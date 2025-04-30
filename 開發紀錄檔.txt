@@ -1,0 +1,5 @@
+﻿2025-04-30 22:57:02 - P0-1.1.1: 確認開發紀錄檔 D:\friedg\開發紀錄檔.txt 狀態，檔案已存在，準備開始記錄。
+2025-04-30 23:04:52 - P0-1.2.1: 確認/建立 Firebase 開發 (Dev) 專案，專案狀態：已建立，專案 ID：friedg-dev。
+2025-04-30 23:05:06 - P0-1.2.1: 確認/建立 Firebase 開發 (Dev) 專案，專案狀態：已建立，專案 ID：friedg-dev。
+2025-04-30 23:12:16 - P0-1.3.1: 在專案 friedg-dev 中啟用必要的 Firebase/Google Cloud APIs (Firestore, Functions, Auth, Pub/Sub, Secret Manager, Cloud Build 等)。
+2025-04-30 23:16:18 - P0-1.4.1: 在 D:\friedg 目錄下初始化 Firebase Hosting，設定 public 目錄為 'public'，設定為 SPA，並關聯至 friedg-dev 專案。已生成 firebase.json 與 .firebaserc。
