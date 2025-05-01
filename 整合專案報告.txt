@@ -4218,5 +4218,3533 @@ exports.generateDailyReport = functions.pubsub.schedule('every day 02:00').onRun
 ```
 
 ---
+好的，各位開發夥伴：
 
+這是一份基於現有專案資料，由我以技術專案開發經理的角色為大家規劃整理的專案技術開發報告書。本報告旨在提供專案的全貌、核心架構、模組細節、技術標準、安全性考量、部署建議與已知風險，以便各位能清晰理解專案需求，並依據建議的開發流程順序推進工作。請務必仔細閱讀，確保所有關鍵資訊被理解與遵循。
+
+本專案的核心目標是為「吃雞排找不早」打造一套集 POS 點餐與後台管理於一體，並具備高度彈性與擴展性的智慧餐飲解決方案，最終願景是成為店家的「經營大腦」與成長夥伴。系統採用多租戶 (Multi-Tenant) SaaS 架構，基於 Firebase 無伺服器平台構建。
+
+為了讓專案能夠穩健推進並符合業務優先級，我們的建議開發流程順序將依照以下階段進行：
+
+1.  **員工管理系統 (包含核心身份驗證與權限)**
+2.  **線上點餐系統 (顧客端)**
+3.  **會員管理系統**
+4.  **現場 POS 點餐系統 (員工端)**
+
+這樣的順序安排是基於先建立內部運營基礎（員工管理），再開放外部服務（線上點餐），接著強化顧客關係（會員），最後完善現場營運工具（POS），逐步累積使用者與業務流程。
+
+以下是根據提供的來源資料，為各位開發夥伴詳細整理的專案技術開發報告書：
+
+---
+
+**「吃雞排找不早」POS 與後台管理系統 - 專案技術開發報告書**
+
+**日期：** 2024 年 05 月 31 日
+
+**文件版本：** V1.1 (基於 V1.0 補充詳細開發流程與整合需求)
+
+**來源文件依據：** 本報告書整合編寫自多份專案規劃與技術文件，包含對系統核心理念、技術架構、各功能模組的詳細描述、安全性考量、部署維運建議、已知問題與風險，以及未來的擴展規劃。
+
+---
+
+**1. 專案概述 (Project Overview)**
+
+**1.1. 專案核心理念與目標**
+
+本專案的核心理念是打造一套全方位、高度客製化的智慧餐飲解決方案，不僅處理訂單，更能驅動成長、增加營收、優化顧客關係、降低營運成本。目標是成為店家的「經營大腦」與成長夥伴。
+
+系統設計採用多租戶 (Multi-Tenant) SaaS 架構，為眾多獨立店家（租戶）提供服務。核心策略是提供媲美高階付費系統的功能，但以免費註冊使用吸引用戶基礎，再透過增值服務獲利。系統需具備高度靈活性與擴展性，並確保租戶擁有高度自主設定權。即使無專用硬體，也能流暢使用.
+
+具體目標包括：提升營運效率（自動化日常流程）、實現數據整合透明（集中管理數據提供決策支援）、強化內部管理（標準化員工、流程、庫存、溝通）、改善內部溝通、支援行動操作 (PWA)、建立激勵機制、優化人力資源。
+
+**1.2. 專案範圍 (In Scope)**
+
+主要功能模組包括：
+*   超級管理後台 (Super Admin)
+*   租戶後台 (店家管理後台)
+*   線上點餐 & 會員中心 & 租戶探索平台
+*   線下點餐模組 (員工端 - PWA)
+*   身份認證、職位與權限管理
+*   GPS 定位打卡系統
+*   庫存管理系統 (月度盤點與內部叫貨)
+*   排班與請假系統
+*   銷售回報系統
+*   薪資與獎金系統
+*   績效考核、提升與降級系統
+*   顧客評價系統
+*   內部溝通系統 (公告、知識庫、投票)
+*   系統管理功能 (審核、參數設定、日誌、基本分析)
+*   取餐編號管理模組
+*   硬體周邊整合模組 (雲端出單模式)
+*   推薦註冊與自動獎勵機制
+*   廣告投放與管理系統
+*   租戶探索平台
+*   系統安全框架
+
+請注意，完整的即時進銷存管理、完整的顧客關係管理系統 (CRM)、完整的線下 POS 硬體整合 (專注 PWA/雲端出單)、全面的財務會計系統整合、原生行動 App 開發、詳細的高階數據分析儀表板等目前為範圍外 (Out of Scope)。
+
+**1.3. 目標使用者**
+
+系統服務於四類主要使用者：
+*   服務商/超級管理員 (Super Admin): 最高權限，管理所有租戶、全局設定等.
+*   租戶管理員 (店家管理員)/分店經理: 管理所屬店家員工、菜單、訂單等.
+*   分店員工/夥伴: 處理日常點餐、打卡、排班、查看薪資等.
+*   顧客: 線上點餐、會員管理、提交評價.
+
+**1.4. 文件目的**
+
+本報告旨在明確定義系統架構、技術選型、開發標準、安全要求、部署維運策略及已知風險，作為開發團隊的共同依循準則. 特別著重提供細節與注意事項，使新的開發團隊能夠順利接手專案.
+
+---
+
+**2. 技術架構 (Architectural Design)**
+
+系統採用基於 Firebase 的無伺服器 (Serverless) 和多租戶 (Multi-Tenant) SaaS 架構.
+
+**2.1. 宏觀架構**
+
+*   **前端 (PWA):** 部署於 Firebase Hosting，使用標準 HTML/CSS/JavaScript (未指定框架). 透過 Firebase Client SDK 與後端溝通.
+*   **後端 (Firebase Functions):** 使用 Node.js 20 LTS，部署於 Cloud Functions V2. 處理業務邏輯、第三方整合、排程與背景任務.
+*   **資料庫 (Firestore):** NoSQL 文件型資料庫. 儲存所有結構化數據. 採用共享資料庫、共享 Schema，並透過**強制 TenantID 或 StoreID 過濾**實現多租戶資料隔離.
+*   **身份驗證 (Authentication):** 主要整合 LINE Login，透過 Cloud Function 換取 Firebase 自定義 Token. 員工可能採用其他方式 (待定義).
+*   **訊息推送 (Cloud Messaging):** 用於即時通知 PWA 或透過 Cloud Functions 觸發 LINE/Telegram 通知.
+*   **外部整合:** 外送平台 (Uber Eats, Foodpanda - API/Webhook)、金流 (LINE Pay API)、通知 (LINE Notify, Telegram Bot API)、LINE Login (LIFF SDK)、LINE Messaging API (可能用於評價).
+
+**2.2. 前端架構 (PWA)**
+
+*   技術棧：HTML/CSS/JavaScript，無特定框架.
+*   核心：Service Worker (離線快取/安裝)、Manifest file.
+*   Firebase 整合：必須使用 Firebase Client SDK v9.x.x Compat 版本 (建議 v9.22.2 短期統一)，長期規劃 v9+ 模組化 SDK v11.6.1+.
+*   UI/UX：需高度直觀、可配置、響應式. **關鍵風險：缺乏 UI/UX 設計稿**.
+
+**2.3. 後端架構 (Firebase Functions)**
+
+*   技術棧：Node.js 20 LTS, Cloud Functions V2.
+*   觸發器：HTTPS (API)、Authentication (用戶初始化)、Pub/Sub & Scheduler (定時/批次).
+*   部署：建議 asia-east1 (彰化) 或 asia-northeast1 (東京) 區域降低延遲. 組織功能相關函數.
+*   冷啟動：記憶體 >= 256MB, 可設定最小實例數.
+
+**2.4. 資料庫設計 (Firestore)**
+
+*   類型：NoSQL Document DB.
+*   原則：共享資料庫、共享 Schema. **所有租戶/分店數據必須強制包含 TenantID 或 StoreID 並過濾**. 需定義複合索引 (`firestore.indexes.json`).
+*   限制：不支援複雜 Join/聚合，查詢筆數/大小限制 (1MB)，單文件寫入頻率限制. 需透過結構優化、批次處理克服.
+
+**2.5. 外部整合 (Integrations)**
+
+必須整合外送平台 (Uber Eats, Foodpanda)、金流 (LINE Pay)、通知 (LINE Notify, Telegram Bot)、LINE Login/LIFF. 注意第三方依賴、配額限制、延遲.
+
+---
+
+**3. 技術標準與規範 (Technical Standards & Specifications)**
+
+為確保專案一致性、可維護性與穩定性，需嚴格遵循以下標準：
+
+**3.1. 版本控制與依賴管理**
+
+*   SDK 版本統一：Firebase Client SDK (v9.22.2 Compat 短期，v11.6.1+ Modular 長期)、LIFF SDK (2.21.4+). Admin SDK (v13.x+). Functions V2 SDK.
+*   Node.js：20 LTS.
+*   NPM：強制使用並提交 `package-lock.json`.
+*   Firebase CLI：最新穩定版 (v12+).
+
+**3.2. 編碼風格與文件**
+
+*   風格：一致的 JavaScript 函數命名/宣告. 建議 ESLint + Prettier.
+*   文件：JSDoc 註解、技術規格書、API 規格、安全規則、索引定義需及時更新. **API 詳細規格文件缺失為關鍵待辦事項**.
+
+**3.3. 開發實踐**
+
+*   集中初始化：Firebase/LIFF 初始化邏輯集中管理，用 Promise/async/await 確保初始化完成，**嚴禁 setTimeout 輪詢**.
+*   **模組化開發 (Cloud Functions):** 強烈建議將 Cloud Functions 的邏輯按功能或觸發器類型拆分到不同的檔案或模組中，**避免將所有函數邏輯集中在單一的 `index.js` (或其他主檔案) 中**。採用清晰的目錄結構組織函數程式碼，以提高可讀性、可維護性與可測試性。
+*   安全性：實施深度防禦、最小權限、安全左移. 強制 HTTPS. **Firestore 安全規則 (`firestore.rules`) 是極高優先度**. **Cloud Functions 內部必須再次驗證權限**. 對輸入進行嚴格驗證清理防注入. 輸出數據適當編碼防 XSS. **禁止硬編碼敏感資訊**. 敏感資訊加密存儲或用 Secret Manager. **詳細操作日誌記錄是核心待實現邏輯**.
+*   錯誤處理：定義統一的 API 錯誤回傳格式.
+
+---
+
+**4. 多分店資訊整合與點餐入口 (Multi-Store Integration & Ordering Entry Points)**
+
+本系統設計基於多租戶/多分店架構，這是所有模組的基礎.
+
+*   **資料隔離**: 所有與店家相關的數據 (菜單、訂單、員工、排班、庫存、設定等) 都必須包含 `tenantId` 或 `storeId` 欄位，並在讀寫時透過 Firestore 安全規則與後端 Function 邏輯強制過濾，確保資料安全與隔離.
+*   **分店設定**: 租戶管理員可以在後台設定各分店的詳細資訊，包括名稱、地址、經緯度 (用於打卡圍欄)、營業時間、聯絡方式、雲端印表機設定、支付方式、線上訂餐開關、排班/薪資參數等. 這些設定應分層管理 (全局 > 租戶 > 分店).
+*   **員工跨店**: 系統支援員工跨分店任職. 員工登入後需選擇當前工作分店進行操作，其打卡、訂單、庫存等操作記錄將關聯至該分店.
+
+**點餐入口**：顧客和員工可透過不同入口進入系統進行點餐或相關操作.
+
+1.  **租戶探索平台 (Tenant Discovery Platform)**:
+    *   **功能**: 面向終端消費者，展示平台上的店家，為租戶導流.
+    *   **整合**: 顯示店家詳細公開資訊、菜單預覽、活動、營業時間、聯繫方式. 提供「線上點餐連結」導向特定店家的線上點餐 PWA. 支援基於地理位置、關鍵字等的搜尋與篩選.
+    *   **資料來源**: 整合所有選擇發布公開資訊的租戶/分店資料.
+2.  **店家專屬線上點餐 PWA**:
+    *   **功能**: 顧客透過掃描店家提供的 QR Code 或點擊連結，直接進入特定分店的線上點餐頁面.
+    *   **整合**: 此 PWA 與會員中心綁定. 載入該分店的菜單、進行中的活動、設定的點餐規則. 處理顧客的瀏覽、選餐、加入購物車、結帳流程.
+3.  **員工端現場 POS 點餐模組 (PWA)**:
+    *   **功能**: 員工在現場透過 PWA 進行點餐、結帳、出單等操作.
+    *   **整合**: 員工登入後選擇工作分店，系統載入該分店的菜單、點餐設定、排班等資訊. 介面針對觸控優化，支援離線操作緩存訂單草稿，網路恢復後同步. 支援雲端出單或螢幕顯示叫號.
+
+這些入口都必須確保正確載入或操作的是**當前租戶/分店**的數據，這依賴於嚴格的 `TenantID`/`StoreID` 過濾邏輯.
+
+---
+
+**5. 開發流程架構順序與模組細節 (Development Flow & Module Details)**
+
+我們將依據建議的順序，詳述各階段的核心模組及其要點。
+
+**階段 1: 員工管理系統 (基礎)**
+
+此階段目標是建立系統的內部基礎，確保員工數據、權限、考勤與基礎薪資管理的可用性。
+
+*   **5.1.1. 身份認證、職位與權限管理 (Partner Management & Auth)**:
+    *   **核心**: 建立 6 級職等體系. 管理員設定各職等權限範圍. 前後端雙重實施權限控制 (Firestore Rules + Function 內部驗證).
+    *   **驗證**: 整合 LINE Login 驗證夥伴身份. 初次登入需管理員審核綁定帳號.
+    *   **功能**: 夥伴基本資料管理. 夥伴招募與審核流程. 支援跨店分派夥伴.
+    *   **API 要點**: `/api/auth/employee-login` (LINE Token 換 Firebase Token). `/api/admin/employees/` (管理員工資料), `/api/admin/roles/` (管理職位權限).
+    *   **數據**: `users` 或 `employees` 集合 (含 `uid`, `role`, `storeId` 等).
+*   **5.1.2. 打卡考勤模組 (Clock-in)**:
+    *   **核心**: GPS 定位打卡，需在分店地理圍欄內. 記錄時間戳、位置. 自動判定狀態 (準時/遲到/早退/加班/缺勤).
+    *   **功能**: 跨店打卡支援. 漏打卡補登申請審核. 打卡提醒.
+    *   **API 要點**: `/api/attendance/clock` (打卡請求). `/api/attendance/reports/{employeeId}/{month}` (個人考勤報告). `/api/admin/attendance/{storeId}/{date}` (管理端考勤報表). `/api/admin/attendance/makeup` (補登申請審核).
+    *   **數據**: `attendanceRecords` 集合 (含 `type`, `timestamp`, `location`, `storeId`, `employeeId`, `status`).
+    *   **驗證**: 需後端驗證 GPS 座標是否在圍欄內 (`storeId` 關聯 `stores` 集合的 `latitude`/`longitude`/`radius`).
+*   **5.1.3. 排班與請假系統 (Scheduling & Leave)**:
+    *   **核心**: 提供班表排定 (手動/自動). 班表發布與通知. 請假申請與審批流程. 禁休日期管理. 調班/代班支援.
+    *   **自動化**: 自動排班演算法為**關鍵待辦事項**. 請假餘額扣減邏輯需明確.
+    *   **API 要點**: `/api/admin/schedules/{storeId}/{month}` (管理班表). `/api/schedules/employee/{employeeId}/{month}` (查看個人班表). `/api/leave/request` (請假申請). `/api/admin/leave/{storeId}/approve` (請假審批).
+    *   **數據**: `schedules`, `leaveRequests`, `blackoutDates` 集合.
+*   **5.1.4. 薪資與獎金系統 (Payroll & Bonus)**:
+    *   **核心**: 根據出勤、績效、獎金自動計算薪資. 提供管理員審核修正. 夥伴可查看明細.
+    *   **獎金**: 自訂多維度績效指標. 配置可配置化獎金任務與自動計入. **獎金評估邏輯為核心待實現**.
+    *   **自動化**: 每月自動觸發薪資計算 (Cloud Function).
+    *   **API 要點**: `/api/payroll/employee/{employeeId}` (查詢個人薪資). `/api/admin/payroll/{storeId}/{month}` (管理端薪資報表). `/api/admin/bonus-tasks/{storeId}` (管理獎金任務). `/api/admin/payroll/{storeId}/{month}/approve` (薪資審核).
+    *   **數據**: `payrolls`, `bonusTasks`, `bonusRecords`, `performanceMetrics` 集合.
+*   **5.1.5. 績效考核、提升與降級 (Performance)**:
+    *   **核心**: 提供公平評估與職位調整機制. 支援自動觸發投票 (實習轉正). 支援全員投票、老闆指派/投票降級流程. 結果記錄並更新夥伴職位.
+    *   **功能**: 夥伴參與績效評審與投票. 管理員後台操作流程管理. **核心後端邏輯待實現**.
+    *   **API 要點**: `/api/admin/performance/{storeId}/evaluations` (管理評估). `/api/admin/performance/{storeId}/promotions` (管理晉升/降級). `/api/performance/employee/{employeeId}` (個人績效查看). `/api/votes/submit` (提交投票).
+    *   **數據**: `evaluations`, `promotions`, `demotions`, `votes` 集合.
+*   **5.1.6. 內部溝通系統 (Internal Comms)**:
+    *   **功能**: 公告發布/管理、知識庫 (含測驗)、投票系統.
+    *   **API 要點**: `/api/announcements/{storeId}` (查看公告). `/api/knowledgebase/{storeId}` (查看知識庫). `/api/admin/announcements/{storeId}` (發布公告). `/api/admin/knowledgebase/{storeId}` (管理知識庫).
+
+**階段 2: 線上點餐系統 (顧客端)**
+
+此階段目標是讓外部顧客能夠透過線上管道瀏覽菜單、點餐、付款、追蹤訂單。
+
+*   **5.2.1. 線上點餐模組 (顧客端)**:
+    *   **核心**: 顧客透過 PWA 瀏覽菜單、選餐、加入購物車、結帳. 支援 LINE Pay 付款. 訂單狀態追蹤與顯示.
+    *   **功能**: 餐點選項自訂 (加料/去冰等). 售完餐點自動標記.
+    *   **API 要點**: `/api/menus/{storeId}` (載入菜單). `/api/order/create` (建立新訂單). `/api/payment/linepay/request` (建立 LINE Pay 交易). `/api/payment/linepay/confirm` (確認付款). `/api/order/status/{orderId}` (查詢訂單狀態).
+    *   **數據**: `menus`, `products`, `orders`, `payments` 集合.
+    *   **流程**: 顧客選餐 -> 建立訂單請求 (含商品、總金額、付款方式) -> 後端驗證建立訂單記錄 (狀態 pending) -> 若 LINE Pay，呼叫 LINE Pay API -> 導向 LINE Pay -> 顧客完成付款 -> LINE Pay 回調通知後端 -> 後端驗證並更新訂單狀態.
+    *   **狀態機**: 定義完整的訂單狀態流轉 (Draft, PendingPayment, Paid, Preparing, ReadyForPickup, Completed, Cancelled).
+*   **5.2.2. 取餐編號管理模組 (Pickup Number)**:
+    *   **核心**: 產生並顯示訂單取餐號碼. 清晰展示訂單狀態. **支援無實體螢幕的運作模式** (透過 LINE 通知顧客).
+    *   **API 要點**: `/api/pickup/call` (叫號/發送通知).
+    *   **數據**: `orders` 集合 (含 `pickupNumber`, `status`).
+*   **5.2.3. 外送平台串接 (Delivery Integration)**:
+    *   **核心**: 從外送平台 (Uber Eats, Foodpanda) 匯入訂單. 夥伴在系統中處理外送訂單. 支援取消/拒單並同步平台.
+    *   **整合**: 透過 API 或 Webhook 模擬. 租戶後台設定 API 憑證.
+    *   **API 要點**: `/api/webhook/ubereats/order`, `/api/webhook/foodpanda/order` (接收訂單 Webhook). `/api/ubereats/update`, `/api/foodpanda/update` (更新平台狀態).
+    *   **數據**: `orders` 集合 (標示來源 source: delivery).
+*   **5.2.4. 顧客評價機制 (Customer Feedback)**:
+    *   **核心**: 收集顧客對服務/產品的反饋. LINE Bot 問卷方式. 評價匿名儲存關聯訂單夥伴. 外部評價匯入.
+    *   **功能**: 員工端展示評價. 影響夥伴績效. 申訴機制. **LINE Bot 互動流程及 webhook 邏輯待實現**.
+    *   **API 要點**: `/api/webhook/line/feedback` (接收 LINE Bot 回饋). `/api/admin/feedback/{storeId}` (管理評價).
+    *   **數據**: `feedbacks` 集合 (含 `storeId`, `orderId`, `uid`, `rating`, `comment` 等).
+
+**階段 3: 會員管理系統**
+
+此階段在線上點餐基礎上，強化顧客關係與忠誠度功能。
+
+*   **5.3.1. 會員系統模組**:
+    *   **核心**: 建立忠誠度，收集數據. 會員綁定與登入 (LINE - **租戶獨立 Channel**). 點數計算與兌換 (租戶可設定規則). 訂單追蹤與歷史查詢. 會員分眾標籤管理.
+    *   **活動**: 優惠券/兌換券系統 (租戶可定義). 自動化活動設定 (生日禮、發放活動券等). 這些由後端任務定時觸發. 成就系統 (顧客與員工共用). 成就商店兌換獎勵.
+    *   **API 要點**: `/api/member/profile` (需驗證 Tenant). `/api/member/points` (需驗證 Tenant). `/api/member/orders` (需驗證 Tenant). `/api/member/coupons` (需驗證 Tenant). `/api/redeem` (需驗證 Tenant). `/api/achievement-store` (需驗證 Tenant). `/api/achievement-progress/{uid}` (需驗證 Tenant).
+    *   **數據**: `users` 或 `customers` 集合 (含 `points`, `memberTags`, `tenantId`). `pointRules` (含 `tenantId`), `coupons` (含 `tenantId`), `campaigns` (含 `tenantId`), `achievement_store` (含 `tenantId`), `achievement_record` (含 `tenantId`), `redeem_history` (含 `tenantId`), `user_points` (含 `tenantId`) 集合.
+    *   **隱私**: 注意數據隱私與法規遵循.
+
+*   **5.3.2. 顧客推薦獎勵機制 (Customer Referral Program - 新增)**:
+    *   **核心**: 激勵現有顧客推薦新顧客，擴大**租戶**的客戶基礎。**此機制在租戶內部運作**。
+    *   **運作流程**:
+        1.  **生成推薦碼**: 已註冊顧客可在**該租戶**的會員中心生成個人專屬推薦碼。推薦碼需確保在**租戶內唯一**。
+        2.  **新顧客使用**: 新顧客在首次註冊**該租戶**會員或首次在**該租戶**下單結帳時輸入推薦碼。
+        3.  **驗證與綁定**: 後端驗證推薦碼在**該租戶內**的有效性，記錄推薦關係 (`tenantId`, `referrerUid`, `refereeUid`, `status: pending`)。
+        4.  **激活條件**: 新顧客 (Referee) 成功完成在**該租戶下**的第一筆訂單 (狀態變為 `Completed` 或類似終態)。
+        5.  **獎勵觸發**: 後端監聽訂單狀態變化或定時檢查，當 Referee 在**該租戶**的首單完成時，觸發獎勵發放。
+        6.  **獎勵執行**:
+            *   向推薦人 (Referrer) 發放一張**該租戶**的優惠券。
+            *   向新顧客 (Referee) 發放一張**該租戶**的優惠券。
+            *   更新推薦關係狀態 (`status: completed`)。
+    *   **API 要點**:
+        *   `/api/referral/my-code` (GET): 獲取當前登入顧客在**當前租戶**的推薦碼。
+        *   `/api/referral/apply` (POST): 新顧客提交推薦碼進行**租戶內**綁定 (請求需含 `tenantId`)。
+        *   `/api/tenant-admin/referral/rules` (GET/POST): **租戶管理員**管理其推薦活動規則 (請求需含 `tenantId`)。
+        *   (後端內部邏輯): 監聽訂單完成事件 (需檢查 `tenantId`)，觸發獎勵發放函數。
+    *   **數據模型概念**:
+        *   `customers`: 增加 `referralCode` 欄位 (或獨立集合 `customerReferralCodes` 含 `tenantId`, `uid`, `code`)。
+        *   `referrals`: 記錄推薦關係 (含 `tenantId`, `referrerUid`, `refereeUid`, `codeUsed`, `status`, `createdAt`, `completedAt`).
+        *   `coupons`: 見下一節。
+
+*   **5.3.3. 優惠券結構規劃 (Coupon Structure - 新增)**:
+    *   **核心**: 定義靈活的優惠券系統，支持推薦獎勵及租戶自訂的行銷活動。
+    *   **數據模型 (`coupons` 集合)**:
+        *   `couponId`: (string) 唯一 ID。
+        *   `tenantId`: (string) **必須，所屬租戶 ID**。
+        *   `userId`: (string) 所屬用戶 UID。
+        *   `code`: (string, optional) 優惠券代碼。
+        *   `title`: (string) 優惠券標題。
+        *   `description`: (string) 描述。
+        *   `type`: (string enum) 類型 (e.g., `PERCENTAGE`, `FIXED_AMOUNT`)。
+        *   `discountValue`: (number) 折扣值。
+        *   `minOrderAmount`: (number, optional) 最低訂單金額要求。
+        *   `applicableStoreIds`: (array of strings, optional) 適用分店 ID 列表 (**必須屬於該 tenantId**)。
+        *   `applicableProductIds`: (array of strings, optional) 適用商品 ID 列表 (**需驗證商品屬於該 tenantId**)。
+        *   `validFrom`: (Timestamp) 生效日期。
+        *   `validUntil`: (Timestamp) 失效日期。
+        *   `status`: (string enum) 狀態 (`active`, `used`, `expired`)。
+        *   `source`: (string enum, optional) 來源 (`REFERRAL_REFERRER`, `REFERRAL_REFEREE`, `CAMPAIGN`, `MANUAL`, etc.)。
+        *   `createdAt`: (Timestamp)。
+        *   `usedAt`: (Timestamp, optional)。
+        *   `usedOrderId`: (string, optional)。
+    *   **優惠券模板 (`couponTemplates` 集合, Optional):** 可考慮建立模板 (可全局或租戶自訂，需含 `tenantId` 區分)。租戶管理員設定推薦獎勵時選擇或創建模板。
+    *   **發放邏輯 (推薦獎勵)**: 當推薦激活條件滿足時，後端 Cloud Function 根據**該租戶**設定的推薦獎勵優惠券模板，為 `referrerUid` 和 `refereeUid` 在 `coupons` 集合中各創建一條記錄 (含 `tenantId`)。
+    *   **使用邏輯**:
+        1.  顧客在**某租戶**結帳時，前端 API (`/api/member/coupons?status=active&tenantId=...`) 獲取可用優惠券。
+        2.  顧客選擇優惠券。
+        3.  前端提交 `couponId`。
+        4.  後端驗證 `couponId` 的有效性 (含 `tenantId` 匹配)。
+        5.  驗證通過，計算折扣。
+        6.  訂單完成後，更新 `coupon` 狀態。
+
+*   **5.3.4. 推薦註冊與自動獎勵機制 (Tenant Referral - 原 5.3.2)**:
+    *   **核心**: 激勵推廣**平台本身**，降低**新租戶**獲客成本. 推薦碼生成、驗證綁定關係. 激活條件追蹤 (可配置). 獎勵觸發與執行 (自動提升**租戶**資源/解鎖功能/延長服務期).
+    *   **API 要點**: `/api/referral/register-tenant` (新租戶註冊使用推薦碼). `/api/superadmin/referral/rules` (Super Admin 管理推薦規則).
+    *   **數據**: `ReferralCodes` (for tenants), `ReferralUsages` (for tenants), `ReferralRules` (for tenants) 集合.
+
+**階段 4: 現場 POS 點餐系統 (員工端)**
+
+此階段完善門市現場營運工具，利用 PWA 特性提升效率。
+
+*   **5.4.1. 線下點餐模組 (員工端 - PWA)**:
+    *   **核心**: 提升效率，減少錯誤. 利用 PWA 離線操作. 介面直觀可配置 (大按鈕、觸控優化). 支援離線模式下的點餐、暫存訂單. 網路恢復後自動同步離線數據.
+    *   **功能**: 開單與選桌. 點餐操作 (含備註、套餐替換). 訂單管理 (暫存、送單、劃單、修改/取消 - 需權限+Log). 結帳 (含混合支付、折扣/招待 - 需權限+Log、發票、觸發評分). 現金抽屜管理與班別結算. 訓練模式. 資源限制檢查. 出單 (雲端列印或螢幕顯示). **高度自訂性是賣點**.
+    *   **API 要點**: 重用 `/api/order/create` (員工端下單). `/api/order/update/{orderId}/status` (更新狀態). `/api/order/{orderId}` (查詢訂單詳情). `/api/shift/closeout/{storeId}` (班別結算). `/api/cashdrawer/{storeId}` (現金抽屜管理).
+    *   **數據**: `orders` 集合 (source: local). `shifts`, `cashDrawerLogs` 集合.
+    *   **PWA 特性**: Service Worker 實現離線快取菜單/設定/草稿訂單. IndexedDB 儲存待同步離線操作隊列. Background Sync API 或手動機制進行後台同步. 資料衝突處理策略. 狀態管理機制.
+*   **5.4.2. 硬體周邊整合模組 (雲端出單模式)**:
+    *   **核心**: 將列印任務發送至租戶指定的雲端印表機伺服器. **即使無印表機也能運作** (透過 KDS/PWA 介面顯示，電子憑證等).
+    *   **功能**: 租戶後台配置雲端印表機 API URL/Key/模板. POS 後端格式化數據並調用指定 API. 響應處理與錯誤重試.
+    *   **API 要點**: `/api/print/order/{orderId}` (觸發列印).
+    *   **數據**: `stores` 集合 (含打印機配置).
+*   **5.4.3. 庫存管理 (Inventory Management)**:
+    *   **核心**: 基本庫存追蹤，月度盤點與內部叫貨流程. 按 TenantID 隔離數據.
+    *   **功能**: 月度盤點流程管理、線上填報、生成報告. 內部叫貨流程管理、填寫叫貨單、物流審核、記錄歷史. 租戶可選啟用原料級或成品庫存管理.
+    *   **範圍外**: 不含完整的即時進銷存管理或成本計算.
+    *   **API 要點**: `/api/inventory/monthly-count/{storeId}/{month}` (月度盤點). `/api/inventory/order-request/{storeId}` (內部叫貨). `/api/admin/inventory/{storeId}/report` (庫存報告).
+    *   **數據**: `inventoryItems`, `monthlyCounts`, `internalOrderRequests` 集合.
+*   **5.4.4. 銷售回報系統 (Sales Report)**:
+    *   **核心**: 為未完全導入 POS 或需人工校正情境提供回報機制. 分店每日提交標準化銷售數據表單. 支援自定義欄位.
+    *   **API 要點**: `/api/sales/report/{storeId}/{date}` (提交銷售回報). `/api/admin/sales/{storeId}/{date}` (管理端檢視).
+    *   **數據**: `salesReports` 集合.
+
+**6. 系統管理與監控**
+
+此部分功能支援整個系統的運維和管理。
+
+*   **核心**: 提供管理員配置、監控、審核的集中入口.
+*   **功能**: 審核中心 (集中處理請假、補卡、獎金、晉升/降級等). 參數設定 (全局、租戶、分店層級參數管理). **必須解決參數配置來源衝突問題**. 系統監控 (操作日誌、錯誤日誌、即時通知). **詳細操作日誌記錄是核心待實現邏輯**. 基本分析數據檢視 (與薪資/績效相關). 手動輸入外部平台評價. 廣告投放與管理系統. 租戶管理 (Super Admin 新增/編輯/停用租戶).
+*   **API 要點**: `/api/admin/approval/pending/{storeId}` (待審核列表). `/api/admin/settings` (參數管理). `/api/admin/logs` (查看日誌). `/api/admin/analytics/{storeId}` (基本分析). `/api/admin/ads` (廣告管理). `/api/superadmin/tenants` (租戶管理).
+*   **數據**: `settings`, `system_config`, `auditLogs`, `errorLogs` 集合.
+
+---
+
+**7. 系統安全框架 (System Security Framework)**
+
+安全性是 SaaS 服務的基石，必須達到企業級安全標準.
+
+*   **原則**: 深度防禦、最小權限、安全左移.
+*   **措施**: 強密碼、MFA (管理員可選). 安全 Session/JWT. **Firestore 安全規則 (Firestore Rules) 極高優先度，需提供具體範例和測試計劃**. 所有 Cloud Functions 內部**必須再次驗證權限**. **強制 TenantID/StoreID 過濾**. 敏感資訊加密存儲或 Secret Manager. 傳輸加密 (HTTPS). 定期數據備份加密. 基礎設施安全加固、弱點掃描. App Check 防濫用. HTTP 函數入口加頻率限制/DDoS 防護. 依賴庫安全掃描更新. **詳細操作日誌 (Audit Log) 記錄**. 開發安全 (安全設計、Code Review、**禁止硬編碼敏感資訊**、嚴格輸入驗證清理、輸出適當編碼防 XSS).
+*   **風險與對策**: 安全漏洞攻擊、Firestore 規則錯誤、DDoS. 對策：定期掃描滲透測試、驗證規則、啟用 App Check、頻率限制、應變流程. XSS 防護不足：全面覆蓋輸入驗證和輸出編碼.
+
+---
+
+**8. 部署與維運建議 (Deployment & Operations Recommendations)**
+
+確保系統順利上線並長期穩定運行。
+
+*   **部署平台**: 前端 Firebase Hosting, 後端 Cloud Functions V2 (asia-east1 / asia-northeast1).
+*   **環境管理**: **必須** 區分開發 (Dev) 和生產 (Prod)，建議獨立 Firebase 專案. 可考慮 Staging.
+*   **部署流程**: 手動 CLI，**建議建立 CI/CD Pipeline** 自動化測試部署.
+*   **版本升級**: 語意化版本管理. 資料庫結構升級需遷移腳本或兼容讀取.
+*   **監控日誌**: Firebase 控制台、Cloud Logging 監控狀態/錯誤/性能. 定期檢視操作/錯誤日誌. 設定安全事件告警 (Telegram).
+*   **效能優化**: Firestore 索引. 快取機制. Functions 並行執行、最低實例數、提升記憶體.
+*   **測試策略**: 單元測試 (模擬器)、整合測試、端對端測試 (關鍵流程 E2E 案例需細化). **安全性測試 (Firestore Rules 驗證)** **高優先度**. 使用者驗收測試 (UAT)、訓練模式.
+*   **資料庫備份恢復**: Firestore 定期備份機制 (Cloud Storage 或導出). 資料保留策略. 恢復測試計劃.
+*   **容錯備援**: 針對單點故障設計方案.
+
+---
+
+**9. 風險與挑戰 (Risks & Challenges)**
+
+開發與維運過程中需特別關注的風險：
+
+*   **基礎設施限制**: Firestore 寫入/查詢頻率與複雜查詢效能限制. Node.js 單執行緒在 CPU 密集任務下的瓶頸.
+    *   **對策**: 優化資料結構/索引、複雜計算轉批次處理、使用 Cloud Tasks/Cloud Run.
+*   **第三方服務依賴**: 外送/金流/通知平台 API 配額限制、穩定性、延遲.
+    *   **對策**: 請求緩存、錯誤重試、過載保護.
+*   **開發與管理**: **缺乏 UI/UX 設計稿是關鍵風險**. **核心後端邏輯大量缺失或待完善** (自動排班、請假扣減、獎金計算、操作日誌、審批流程等). **缺失 API 詳細規格文件**. **缺失 Firestore 安全規則範例與測試計劃**. **Firestore 複合索引未定義**. **系統參數配置來源衝突與保存邏輯未解決**.
+    *   **對策**: **優先解決上述關鍵待辦事項**. 盡快取得設計稿. 強化測試.
+*   **安全性**: 安全漏洞與攻擊 (JWT 劫持、規則錯誤、DDoS). XSS 防護不足. 資料衝突處理 (尤其離線模式).
+    *   **對策**: 定期安全掃描/滲透測試、驗證規則、App Check、頻率限制. 全面輸入驗證/輸出編碼.
+*   **PWA 離線同步**: 離線操作的可靠性、同步衝突處理.
+    *   **對策**: 嚴謹設計離線隊列與同步邏輯，基於時間戳/版本號或後端權威處理衝突.
+
+---
+
+**10. 優化與擴展規劃 (Optimization & Expansion Plan)**
+
+*   **短期優化**: 優先解決上述關鍵待辦與風險. 優化現有功能 (介面自訂性、效能). 強化安全防護 (XSS、敏感資訊、後端權限).
+*   **未來擴展**: Kiosk 自助點餐. 進階數據分析與 BI. 會員儲值/電子錢包. 更多外部平台串接 (支付、政府發票、社群). 多語言/海外展店支持. SaaS 平台化 (加強超管、租戶自助、數據隔離、計費模組). 排隊叫號系統. 顧客取餐進度看板. 跨店任務系統. 預約訂餐模組.
+*   **技術演進**: 採用 Cloud Functions V2 新功能. 考慮 Serverless Containers (Cloud Run). 持續更新 SDK/依賴.
+
+---
+
+**11. 總結與後續步驟 (Conclusion & Next Steps)**
+
+本報告基於現有資料，詳細闡述了專案的核心概念、技術架構、功能模組、安全性要求、部署維運建議、已知風險與未來規劃. 旨在提供足夠的廣度和深度，使新的開發團隊能夠快速全面了解專案並接手.
+
+為了讓新團隊能夠順暢接手並完成剩餘部分，以下文件和工作是**最高優先級的待辦事項**，請各位開發夥伴務必優先處理：
+
+1.  **完成 API 詳細規格文件：** 針對所有後端 Cloud Functions API，詳細記錄用途、方法、URL、輸入參數、成功/錯誤回應格式範例等.
+2.  **定義並測試 Firestore 安全規則：** 編寫完整的 `firestore.rules` 文件，提供說明與測試範例，確保所有 Collection 讀寫權限得到嚴格控制. 必須使用 Emulator Suite 進行徹底測試.
+3.  **定義 Firestore 複合索引：** 根據預期查詢模式，在 `firestore.indexes.json` 中定義所有必要的複合索引.
+4.  **補齊缺失的核心後端邏輯：** 優先實現標記為「關鍵」或「核心修正重點」的 Cloud Functions，特別是薪資計算、獎金評估、請假扣減、操作日誌記錄、審批流程、分析數據獲取、LINE Bot 評價處理、自動排班演算法等. **開發過程中務必遵循模組化原則，避免將邏輯集中在單一檔案。**
+5.  **解決系統參數配置的衝突與保存邏輯問題：** 確保參數設定有唯一可靠的入口和保存機制.
+6.  **落實全面的安全性措施：** 特別是輸入驗證、輸出編碼 (XSS)、敏感資訊管理、後端權限檢查等，並進行安全性測試.
+7.  **產出關鍵介面的 UI/UX 設計稿：** 即使是線框圖，也能極大幫助前端開發，減少返工.
+8.  **建立 CI/CD Pipeline：** 自動化測試與部署流程.
+9.  **規劃詳細的部署與維運策略：** 包含環境管理、監控告警、資料備份與恢復計劃.
+
+完成上述事項後，專案將具備更清晰的開發方向、更穩定的架構和更可靠的基礎，為後續功能完善與擴展奠定堅實基礎.
+
+請各位開發夥伴立即開始審閱此報告，並針對上述高優先級事項展開工作。若有任何疑問或需要進一步釐清，請隨時提出。我們將共同努力，推進專案成功！
+
+
+
+
+
+
+
+
+
+
+
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v2.3（全職位＋轉盤系統＋風控優化＋完整內容）
+
+---
+
+## ✅ 每日店長獎金制度
+
+### 🎯 運作原則：
+- 店長每日於輸入營業額時，需手動選擇當日的「獎金類型」。
+- 每日僅能套用一種獎金公式，並紀錄至獎金明細。
+
+### 🏷️ 可選獎金類型：
+
+| 類型 | 條件 | 計算方式 |
+|------|------|-----------|
+| 平日獎金 | 營收（現場+熊貓×0.65+UBER×0.65）≥13,000 | × 30% |
+| 假日獎金 | 不限營收 | × 38% |
+| 過年獎金 | 不限營收 | × 38% |
+| 其他獎金 | 自定類型與邏輯 | 由後台設定 |
+| 爆量獎金 | 營收 ≥35,000 | 固定 $1000 |
+| 留言獎金 | LINE 留言數 ≥10 | 固定 $500 |
+| 訂單筆數獎金 | 單日訂單 ≥120 | 固定 $800 |
+| 全員出勤獎金 | 當日排班皆出勤且無遲到 | 固定 $1000 全班分配 |
+
+---
+
+## 🧠 店長加碼福利條件
+
+### 🟩 公假制度
+- 當月任一平台評分達 4.9，可於下月指定一天公假
+- 該日不影響「全月營業獎金」資格
+
+### 🟩 店長月度獎金
+| 項目 | 條件 | 金額 |
+|------|------|------|
+| 全月營業獎金 | 當月無休（扣除公假） | $10,000 |
+| 月營收獎金 | 每超 35 萬營收 | +$6000（可疊加） |
+| 生日獎金 | 當月生日 | $6000 |
+| 週日加班獎金 | 週日有打卡 | 套用假日獎金公式 |
+| 評分獎金 | 外送平台 / Google 評分 ≥指定值 | 自訂級距對應金額 |
+
+---
+
+## 👩‍🍳 正職與組長獎金制度
+
+### 👤 正職：
+| 項目 | 條件 | 金額 |
+|------|------|------|
+| 加班獎金 | 月休少於8天，每少1天 | +$1500 |
+| 全勤獎金 | 無遲到、請假、早退 | $500 |
+| 評分高於8分 | 當月平均評分 | +$500 |
+| 生日獎金 | 固定發放 | $1000 |
+| 指名好評 | 每次顧客點名 | +$500 |
+
+### 🧑‍💼 組長加碼項目：
+| 額外項目 | 條件 | 金額 |
+|-----------|------|------|
+| 生日獎金 | 固定 | $2000 |
+| 平台/Google評分 | 每 +0.1 起跳（自4.8/4.0起） | +200 / +100 |
+| 升任成功 | 通過員工評分晉升組長 | 一次性 +$3000 |
+| 高評分月獎金 | 評分≥8 | +$1000 |
+
+---
+
+## 📊 評分制度（用於升遷/獎懲）
+
+### 📌 評分邏輯與權重
+| 來源 | 權重 |
+|------|------|
+| 同事互評 | 40%（匿名）|
+| 老闆/主管 | 30% |
+| 顧客反饋（含LINE/Google）| 20% |
+| 遲到/早退紀錄 | 10%（每5分鐘 -1分）|
+
+### 📌 升遷／降級條件
+| 職位變動 | 條件 |
+|------------|----------|
+| 新人→正職 | 滿3週，櫃檯與後勤評分平均 ≥6 |
+| 正職→組長 | 滿6月並自提評分，評分 ≥8 |
+| 組長→降職 | 單月分數 <6 或被點名負評 ≥3 |
+| 正職→降職 | 同上，降為 $38000 薪資階級 |
+
+### 📌 評分匿名與權限規範
+- 所有評分匿名顯示
+- 僅「系統總管理員」可查看評分者身份（稽核用途）
+
+---
+
+## 🎰 季獎金轉盤與抽獎機制
+
+| 類型 | 規則 |
+|------|------|
+| 季獎金池 | 各分店「淨營收 × 5%」作為轉盤獎金池 |
+| 轉盤次數 | 員工每 10 分可換 1 次（可由管理員手動加/補）|
+| 年終紅包 | 可搭配轉盤強化，另計年平均分數計算比例 |
+
+### 📌 抽獎流程與邏輯
+- 中獎後從獎金池自動扣除金額
+- 每筆記錄含：員工ID、獎項、金額、時間、隨機種子、抽獎來源
+- 支援多類型獎項：金額／假期券／禮品／點數券
+- 可設次數上限，每季結束自動重置
+
+### 📈 排行榜模組
+- 累積中獎金額榜（當月／當季）
+- 單筆最大中獎紀錄
+- 近期10筆中獎列表（員工、金額、時間）
+
+---
+
+## 🔒 系統風險控管與優化建議（正式附錄）
+
+### 1. 📊 高頻查詢風險
+- 排行榜與即時轉盤結果建立 index 並加入快取機制
+- 可透過 webhook 定時刷新前端排行榜內容
+
+### 2. ⚖️ 操作公平性
+- 店長每日獎金選擇紀錄進 `bonus_selection_logs`
+- 提供稽核頁供管理層檢查歷史誤選紀錄
+
+### 3. 🎲 抽獎風控
+- 每筆抽獎自動生成隨機種子與 hash
+- 紀錄抽獎者 ID 與操作 IP（可稽核）
+
+### 4. 🧩 分數作弊防範
+- 採匿名評分＋職位權重機制（老鳥1.2、新人0.8）
+- 自動偵測相互灌分行為（雙向滿分多次）提示稽核
+
+### 5. 🗓️ 公假一致性
+- 外送平台評分建議自動抓取快照（若無法自動則需人工備查）
+
+### 6. 📢 即時通知機制
+- 若中獎金額 ≥ $3000，自動觸發：
+  - LINE Notify 員工本人
+  - 通知店長群組
+  - 公告至全員通知欄（附圖片特效）
+
+---
+
+## 🔧 管理後台操作補充
+
+- 後台可管理：獎項類型、機率、轉盤次數上限、轉盤次數手動加值
+- 所有抽獎紀錄與員工得獎歷史可查詢與稽核
+- 系統內置 JSON 設定結構與獎金公式可動態調整
+- 可於年度／季度報表自動統整獎金、轉盤、得獎歷史
+
+---
+
+📝 本文件為獎金制度、遊戲化模組、評分升遷規則與風控整體邏輯設計，建議併入《整合專案報告》尾端，供開發、管理與稽核使用。
+
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v2.4（含 Firestore 資料表設計）
+
+...
+
+## 🗂️ Firestore 資料結構設計（獎金與評分模組）
+
+### 1. `bonus_templates`（獎金類型設定）
+```json
+{
+  id: "weekday_bonus",
+  name: "平日獎金",
+  type: "營收計算",
+  enabled: true,
+  sources: [
+    { name: "現場", adjust: "none" },
+    { name: "熊貓", adjust: "-35%" },
+    { name: "UBER", adjust: "-35%" }
+  ],
+  threshold: 13000,
+  percentage: 0.3,
+  notes: "平日營收獎金，店長每日手選"
+}
+```
+
+### 2. `daily_bonus_entries`（每日獎金紀錄）
+```json
+{
+  store_id: "龍安店",
+  date: "2025-05-02",
+  user_id: "staff_abc",
+  bonus_type: "weekday_bonus",
+  raw_revenue: {
+    現場: 10000,
+    熊貓: 12000,
+    UBER: 8000
+  },
+  calculated_result: 7120,
+  formula_used: "(10000 + 12000*0.65 + 8000*0.65) * 0.3",
+  created_at: Timestamp
+}
+```
+
+### 3. `monthly_scores`（每月評分與狀態）
+```json
+{
+  user_id: "staff_xyz",
+  month: "2025-05",
+  score_total: 82,
+  source_breakdown: {
+    coworker: 34,
+    manager: 28,
+    customer: 16,
+    attendance: 4
+  },
+  evaluated: true,
+  promoted: false,
+  demoted: false
+}
+```
+
+### 4. `bonus_draw_logs`（抽獎紀錄）
+```json
+{
+  store_id: "內壢忠孝店",
+  user_id: "staff_aaa",
+  draw_time: Timestamp,
+  prize: {
+    name: "$3000獎金",
+    value: 3000,
+    type: "cash"
+  },
+  seed: "c3c7e9a1e...",
+  ip: "192.168.0.5",
+  remaining_pool: 25400
+}
+```
+
+### 5. `seasonal_bonus_pool`（每季獎金池）
+```json
+{
+  store_id: "中壢龍崗店",
+  quarter: "2025-Q2",
+  total_pool: 50000,
+  used_pool: 17600,
+  remaining: 32400,
+  auto_reset_on: "2025-07-01"
+}
+```
+
+### 6. `employee_votes`（匿名互評紀錄）
+```json
+{
+  from_user_id: "staff_001",
+  to_user_id: "staff_007",
+  month: "2025-05",
+  category: "櫃台",
+  score: 8,
+  anonymous: true,
+  created_at: Timestamp
+}
+```
+
+### 7. `bonus_selection_logs`（店長獎金選擇紀錄）
+```json
+{
+  store_id: "龍安店",
+  user_id: "manager_xyz",
+  date: "2025-05-02",
+  selected_type: "假日獎金",
+  selected_at: Timestamp,
+  verified: false
+}
+```
+
+### 8. `bonus_settings`（後台轉盤與獎項設定）
+```json
+{
+  id: "spin_default",
+  season: "2025-Q2",
+  max_spins_per_user: 10,
+  prizes: [
+    { name: "$1000獎金", value: 1000, chance: 15 },
+    { name: "$3000獎金", value: 3000, chance: 5 },
+    { name: "假期券1日", value: null, chance: 10 },
+    { name: "未中獎", value: 0, chance: 70 }
+  ]
+}
+```
+
+---
+
+📌 **備註與建議：**
+- 所有集合應設索引於 `user_id + date`、`store_id + date`、`month + user_id`
+- 中獎與評分應可由管理員後台進行補發或調整
+- 建議加上 `is_test` 欄位標示測試資料以利排除
+
+下一步可依此設計自動化計算 Function 或 UI 對應欄位。
+
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v2.5（含 Firestore 資料表設計 + Functions + UI）
+
+...
+
+## 🗂️ Firestore 資料結構設計（獎金與評分模組）
+
+...（原資料表內容略，已保留）
+
+---
+
+## ⚙️ Firebase Functions 自動化範本建議
+
+### Function 1: `calculateDailyBonus`
+- 觸發：Firestore trigger on `daily_bonus_entries`
+- 功能：依據 `bonus_type` 自動讀取對應 `bonus_templates` 計算獎金
+- 輸出：將 `calculated_result`、`formula_used` 寫入同筆 `daily_bonus_entries`
+
+### Function 2: `evaluateMonthlyScores`
+- 觸發：每月月底 (scheduled)
+- 功能：
+  - 匯總 employee_votes
+  - 根據權重比對分數來源，寫入 `monthly_scores`
+  - 判斷是否達升遷/降職條件，更新 user 狀態與 flag
+
+### Function 3: `generateSeasonalPool`
+- 觸發：每季結束自動結算（scheduled）
+- 功能：計算總營收 × 5% 建立新季的 `seasonal_bonus_pool`
+
+### Function 4: `handleBonusSpin`
+- 觸發：使用者發起轉盤行為（https callable）
+- 功能：
+  - 驗證次數是否足夠
+  - 根據 `bonus_settings` 抽出獎項（weighted random）
+  - 扣除獎金池金額，寫入 `bonus_draw_logs`
+  - 回傳抽獎結果與剩餘獎金
+
+### Function 5: `notifyBigWinners`
+- 觸發：抽中金額 ≥ $3000 時
+- 功能：透過 LINE Notify 通知使用者、店長、群組（含圖片與動畫效果）
+
+---
+
+## 🧩 管理後台與員工前台介面欄位建議（UI Layout）
+
+### 員工端 - [我的獎金]
+| 元件名稱 | 說明 |
+|----------|------|
+| 月獎金累計條 | 顯示目前已獲得獎金總額與類型分佈圖 |
+| 評分成績卡片 | 當月分數與平均、升遷進度條 |
+| 可用轉盤次數 | 數字顯示 + 進入轉盤按鈕 |
+| 最近中獎紀錄 | 抽獎時間、金額、項目名稱（最多10筆）|
+
+### 店長端 - [獎金管理]
+| 功能 | 元件說明 |
+|------|----------|
+| 每日獎金設定 | 營收填寫、選擇獎金類型下拉選單、自動顯示試算結果 |
+| 每月員工獎金表 | 表格顯示所有員工當月獎金總額、分類、評分狀態、是否升降職 |
+| 轉盤紀錄查詢 | 員工轉盤紀錄搜尋、篩選高額、手動補償次數按鈕 |
+| 評分統計 | 顯示該月每人平均分數、投票人數、比對歷史趨勢圖 |
+
+### 管理員端 - [獎項與機率設定]
+| 功能 | 元件說明 |
+|------|----------|
+| 建立獎金模板 | 設定營收來源、扣除邏輯、計算百分比、門檻 |
+| 編輯轉盤設定 | 設定獎項名稱、金額、機率、類型與上限轉次 |
+| 評分解密模式 | 系統總管理員進入後可查每筆評分來源 ID（稽核用）|
+| 活動獎勵補發 | 手動發放獎金 / 補發轉盤次數功能 |
+
+---
+
+📌 **後續建議：**
+- 可逐步將轉盤結果與排行榜做動畫化呈現（彈跳、閃爍中獎特效）
+- 管理端可實作儀表板，整合獎金發放統計、獎金池流向、異常檢查結果（如灌票警示）
+
+此段建議可作為管理後台、Firebase Functions 開發與 UI/UX 規劃的初始範本。
+
+
+員工職位階級名稱與晉升路徑
+系統內職等	俗稱名稱	說明	薪資標準	晉升條件
+實習生	新手蛋蛋	試用期員工，入職首月	$38,000	入職滿3週，評分通過
+正職1階	正職小雞仔	通過考核的正式員工	$45,000	滿一年自動升
+正職2階	雞勇者	表現優異、有潛力升組長	$48,000	可申請升組長
+組長	戰鬥雞	班表管理、負責店內作業安排	$53,000 +獎金	由老闆或主管指派或申請評分通過
+店長	養雞人	分店最高管理者	獨立規劃	須由老闆直接任命
+老闆	雞的傳人	系統最高層管理員	-	固定職位
+
+🔁 職等變動邏輯（評分結合）
+降職條件範例：
+
+正職若評分低於 6 或當月被顧客點名負評達 3 次 → 降回「新手蛋蛋」等級。
+
+組長若評分低於 6 或被顧客連續負評超過門檻 → 降為「雞勇者」。
+
+晉升條件補充：
+
+「雞勇者」可主動申請晉升為「戰鬥雞」（組長），須滿6個月並通過所有人匿名投票評分。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.0（含擴充建議 + Firebase + UI + 優化報告）
+
+...（保留前段內容）
+
+---
+
+## 🔄 擴充模組與優化建議報告（正式擴展章）
+
+### 一、🧭 職位權限與控制強化
+
+| 職稱 | 系統內職等 | 權限特色 |
+|------|-------------|------------|
+| 新手蛋蛋 | 實習期 | 僅限打卡、查詢獎金、不允許升遷申請 |
+| 正職小雞仔 | 正職1階 | 開始累積分數、享受基礎獎金、允許投票 |
+| 雞勇者 | 正職2階 | 可提出升組長申請、可被設定指導新人 |
+| 戰鬥雞 | 組長 | 管理排班、觀看班級出勤統計、不得看評分身份 |
+| 養雞人 | 店長 | 所有員工管理權限、獎金判定、補發控制 |
+| 雞的傳人 | 系統總管理員 | 解密評分、全站設定、稽核與轉盤權限調整 |
+
+> 🔒 建議每職位綁定 role 權限組，透過前台及 Firebase rules 控管行為。
+
+---
+
+### 二、📥 晉升申請與審核紀錄模組
+
+| 集合：`promotion_requests` |
+```json
+{
+  user_id: "staff_abc",
+  from_title: "雞勇者",
+  to_title: "戰鬥雞",
+  month: "2025-06",
+  apply_time: Timestamp,
+  vote_result: { avg: 8.3, voters: 12 },
+  approved_by: "owner_001",
+  status: "approved"
+}
+```
+- 紀錄所有升遷申請歷程、通過者與否、決策人與升遷條件是否達標。
+- 可由 UI 顯示升遷進度條與「投票結果分析」視覺化。
+
+---
+
+### 三、🎖️ 成就模組（徽章 + 通知）
+
+| 成就名稱 | 條件 | 顯示位置 |
+|------------|--------|-------------|
+| 穩定之雞 | 每日打卡滿30天 | 員工頁面 + LINE通知 |
+| 中獎達人 | 轉盤中獎10次 | 頁面徽章 + 排行標示 |
+| 全勤勇者 | 無請假 + 準時30天 | 評分加分 + $500 |
+
+> 所有成就應寫入 `user_achievements` 集合，於 UI 與排行榜顯示。
+
+---
+
+### 四、📊 員工獎金預測工具
+
+- 頁面元件：「若明日營收為 ______，可拿獎金？（即時試算）」
+- 功能結合 `bonus_templates` 即時計算
+- 提升員工每日營收參與感與「可見的報酬期待」
+
+---
+
+### 五、⏳ 轉盤過期機制與獎勵刺激
+
+- 每次獲得轉盤次數，應加入欄位 `expires_at`
+- 預設轉盤有效期：季末，過期即失效
+- 每週獎勵任務例：
+  - 本週轉盤中獎 ≥3 次 → 加碼 $1000
+  - 當週無遲到 → 額外獲得1次轉盤
+
+> 推動週期性任務由 Function `evaluateWeeklyMissions()` 自動運算
+
+---
+
+### 六、🤝 團隊獎金共享模組（team_bonus）
+
+- 集合：`team_bonus_events`
+```json
+{
+  date: "2025-06-03",
+  store_id: "中壢店",
+  condition: "營收 ≥ 50000",
+  total_bonus: 2000,
+  members: ["staff_01", "staff_02"],
+  divided_per_person: 1000
+}
+```
+- 當天所有打卡員工平均分配團隊達標獎金，提升合作參與感。
+
+---
+
+### 七、💬 LINE Bot 雙向查詢功能模組（Chat UX）
+
+- 範例命令：
+  - `@我今天可以拿多少獎金？`
+  - `@我還差幾分升組長？`
+  - `@我本季還能轉幾次盤？`
+- 整合 webhook 與 LINE Bot 回覆，增加即時互動感與員工黏著度
+
+---
+
+### 八、📈 指標與管理報表建議強化
+
+| 模組 | 指標 |
+|------|------|
+| 員工績效 | 分數標準差、近30日走勢 |
+| 獎金統計 | 平均發放額、月總支出佔比 |
+| 轉盤活動 | 平均中獎值、兌換率（次數/獎金池）|
+| 升遷效率 | 升職通過率、平均審核天數 |
+
+---
+
+📌 本章內容可納入《整合專案報告》作為獎金制度的擴充路線圖（Roadmap）與開發優先順序參考。
+是否要協助你標記哪些屬於 Phase 1 / Phase 2 可先開發？
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.1（含擴充建議 + Firebase + UI + 優化報告 + 開發分期）
+
+...（保留前段內容）
+
+---
+
+## 📌 擴充模組開發建議分期（Phase 規劃）
+
+### ✅ Phase 1：核心功能優先實作
+| 模組 | 原因 |
+|-------|------|
+| `promotion_requests` 升遷申請表 | 升遷評分與流程透明化基礎 |
+| `user_achievements` 成就紀錄模組 | 強化激勵與紀錄功能 |
+| `bonus_spin` 過期控制 + 計數功能 | 防止累積過度轉盤次數造成爆量發獎 |
+| LINE Bot 問答查詢（基礎） | 提升系統即時互動與透明度 |
+| 獎金預測工具元件（前台） | 提升員工自主營收目標參與度 |
+
+### 🟨 Phase 2：進階功能與管理提升
+| 模組 | 原因 |
+|-------|------|
+| `team_bonus_events` 團隊獎金 | 強化團體合作文化與跨班激勵 |
+| `evaluateWeeklyMissions` 每週任務發獎 | 導入週期性目標與彈性激勵模式 |
+| LINE Bot 整合 webhook 回覆全功能 | 包含查轉盤次數 / 升遷條件 / 評分等 |
+| 成就徽章視覺化排行 + 公告牆整合 | 增加遊戲化呈現與橫向刺激性 |
+| 抽獎動畫與儀表圖強化 | 用於前台 UI 美化與抽獎觀感提升 |
+
+### 🔒 Phase 3：稽核與長期穩定性建設
+| 模組 | 原因 |
+|-------|------|
+| 評分灌票警示（灌票偵測器） | 確保評分制度公平性長期穩定 |
+| `promotion_requests` 日誌備查 + 管理員手動介入 UI | 可修正錯誤申請與人工處理流程 |
+| 自動化 Firebase 日報/週報功能（可寄至 Telegram / LINE Notify） | 對內管理效率強化 |
+
+---
+
+📌 本分期規劃建議可配合開發週期、技術資源與人力配置安排滾動式推進。
+是否需轉為甘特圖或開發任務表？或要我標示預估工期與角色（前端/後端/PM）？
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.2（擴充建議 + Firebase + UI + 工期任務分工甘特圖）
+
+...（保留前段內容）
+
+---
+
+## 📌 擴充模組開發建議分期（Phase 規劃）
+
+### ✅ Phase 1：核心功能優先實作
+| 模組 | 原因 | 工期估算 | 角色配置 |
+|-------|------|-----------|------------|
+| `promotion_requests` 升遷申請表 | 升遷評分與流程透明化基礎 | 5 天 | 前端、後端、PM |
+| `user_achievements` 成就紀錄模組 | 強化激勵與紀錄功能 | 4 天 | 後端、前端 |
+| `bonus_spin` 過期控制 + 計數功能 | 防止爆量發獎 | 3 天 | 後端、Firebase Functions |
+| LINE Bot 問答查詢（基礎） | 提升互動與透明度 | 3 天 | Bot 開發、PM |
+| 獎金預測工具元件（前台） | 增加主動參與度 | 3 天 | 前端、設計師 |
+
+### 🟨 Phase 2：進階功能與管理提升
+| 模組 | 原因 | 工期估算 | 角色配置 |
+|-------|------|-----------|------------|
+| `team_bonus_events` 團隊獎金 | 強化團體合作文化 | 4 天 | 後端、前端 |
+| `evaluateWeeklyMissions` 每週任務獎金 | 導入週期任務制度 | 3 天 | Firebase Functions、PM |
+| LINE Bot webhook 回覆整合 | 強化查詢與互動 | 4 天 | Bot 開發、後端 |
+| 成就徽章排行 + 公告牆 | 遊戲化呈現 | 5 天 | 前端、設計師 |
+| 抽獎動畫與儀表強化 | 抽獎體驗升級 | 3 天 | 前端動畫、UI/UX |
+
+### 🔒 Phase 3：稽核與穩定性建設
+| 模組 | 原因 | 工期估算 | 角色配置 |
+|-------|------|-----------|------------|
+| 評分灌票警示（灌票偵測器） | 確保制度公平 | 3 天 | 後端邏輯、PM |
+| `promotion_requests` 日誌 + 管理員介入 | 補人工作業與修正流程 | 2 天 | 前端、後端 |
+| Firebase 自動日報/週報系統 | 管理效率提升 | 3 天 | Firebase Functions、後端 |
+
+---
+
+## 📊 甘特圖時程規劃（建議 4 週 Sprint 制）
+
+### 📅 第一週（Week 1）
+- [●●●●] `promotion_requests`
+- [●●●] `bonus_spin` 過期控制
+- [●●] LINE Bot 初版（查詢剩餘次數）
+
+### 📅 第二週（Week 2）
+- [●●●●] `user_achievements`
+- [●●] 獎金預測元件
+- [●] 評分灌票警示初稿（研發階段）
+
+### 📅 第三週（Week 3）
+- [●●●●] `team_bonus_events`
+- [●●●] `evaluateWeeklyMissions`
+- [●●] 成就徽章 UI
+- [●] Firebase 日報模組
+
+### 📅 第四週（Week 4）
+- [●●●●] LINE Bot webhook 完整版
+- [●●] 抽獎動畫 + 儀表強化
+- [●] 稽核手動介面補強
+
+---
+
+📌 本工期排程為初步評估版本，建議依實際開發規模進行任務細分與每日站立會同步調整。
+如需我幫你再轉為 Asana / Trello / Jira 任務板格式，也可以幫你整批匯出。
+
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.3（含優化建議 + 擴展模組 + 技術架構）
+
+...（保留前段內容）
+
+---
+
+## 🧠 系統優化與擴充建議（v3.3 擴展章）
+
+### 一、📦 Firestore 結構優化與新集合設計
+
+#### ✅ 新增集合建議
+| 集合名稱 | 功能說明 |
+|------------|------------|
+| `bonus_summary_daily` | 每日獎金發放快照（給排行榜快取用）|
+| `rankings_cached` | 當日累積中獎排行、單筆最高、近10筆中獎記錄快取 |
+| `line_event_templates` | 控制 LINE 通知類型（中獎通知、升遷、評分成功等）|
+| `manual_bonus_injections` | 老闆私下獎金注入或補發轉盤次數記錄 |
+| `bonus_compensation_requests` | 員工補償轉盤申請紀錄（店長審核）|
+
+### 二、🛠️ Firebase Functions 強化建議
+
+| Function 名稱 | 功能 |
+|------------------|------|
+| `generateBonusSnapshotDaily()` | 每日結算獎金與中獎榜單寫入快取集合 |
+| `triggerLineEvent(type, user_id)` | 發送 LINE Notify，依據 `line_event_templates` 設定執行 |
+| `autoSyncPlatformRatings()` | 定時同步 Uber/Panda 評分（若 API 支援）或快照記錄版本 |
+| `submitBonusCompensationRequest()` | 補償轉盤申請後觸發，產生審核流程與獎金扣除模擬預覽 |
+
+---
+
+## 📌 邏輯架構補強與擴充模組
+
+### A. 跨店出勤與評分歸屬處理
+- 所有獎金/評分/轉盤紀錄皆需綁定 `store_id`
+- 評分、升遷審核 UI 顯示「本月在X店出勤Y天」
+- 評分畫面切換下拉可查不同分店評分
+
+### B. 店長代理制度（可由老闆指定或店長當日設定）
+- 新欄位：`daily_manager_override`
+```json
+{
+  date: "2025-06-12",
+  store_id: "龍崗",
+  acting_manager_id: "staff_002",
+  assigned_by: "養雞人",
+  timestamp: Timestamp
+}
+```
+- 前台顯示「代理店長身份執行中」，具管理權限但記錄於代理稽核
+
+### C. LINE Bot 模組化通知管理
+- Firestore 集合範例 `line_event_templates`
+```json
+{
+  id: "notify_big_win",
+  trigger: "bonus_draw_logs.value >= 3000",
+  enabled: true,
+  message_template: "恭喜你抽中 ${{value}} 元轉盤大獎！🎉",
+  channels: ["user_dm", "store_manager", "global_announce"]
+}
+```
+
+---
+
+## 🎯 行銷與激勵擴展模組
+
+### 1. 季末排行特別獎機制（獎金/LINE點數/假期）
+| 排名類型 | 獎勵方式 |
+|-----------|------------|
+| 中獎總額排行第一 | 加碼 $3000 + 公開表揚 |
+| 抽獎次數最多者 | 折抵轉盤費用 or 加碼一次免費抽 |
+
+### 2. 顧客參與式抽獎（LINE留言/QR掃描）
+- 顧客完成 LINE 問券後可參與抽獎（Firebase Hosting 頁面）
+- 每筆由 Functions 觸發與中獎機率相對應小品項（贈品券、炸物券）
+
+### 3. 老闆私獎帳戶（可補發未記錄獎金或激勵轉盤次數）
+- UI 欄位：金額、原因、有效期、是否可轉盤、是否列入排行榜
+- 欄位寫入 `manual_bonus_injections`
+
+### 4. 員工轉盤補償提案系統
+- 員工提出補發抽獎次數，由店長審核
+```json
+{
+  user_id: "staff_123",
+  reason: "當日病假未轉盤",
+  proposed_spin: 1,
+  status: "pending",
+  approved_by: null
+}
+```
+
+---
+
+## 🧩 預警與公平性偵測建議
+
+| 項目 | 對策建議 |
+|------|-----------|
+| 排行榜爆量查詢 | 引入快取快照更新，每日1次寫入 `rankings_cached` |
+| 抽獎公平性爭議 | 每筆中獎需寫入 `seed`, `random_result`, `timestamp`, `ip` 作稽查用 |
+| 評分灌票異常 | 增設自動比對互評分數相似度，並生成稽核列表給管理員 |
+| 平台評分偽造 | 所有手動輸入需附加來源與輸入人 ID，並備份為版本歷史 |
+
+---
+
+📌 本章建議納入為未來「v4.0」或跨系統聯動的升級路線圖。
+如需我再為以上模組生成 UI 圖、資料表 JSON 樣板或任務板任務清單，也可立即補上。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.4（擴展模組 + Firebase Functions 起手式）
+
+...（保留前段內容）
+
+---
+
+## 🔧 Firebase Functions 起手式程式碼樣板
+
+### 1. `generateBonusSnapshotDaily()`
+> 每日產出排行榜與中獎紀錄快取
+```ts
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+admin.initializeApp();
+
+export const generateBonusSnapshotDaily = functions.pubsub.schedule('every 24 hours').onRun(async () => {
+  const db = admin.firestore();
+  const snapshot = await db.collection('bonus_draw_logs').where('date', '==', todayDate()).get();
+
+  const rankings = calculateTopWinners(snapshot.docs);
+  await db.collection('rankings_cached').doc(todayDate()).set({ rankings });
+});
+```
+
+### 2. `triggerLineEvent(type, userId)`
+> 發送 LINE 通知：依據事件種類與 templates 設定
+```ts
+export const triggerLineEvent = functions.firestore.document('bonus_draw_logs/{logId}').onCreate(async (snap, context) => {
+  const data = snap.data();
+  if (data.value >= 3000) {
+    const template = await getTemplateById('notify_big_win');
+    const message = template.message_template.replace('{{value}}', data.value);
+    await sendLineNotify(data.user_id, message);
+  }
+});
+```
+
+### 3. `autoSyncPlatformRatings()`
+> 手動或定時同步平台評分至 Firestore
+```ts
+export const autoSyncPlatformRatings = functions.pubsub.schedule('every 24 hours').onRun(async () => {
+  const scores = await fetchPlatformRatings(); // 擴充用 API
+  const db = admin.firestore();
+  for (const storeId in scores) {
+    await db.collection('platform_ratings').doc(storeId).set({ ...scores[storeId], updatedAt: Date.now() });
+  }
+});
+```
+
+### 4. `submitBonusCompensationRequest()`
+> 員工申請補轉，產生紀錄，並由店長審核
+```ts
+export const submitBonusCompensationRequest = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+  const req = {
+    user_id: context.auth.uid,
+    reason: data.reason,
+    proposed_spin: data.proposed_spin,
+    status: 'pending',
+    created_at: admin.firestore.Timestamp.now()
+  };
+  await db.collection('bonus_compensation_requests').add(req);
+  return { success: true };
+});
+```
+
+---
+
+📌 以上為四大核心功能模組起手式，建議於部署前搭配對應 security rules 限制權限與稽核控制。下一步是否補上 rules 規則與 UI 元件視覺設計？
+
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.5（擴展模組 + Functions + Firestore 安全規則）
+
+...（保留前段內容）
+
+---
+
+## 🔐 Firestore Security Rules 設計草案
+
+```ts
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 所有登入者皆可讀取公告快取與轉盤紀錄摘要
+    match /rankings_cached/{day} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // bonus_draw_logs 僅本人可讀寫（轉盤中獎紀錄）
+    match /bonus_draw_logs/{log} {
+      allow create: if request.auth != null && request.resource.data.user_id == request.auth.uid;
+      allow read: if resource.data.user_id == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // bonus_templates（獎金邏輯）僅管理員可寫入
+    match /bonus_templates/{template} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.token.role == 'admin';
+    }
+
+    // bonus_compensation_requests
+    match /bonus_compensation_requests/{requestId} {
+      allow create: if request.auth != null && request.resource.data.user_id == request.auth.uid;
+      allow read: if resource.data.user_id == request.auth.uid;
+      allow update: if request.auth.token.role in ['manager', 'admin'];
+      allow delete: if false;
+    }
+
+    // manual_bonus_injections 僅老闆／管理員可操作
+    match /manual_bonus_injections/{log} {
+      allow read, write: if request.auth.token.role == 'admin';
+    }
+
+    // platform_ratings 自動快照資料，只能由 Function 寫入
+    match /platform_ratings/{storeId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.token.role == 'function';
+    }
+
+    // promotion_requests 升遷流程
+    match /promotion_requests/{req} {
+      allow create: if request.auth != null && request.resource.data.user_id == request.auth.uid;
+      allow read: if resource.data.user_id == request.auth.uid || request.auth.token.role in ['manager', 'admin'];
+      allow update: if request.auth.token.role in ['manager', 'admin'];
+    }
+  }
+}
+```
+
+---
+
+📌 若結合多分店權限，可進一步搭配：
+- `request.auth.token.store_ids` 限制可操作店別
+- `isManagerOfStore(store_id)` 自訂函式驗證身份與店別
+
+下一步是否補上 UI 元件建議圖與操作邏輯畫面結構？
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.6（員工端功能補強模組）
+
+...（保留前段內容）
+
+---
+
+## 👥 員工端功能擴充模組設計（v3.6 補強）
+
+### 1. 📌 匿名評分系統 UI
+- 每月初自動彈出「本月評分任務」提醒卡片
+- 分頁式評分介面，依照分店出勤自動列出需評分同事名單
+- 評分面向：櫃台、油鍋、後勤、團隊合作、責任心（依職責篩選）
+- 每項使用滑桿 + 顏色（紅→綠）+ emoji 對應
+- 每月未完成評分者限制抽獎與成就獲得
+
+### 2. 📈 升遷與降職流程提示
+- 頁面頭銜顯示：「目前職位：雞勇者」→ 升遷後自動動畫展示「戰鬥雞」徽章
+- 同時發出 LINE Notify + App 內通知：「您已升職為 組長｜戰鬥雞」
+- 降職也會顯示動畫變動與提醒：「您目前已降回 正職｜小雞仔」
+- 每月統計頁顯示「距離升遷目標：還差 1.2 分」
+
+### 3. 📋 每日工作日誌功能
+- 每日打卡完成後自動跳出「備註欄」：
+  - 今日狀態（選擇：正常／忙碌／異常）
+  - 任務回報（自由輸入備料情況或備忘）
+  - 自評欄（可設定 0-5 顆雞蛋）
+- 寫入 `work_logs` 集合，店長後台可統一檢視或彙整
+
+### 4. 🏆 成就與里程碑系統（自動化）
+| 成就名稱 | 條件 | 獎勵 |
+|-----------|-------|------|
+| 穩定出勤雞 | 連續30天準時打卡 | +1 轉盤次數 |
+| 被點名王者 | 單月被顧客點名 3 次好評 | +500 元獎金 |
+| 評分滿分雞 | 本月平均分數 ≥ 9 分 | +成就徽章 + 名冊展示 |
+- 所有成就記錄於 `user_achievements` 集合，並於個人頁顯示解鎖進度與徽章
+
+### 5. 📊 員工個人頁面（動態儀表板）
+- 顯示區塊：
+  - 當前職等頭銜（含圖示）
+  - 本月薪資級距：$48,000｜雞勇者
+  - 本月平均評分條（顯示來源佔比）
+  - 可用轉盤次數與抽獎歷史紀錄
+  - 累積獎金曲線圖（30日 / 季 / 年）
+  - 我的目標（員工自設，如：每日都打卡、獲得顧客好評一次）
+
+### 6. 🧠 技能標籤模組
+- 每位員工資料內新增欄位：`skills: ['櫃台', '炸鍋']`
+- 店長／管理員可於後台新增或修改技能標籤
+- 員工可於前台發起「技能申請」：如想學油鍋，可送出申請由主管審核
+- 訓練完成後由主管「認證」→ 標籤即刻生效
+- 技能標籤可作為升遷依據與成就觸發條件之一
+
+---
+
+📌 此擴充模組將員工端從「被動接收資訊」強化為「主動參與成長與評價」的互動核心平台，建議搭配轉盤、排行榜、升遷通知與 LINE Bot 查詢功能共同使用。
+
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.6（員工端功能補強模組）
+
+...（保留前段內容）
+
+---
+
+## 👥 員工端功能擴充模組設計（v3.6 補強）
+
+...（保留各模組敘述）
+
+---
+
+## 🧱 員工端前台畫面結構（UI + JSON 欄位設計）
+
+### 1. 📌 評分介面元件 JSON 結構
+```json
+{
+  "type": "rating_form",
+  "target_user_id": "uid_001",
+  "categories": [
+    { "label": "櫃台應對", "score": 4 },
+    { "label": "油鍋節奏", "score": 5 },
+    { "label": "後勤配料", "score": 3 },
+    { "label": "責任心", "score": 4 },
+    { "label": "團隊合作", "score": 5 }
+  ],
+  "comment": "最近炸雞速度有提升👍"
+}
+```
+
+### 2. 📈 升遷動畫 UI 元件
+- 結構：彈窗 + 頭銜更換區塊 + 過場動畫
+```json
+{
+  "type": "promotion_announce",
+  "from": "雞勇者",
+  "to": "戰鬥雞",
+  "date": "2025-06-01",
+  "animation": "badge_slide",
+  "line_notify": true
+}
+```
+
+### 3. 📋 工作日誌表單欄位
+```json
+{
+  "type": "daily_log",
+  "user_id": "uid_012",
+  "date": "2025-06-02",
+  "status": "正常",
+  "notes": "今日補貨較多，備料提前完成",
+  "self_score": 4
+}
+```
+
+### 4. 🏆 成就狀態欄位（user_achievements）
+```json
+{
+  "user_id": "uid_777",
+  "achievement_id": "on_time_30",
+  "name": "穩定出勤雞",
+  "earned_at": "2025-06-02",
+  "icon": "🐣",
+  "reward_type": "spin",
+  "reward_value": 1
+}
+```
+
+### 5. 📊 員工個人頁（dashboard）JSON 結構
+```json
+{
+  "user_id": "uid_135",
+  "rank": "雞勇者",
+  "salary_tier": 48000,
+  "average_score": 8.5,
+  "spin_available": 2,
+  "total_bonus_this_month": 9500,
+  "goals": ["打卡準時", "累積顧客好評"]
+}
+```
+
+### 6. 🧠 技能標籤申請與管理 JSON 結構
+```json
+{
+  "type": "skill_application",
+  "user_id": "uid_999",
+  "skill": "油鍋",
+  "status": "pending",
+  "applied_at": "2025-06-01",
+  "approved_by": null
+}
+```
+
+---
+
+📌 上述為六大功能的 UI 對應欄位與前端資料結構示意，可作為實作前端元件綁定或 API 結構傳遞依據。是否需我幫你接續畫出具體畫面草圖？
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.7（員工端補強 + 線上點餐模組擴充）
+
+...（保留前段內容）
+
+---
+
+## 🍱 線上點餐系統邏輯擴充（v3.7 補充）
+
+### ✅ 現行已支援模組摘要
+| 模組 | 說明 |
+|-------|------|
+| 顧客下單流程 | 綁定 LINE 登入，動態菜單、加料、購物車、付款選項（LINE Pay / 現場付款） |
+| 取餐進度通知 | 顧客可查詢訂單編號與狀態；店員更新狀態會同步 LINE Notify |
+| 顧客評價系統 | 訂單結束後推送問卷，可指定員工、留下意見，寫入評分邏輯與獎金系統 |
+
+### 🧩 可擴充模組設計
+
+#### 1. 📊 菜單推薦模組（個人化 + 熱門）
+```json
+{
+  "type": "menu_recommendation",
+  "logic": [
+    "top_selling_today",
+    "customer_favorite",
+    "combo_pairing"
+  ],
+  "display_position": "menu_top"
+}
+```
+- 顯示「今日熱銷」、「上次有點過」、「推薦搭配」等個人化資訊
+- 根據 Firebase 集合 `orders_summary_daily` 計算熱門商品
+
+#### 2. 🎁 自訂優惠與加購區（滿額條件）
+```json
+{
+  "type": "promotion",
+  "condition": "order.total >= 150",
+  "reward": {
+    "type": "discount",
+    "value": 30
+  },
+  "message": "滿 $150 送 $30 折扣券，下次用"
+}
+```
+- 支援不同類型：折扣、送品項、加價購、累點
+- 管理後台可新增促銷條件與週期時間設定
+
+#### 3. 🛑 訂單取消與編輯保留期
+```json
+{
+  "type": "order_control",
+  "editable_time_window_sec": 60,
+  "cancelable_until_status": "accepted"
+}
+```
+- 顧客可於「60 秒內」編輯或取消訂單
+- 一旦店員點選「製作中」，即視為不可編輯或取消狀態
+
+#### 4. 📦 即時庫存同步（結合 POS）
+```json
+{
+  "type": "menu_sync",
+  "menu_item_id": "chicken_leg",
+  "available": false,
+  "last_updated": "2025-06-01T14:33"
+}
+```
+- 若某商品售完，自動在點餐畫面標示「售完」並排至最下方灰色處理
+- 可與後台 POS 綁定（firebase function or webhook）
+
+#### 5. 🧑‍🍳 顧客身份導購與標籤引導
+```json
+{
+  "type": "customer_segment",
+  "tags": ["學生", "常客", "不吃辣"],
+  "recommendations": ["套餐B", "甜不辣", "豆腐"]
+}
+```
+- 根據 LINE 綁定後的身份標籤與歷史行為，顯示客製化推薦
+- 管理員可手動為顧客加標籤（如團購、辦公大樓）
+
+---
+
+📌 此擴充模組設計將進一步提升點餐系統的個人化、效率與營收轉換率，建議結合顧客點數、抽獎、會員成就模組使用。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.7（員工端補強 + 線上點餐模組擴充）
+
+...（保留前段內容）
+
+---
+
+## 🍱 線上點餐系統邏輯擴充（v3.7 補充）
+
+### ✅ 現行已支援模組摘要
+| 模組 | 說明 |
+|-------|------|
+| 顧客下單流程 | 綁定 LINE 登入，動態菜單、加料、購物車、付款選項（LINE Pay / 現場付款） |
+| 取餐進度通知 | 顧客可查詢訂單編號與狀態；店員更新狀態會同步 LINE Notify |
+| 顧客評價系統 | 訂單結束後推送問卷，可指定員工、留下意見，寫入評分邏輯與獎金系統 |
+
+### 🧩 可擴充模組設計
+
+...（保留 JSON 擴充區段）
+
+---
+
+## 🧱 顧客端畫面結構建議與資料欄位
+
+### 1. 🛒 顧客首頁畫面（mobile-first 設計）
+- 元件：分店選擇器、點餐入口、推薦菜單區、優惠橫幅
+```json
+{
+  "store_selector": true,
+  "welcome_banner": "不早脆皮雞排歡迎您",
+  "recommended_items": ["top_selling_today", "customer_favorite"],
+  "promotion_banner": "本日滿額贈送活動進行中"
+}
+```
+
+### 2. 📋 菜單區域
+- 類別切換、售完標示、加購推薦
+```json
+{
+  "menu": [
+    { "id": "chicken_leg", "name": "雞腿排", "price": 75, "available": true },
+    { "id": "squid", "name": "小卷", "price": 65, "available": false }
+  ],
+  "recommend_combo": ["+10 元加購甜不辣"]
+}
+```
+
+### 3. 🧾 購物車與結帳區
+```json
+{
+  "items": [
+    { "id": "chicken_leg", "qty": 2, "subtotal": 150 },
+    { "id": "drink_1", "qty": 1, "subtotal": 25 }
+  ],
+  "total": 175,
+  "payment_methods": ["LINE Pay", "現場付款"],
+  "submit_button": "送出訂單"
+}
+```
+
+### 4. ⏱️ 訂單狀態查詢與通知畫面
+```json
+{
+  "order_number": "A128",
+  "status": "製作中",
+  "estimated_pickup": "18:15",
+  "notify_via_line": true
+}
+```
+
+### 5. 📣 評價表單觸發
+- 結帳完成後自動出現表單 or 發送 LINE 評價問卷
+```json
+{
+  "order_id": "2025-0601-1123",
+  "employee_rating": true,
+  "comment_field": true,
+  "suggested_tags": ["速度快", "服務好", "口味佳"]
+}
+```
+
+---
+
+📌 上述資料結構可作為開發前端 UI、Firebase 綁定與 LINE Bot 流程整合的參考基礎。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.7（員工端補強 + 線上點餐模組擴充）
+
+...（保留前段內容）
+
+---
+
+## 🍱 線上點餐系統邏輯擴充（v3.7 補充）
+
+### ✅ 現行已支援模組摘要
+| 模組 | 說明 |
+|-------|------|
+| 顧客下單流程 | 綁定 LINE 登入，動態菜單、加料、購物車、付款選項（LINE Pay / 現場付款） |
+| 取餐進度通知 | 顧客可查詢訂單編號與狀態；店員更新狀態會同步 LINE Notify |
+| 顧客評價系統 | 訂單結束後推送問卷，可指定員工、留下意見，寫入評分邏輯與獎金系統 |
+
+### 🧩 可擴充模組設計
+...（保留 JSON 擴充區段）
+
+---
+
+## 🧱 顧客端畫面結構建議與資料欄位
+...（保留原結構）
+
+---
+
+## 🗂️ Firestore 資料表結構建議（線上點餐模組）
+
+### 1. `orders`（顧客訂單）
+```json
+{
+  "order_id": "20250601-0001",
+  "user_id": "uid_abc",
+  "store_id": "內壢忠孝",
+  "items": [
+    { "menu_item_id": "chicken_leg", "qty": 2, "subtotal": 150 }
+  ],
+  "total": 175,
+  "status": "preparing", // created, preparing, ready, picked_up, canceled
+  "payment_method": "LINE Pay",
+  "created_at": Timestamp,
+  "pickup_time": "18:15"
+}
+```
+
+### 2. `menu_items`（菜單項目）
+```json
+{
+  "menu_item_id": "chicken_leg",
+  "name": "雞腿排",
+  "price": 75,
+  "available": true,
+  "category": "炸物",
+  "store_ids": ["內壢忠孝", "中壢龍崗"],
+  "image_url": "...",
+  "tags": ["人氣", "可加辣"]
+}
+```
+
+### 3. `store_config`（分店設定）
+```json
+{
+  "store_id": "中壢龍崗",
+  "line_notify_token": "...",
+  "payment_options": ["LINE Pay", "現場付款"],
+  "menu_display_order": ["雞腿排", "甜不辣"]
+}
+```
+
+### 4. `customer_profiles`（顧客資料）
+```json
+{
+  "user_id": "uid_abc",
+  "line_uid": "...",
+  "tags": ["常客", "不吃辣"],
+  "order_history": [...],
+  "last_store": "中壢龍崗"
+}
+```
+
+### 5. `order_feedback`（顧客評價紀錄）
+```json
+{
+  "order_id": "20250601-0001",
+  "user_id": "uid_abc",
+  "store_id": "中壢龍崗",
+  "rated_employees": ["staff001"],
+  "score": 5,
+  "tags": ["服務好", "速度快"],
+  "comment": "炸物酥脆好吃",
+  "created_at": Timestamp
+}
+```
+
+---
+
+📌 此資料表結構已支援「動態菜單顯示」、「顧客個人化導購」、「訂單與庫存即時互動」、「多分店支援」、「自動 LINE 通知」、「員工評價反饋」等核心點餐模組功能。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.8（員工端補強 + 線上點餐模組擴充 + LINE Bot 對話邏輯）
+
+...（保留前段內容）
+
+---
+
+## 🗨️ LINE Bot 對話邏輯設計（線上點餐系統）
+
+### ✅ 功能類型與對應範例
+
+#### 1. 📦 查詢訂單進度
+- **使用者輸入：**
+  - 「我有訂單嗎」
+  - 「查詢訂單進度」
+- **回覆邏輯：** 查找 `orders` 中 status = preparing/ready，回傳：
+  - `目前訂單 A123 正在製作中，預計取餐時間 18:20`
+
+#### 2. 📋 查詢今日菜單
+- **使用者輸入：**
+  - 「今天有賣什麼」
+  - 「查看菜單」
+- **回覆邏輯：** 抓取 `menu_items` 中 available = true：
+  - `今日提供：雞腿排（$75）、甜不辣（$45）、豆腐（$35）`
+
+#### 3. 🛍️ 查詢優惠與活動
+- **使用者輸入：**
+  - 「有沒有活動」
+  - 「優惠方案是什麼」
+- **回覆邏輯：** 查找促銷規則集 `promotions` 中條件符合者：
+  - `今日活動：滿 $150 贈送下次 $30 折價券`
+
+#### 4. 🏪 查詢營業時間與分店資訊
+- **使用者輸入：**
+  - 「現在有開嗎」
+  - 「中壢店開到幾點」
+- **回覆邏輯：** 查詢 `store_config` 中 store_id 與時段設定：
+  - `中壢龍崗店營業時間：每日 15:00 - 00:30`
+
+#### 5. 🎁 查看目前點數或累積紀錄（需登入）
+- **使用者輸入：**
+  - 「我有幾點」
+  - 「我上次點了什麼」
+- **回覆邏輯：**
+  - 查找 `customer_profiles` → 回傳點數、歷史訂單摘要：
+  - `您目前累積 90 點，上次於 5/31 點了雞排 + 甜不辣`
+
+### 📌 補充建議
+- 每筆查詢應記錄至 `line_bot_logs` 供後續優化分析
+- 若非會員 LINE 用戶，預設引導「點我登入會員即可使用完整功能」+ 綁定入口
+
+---
+
+📌 LINE Bot 設計已對應現有 Firebase 結構，可使用 LINE Messaging API 結合 webhook 自動處理並回覆文字與圖片。後續可進一步導入 Rich Menu、圖文選單或自動發送通知整合。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v3.9（員工端補強 + 點餐 + LINE Bot + 會員系統擴充）
+
+...（保留前段內容）
+
+---
+
+## 👤 會員管理系統擴充模組設計（v3.9 補強）
+
+### ✅ 現行已具備功能
+| 模組 | 狀態 | 備註 |
+|-------|--------|-------|
+| LINE Login 登入與綁定 | ✅ 已完成 | 支援快速登入與會員辨識 |
+| 點數與訂單歷史查詢 | ✅ 已完成 | 消費換點，並可查歷史紀錄與評價 |
+| 顧客問卷與評價機制 | ✅ 已整合 | 支援 LINE 推送、員工指定、連動績效 |
+| 會員標籤管理 | ✅ 後台自訂 | 如常客、不吃辣、辦公區域等 |
+| 優惠券系統 | ✅ 已建構 | 支援生日券、滿額折抵券、自動發送 |
+
+---
+
+### 🧩 v4.0 擴充建議模組
+
+#### 1. 🧠 會員等級制度（自動升級）
+- 根據年度累積消費金額自動升等（銅→銀→金→VIP）
+- 每等級享不同回饋倍率與專屬優惠券
+```json
+{
+  "user_id": "uid_xyz",
+  "member_level": "金牌會員",
+  "total_order_amount": 8700,
+  "benefits": ["生日券$100", "LINEPay加倍點"]
+}
+```
+
+#### 2. 🎯 顧客任務與成就系統
+- 任務範例：「首次推薦好友」、「連續 3 週下單」等
+- 每個任務綁定獎勵點數或抽獎機會，顯示進度條與已完成徽章
+```json
+{
+  "user_id": "uid_789",
+  "task_id": "task_first_share",
+  "completed": true,
+  "reward_type": "points",
+  "reward_value": 100
+}
+```
+
+#### 3. 🏆 會員排行榜模組
+- 每月前 10 名：
+  - 消費金額最高
+  - 點餐次數最多
+  - 顧客好評最多
+- 排行榜顯示於會員首頁，可搭配活動
+
+#### 4. 🎡 會員專屬抽獎轉盤
+- 顧客消費滿額或達成任務後獲得「抽獎券」
+- 抽獎 UI 與員工轉盤獨立，獎品為優惠券、贈品、小雞幣等
+- 管理後台可設定每期轉盤獎項與中獎機率
+
+#### 5. 🧾 電子發票歸戶（可選擇導入）
+- 若未來支援雲端發票整合，可將會員資料與載具號碼綁定
+- 結帳後自動歸戶，並寫入交易紀錄以供查詢與對帳
+
+---
+
+📌 此會員模組擴充設計建議納入 v4.0 發展目標，結合點餐、行銷、推薦與 LINE 官方帳號自動回饋，可提升會員活躍度與顧客終身價值（CLV）。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.0（員工端補強 + 點餐 + LINE Bot + 會員系統擴充）
+
+...（保留前段內容）
+
+---
+
+## 👤 會員管理系統擴充模組設計（v4.0 補強）
+
+...（保留前述內容）
+
+---
+
+## 🧱 會員模組 UI 結構 + 資料欄位建議
+
+### 1. 🧠 會員等級系統畫面元件
+```json
+{
+  "user_id": "uid_xyz",
+  "member_level": "金牌會員",
+  "level_display": {
+    "badge_icon": "🥇",
+    "progress_bar": 72,
+    "next_level": "VIP",
+    "next_requirement": 1300
+  },
+  "benefits": ["生日券$100", "LINEPay加倍點"]
+}
+```
+- 元件包含：等級徽章圖示、進度條（距離下一級）、目前特權列舉
+
+### 2. 🎯 任務清單與成就徽章區塊
+```json
+{
+  "user_id": "uid_abc",
+  "active_tasks": [
+    { "task": "首次下單", "progress": 1, "total": 1, "completed": true },
+    { "task": "一週下三單", "progress": 2, "total": 3, "completed": false }
+  ],
+  "badges": [
+    { "name": "任務達人", "icon": "🏆", "unlocked": true },
+    { "name": "分享達人", "icon": "📣", "unlocked": false }
+  ]
+}
+```
+- UI 顯示任務條列進度 + 解鎖徽章展示列（可點擊詳細說明）
+
+### 3. 🏆 排行榜模組資料結構
+```json
+{
+  "type": "monthly_leaderboard",
+  "ranking_criteria": "total_spending",
+  "store_id": "中壢店",
+  "top_users": [
+    { "user_id": "uid_001", "name": "阿強", "amount": 5280 },
+    { "user_id": "uid_002", "name": "小美", "amount": 4790 }
+  ]
+}
+```
+- 排行榜區塊支援切換：月／季、消費／好評／下單次數
+
+### 4. 🎡 顧客抽獎轉盤資料設計
+```json
+{
+  "user_id": "uid_456",
+  "spins_left": 2,
+  "last_spin_result": {
+    "reward_type": "coupon",
+    "reward_value": "炸物折價券 $20",
+    "timestamp": "2025-06-02T12:33"
+  },
+  "rewards_history": [ ... ]
+}
+```
+- 顯示剩餘抽次、最近中獎結果、可選兌換項目（若搭配點數）
+
+### 5. 🧾 發票歸戶（雲端發票）欄位建議
+```json
+{
+  "user_id": "uid_789",
+  "carrier_id": "/ABCD12345",
+  "auto_claim_enabled": true,
+  "last_claimed_order": "2025-0601-1002"
+}
+```
+- 支援未來連接發票平台（財政部載具 API 或 LINE PAY 消費載具代管）
+
+---
+
+📌 此 UI 資料結構可對應 Web 或 LINE Front-end Framework 畫面元件使用，並支援後續串接獎勵、推播、排行榜與任務獎勵整合。
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.0（員工端補強 + 點餐 + LINE Bot + 會員系統擴充）
+
+...（保留前段內容）
+
+---
+
+## 👤 會員管理系統擴充模組設計（v4.0 補強）
+
+...（保留前述內容）
+
+---
+
+## 🧱 會員模組 UI 結構 + 資料欄位建議
+
+...（保留原結構）
+
+---
+
+## 🔄 任務排程與活動自動化邏輯設計
+
+### 1. 📆 任務刷新邏輯（每日/每週/每月）
+- 每日凌晨 3:00，自動產出新任務實例寫入 `customer_tasks`：
+```json
+{
+  "user_id": "uid_999",
+  "task_id": "daily_checkin",
+  "start_date": "2025-06-03",
+  "expire_date": "2025-06-03T23:59",
+  "status": "pending"
+}
+```
+- 類型包含：
+  - `daily_checkin`: 當日打卡獎 5 點
+  - `weekly_x_orders`: 一週滿 3 單抽一次
+  - `monthly_feedback`: 本月完成 1 筆顧客評價
+
+### 2. 🧾 自動化活動腳本範本（每月會員日）
+```json
+{
+  "event_id": "vip_bonus_day",
+  "trigger_date": "2025-06-10",
+  "target_segment": ["金牌會員", "VIP"],
+  "action": {
+    "type": "grant_coupon",
+    "coupon_type": "vip_special",
+    "value": 50,
+    "message": "感謝您的支持！本月會員日贈您 $50 折價券"
+  },
+  "repeat": "monthly"
+}
+```
+- 搭配 Firebase Functions 每月跑排程，發放 LINE Notify + 寫入 `coupon_records`
+
+### 3. 💬 範例活動腳本（首次綁定、生日、滿額）
+```json
+{
+  "event_type": "birthday",
+  "trigger_field": "birthday",
+  "action": {
+    "type": "send_coupon",
+    "value": 100,
+    "line_notify": true
+  }
+}
+```
+- 其他常見活動條件：
+  - 首次綁定會員
+  - 本月累計消費滿 $1000
+  - 首次填寫評價問卷
+
+---
+
+📌 任務排程與活動腳本可結合 Firebase Scheduled Functions 自動化運作，並配合會員等級、任務系統、抽獎券累積邏輯同步展開。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.0（員工端補強 + 點餐 + LINE Bot + 會員系統擴充）
+
+...（保留前段內容）
+
+---
+
+## 👤 會員管理系統擴充模組設計（v4.0 補強）
+
+...（保留前述內容）
+
+---
+
+## 🧱 會員模組 UI 結構 + 資料欄位建議
+
+...（保留原結構）
+
+---
+
+## 🔄 任務排程與活動自動化邏輯設計
+
+...（保留原結構）
+
+---
+
+## 🧰 後台活動任務設定介面設計（管理員專用）
+
+### A. 任務管理後台（customer_tasks_templates）
+```json
+{
+  "task_id": "weekly_order_challenge",
+  "title": "本週下單 3 次贈抽獎券",
+  "description": "在一週內完成任意 3 筆訂單即可獲得抽獎券",
+  "type": "weekly",
+  "repeat": true,
+  "reward": {
+    "type": "bonus_draw",
+    "value": 1
+  },
+  "condition": {
+    "orders_required": 3,
+    "count_field": "orders_this_week"
+  },
+  "enabled": true
+}
+```
+- 管理員可新增任務模板，自動套用至每位會員每週建立實例
+
+### B. 活動腳本設定介面（event_scripts_templates）
+```json
+{
+  "event_id": "first_binding",
+  "trigger": "on_user_created",
+  "filter_condition": "user.is_bound == true",
+  "action": {
+    "type": "grant_coupon",
+    "coupon_id": "welcome_30",
+    "line_notify": true
+  },
+  "enabled": true
+}
+```
+- 支援複數事件類型觸發（首次登入、生日、累計滿額）
+- 活動腳本可啟用/停用/編輯觸發時間與對象群組
+
+### C. 後台操作欄位（任務與活動統一欄位建議）
+| 欄位名稱 | 說明 |
+|----------|------|
+| 任務/活動名稱 | 顯示於前台名稱 |
+| 條件描述 | 任務邏輯說明（供顧客參考） |
+| 獎勵方式 | 折價券 / 點數 / 轉盤次數 / 等級升級 |
+| 觸發類型 | 每日、每週、首次動作、固定日期等 |
+| 有效期間 | 任務或活動的執行區間 |
+| 對象群組 | 全體會員 / 銅牌以上 / 特定分店 |
+| 是否啟用 | ✅ / ❌ 開關控制 |
+
+---
+
+📌 此管理員後台設計支援行銷活動即時建立、週期性任務安排、獎勵結構編輯與條件彈性配置，未來可搭配成效追蹤與任務完成率統計報表模組整合。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.0（員工端補強 + 點餐 + LINE Bot + 會員系統擴充）
+
+...（保留前段內容）
+
+---
+
+## 👤 會員管理系統擴充模組設計（v4.0 補強）
+
+...（保留前述內容）
+
+---
+
+## 🧱 會員模組 UI 結構 + 資料欄位建議
+
+...（保留原結構）
+
+---
+
+## 🔄 任務排程與活動自動化邏輯設計
+
+...（保留原結構）
+
+---
+
+## 🧰 後台活動任務設定介面設計（管理員專用）
+
+...（保留原結構）
+
+---
+
+## 📊 活動與任務成效追蹤報表模組
+
+### 📈 成效分析主視覺（dashboard 結構）
+| 指標項目 | 說明 |
+|-----------|------|
+| 任務完成率 | 顯示每週任務完成比例與完成人數，依任務類型可篩選 |
+| 活動參與率 | 活動開啟後實際觸發會員數量 / 可觸達總人數 |
+| 折價券使用率 | 各活動發放的優惠券使用比例與金額折抵統計 |
+| 轉盤啟用次數 | 每期抽獎活動中會員實際參與人次、平均中獎金額 |
+| 升等與流失分析 | 升級到高等會員人數／最近 30 天未再回訪人數比對 |
+
+### 📁 報表集合設計（firestore: `report_metrics`）
+```json
+{
+  "report_type": "weekly_task_completion",
+  "range": "2025-W23",
+  "task_id": "weekly_order_challenge",
+  "total_participants": 342,
+  "completed_count": 289,
+  "completion_rate": 84.5
+}
+```
+- 每週自動生成，搭配 `scheduledFunctions` 更新並寫入報表專用集合
+- 可依月份、活動、會員群組、分店進行篩選彙總
+
+### 📊 視覺化圖表建議
+- 完成率折線圖（可切換日／週／月）
+- 使用券比例圓餅圖（依券類型分類）
+- 抽獎參與雷達圖（依會員群層／等級）
+
+📌 本報表模組建議於管理後台新增「活動成效分析」頁籤，並與活動設定頁直接連動、即時呈現該任務之目前狀態與歷史表現。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.1（員工端補強 + 點餐 + LINE Bot + 會員系統擴充 + 積分與演算法模組）
+
+...（保留前段內容）
+
+---
+
+## 👤 會員管理系統擴充模組設計（v4.0 補強）
+
+...（保留前述內容）
+
+---
+
+## 🧱 會員模組 UI 結構 + 資料欄位建議
+
+...（保留原結構）
+
+---
+
+## 🔄 任務排程與活動自動化邏輯設計
+
+...（保留原結構）
+
+---
+
+## 🧰 後台活動任務設定介面設計（管理員專用）
+
+...（保留原結構）
+
+---
+
+## 📊 活動與任務成效追蹤報表模組
+
+...（保留原結構）
+
+---
+
+## 🧮 跨月獎勵積分與推薦演算法模組
+
+### 1. 🔁 積分統計與保留規則
+- 為避免每月歸零浪費，積分支援跨月累積：
+```json
+{
+  "user_id": "uid_abc",
+  "points_total": 1380,
+  "points_this_month": 340,
+  "carry_over_policy": "expire_after_90_days"
+}
+```
+- 可設定：
+  - 有效期（如 90 天）
+  - 每月最多轉入比例（如只保留 50%）
+
+### 2. 🔍 顧客偏好分析與個人化推薦（基礎模型）
+- 根據歷史訂單、點評、加點項目，自動標籤：
+```json
+{
+  "user_id": "uid_abc",
+  "tags": ["常吃雞腿排", "不吃辣", "週五常來"],
+  "recommendation": ["雞腿+豆腐套餐", "週五限時折扣提醒"]
+}
+```
+- 資料來源：`orders`, `feedback`, `visit_time_stats`
+- 後續建議導入 Collaborative Filtering 模型（如 TensorFlow Lite 推論）
+
+### 3. 💌 推薦通知整合（智慧提醒）
+- 每週或每次登入時自動彈出：
+  - 「上次點的雞腿炸得不錯，今晚再來一份？」
+  - 「你上次沒用完的折價券剩 2 天囉！」
+- 可寫入 `personal_notifications` 集合 + 推播至 LINE Notify / 前台提醒氣泡
+
+📌 本模組將強化顧客留存與個人化互動，並可納入後續 AI 自動生成優惠推薦訊息模組。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.2（Firebase Functions 擴充版）
+
+...（保留前段內容）
+
+---
+
+## 🔧 Firebase Functions 實作建議（積分與推薦模組）
+
+### 1. `calculateMonthlyPointsCarryOver()`
+> 每月 1 號自動計算跨月積分保留量
+```ts
+export const calculateMonthlyPointsCarryOver = functions.pubsub.schedule('0 3 1 * *').onRun(async () => {
+  const db = admin.firestore();
+  const users = await db.collection('customer_profiles').get();
+
+  for (const doc of users.docs) {
+    const data = doc.data();
+    const carryRate = 0.5; // 僅保留 50%
+    const newPoints = Math.floor((data.points_this_month || 0) * carryRate);
+    await doc.ref.update({
+      points_total: (data.points_total || 0) + newPoints,
+      points_this_month: 0
+    });
+    await db.collection('points_logs').add({
+      user_id: doc.id,
+      action: 'carry_over',
+      value: newPoints,
+      timestamp: admin.firestore.Timestamp.now()
+    });
+  }
+});
+```
+
+### 2. `generateUserTagsAndRecommendations()`
+> 每週一次掃描訂單與評價記錄，自動更新個人標籤與推薦項目
+```ts
+export const generateUserTagsAndRecommendations = functions.pubsub.schedule('every sunday 04:00').onRun(async () => {
+  const db = admin.firestore();
+  const users = await db.collection('customer_profiles').get();
+
+  for (const doc of users.docs) {
+    const userId = doc.id;
+    const orders = await db.collection('orders').where('user_id', '==', userId).orderBy('created_at', 'desc').limit(10).get();
+    const tagSet = new Set();
+
+    orders.forEach(o => {
+      const items = o.data().items;
+      if (items.find(i => i.menu_item_id === 'chicken_leg')) tagSet.add('常吃雞腿排');
+      if (o.data().notes?.includes('不要辣')) tagSet.add('不吃辣');
+    });
+
+    await doc.ref.update({
+      tags: Array.from(tagSet),
+      recommendation: ["雞腿+豆腐套餐", "週五限時折扣提醒"] // 可結合更動態邏輯生成
+    });
+  }
+});
+```
+
+### 3. `sendPersonalReminders()`
+> 推薦與提醒發送機制（登入時或週期性）
+```ts
+export const sendPersonalReminders = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', '請先登入');
+
+  const profile = await db.collection('customer_profiles').doc(uid).get();
+  const reminders = [];
+
+  if (profile.data().tags?.includes('常吃雞腿排')) {
+    reminders.push("今晚再來一份雞腿排套餐吧！");
+  }
+
+  const coupons = await db.collection('coupon_records').where('user_id', '==', uid).where('is_used', '==', false).get();
+  if (!coupons.empty) {
+    reminders.push("您還有未使用的優惠券，快來使用唷！");
+  }
+
+  await db.collection('personal_notifications').add({
+    user_id: uid,
+    reminders,
+    timestamp: Date.now()
+  });
+
+  return { reminders };
+});
+```
+
+---
+
+📌 以上 Functions 實作支援積分延續、自動標籤、個人推薦與智慧提醒，可獨立執行或搭配排程，並可進一步對接 LINE Notify、Web 前台氣泡訊息模組。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.3（Firebase Functions + 前台互動設計）
+
+...（保留前段內容）
+
+---
+
+## 🔧 Firebase Functions 實作建議（積分與推薦模組）
+
+...（保留前述函式內容）
+
+---
+
+## 💬 前台互動設計（積分推薦與提醒提示）
+
+### 1. 🔔 首頁提醒氣泡（Personal Reminder Bubble）
+- 顯示條件：登入後 10 秒自動觸發，或點擊「我的狀態」
+- 顯示內容：由 `personal_notifications` 撈出最近一筆提醒內容
+```json
+{
+  "reminders": [
+    "今晚再來一份雞腿排套餐吧！",
+    "您還有未使用的 $20 折價券唷～"
+  ]
+}
+```
+- 元件格式：左側雞排圖示 + 氣泡提示 + 「立即點餐」按鈕（可導入菜單頁）
+
+### 2. 🧠 個人化推薦提示條（推薦 Banner）
+- 出現在會員中心首頁上方，背景為用戶標籤配色（如常點炸物 → 背景炸雞圖）
+```json
+{
+  "banner_text": "你喜歡的組合又來了：雞腿+豆腐只要 $99！",
+  "cta": "一鍵點購"
+}
+```
+- 點擊後導向推薦商品加入購物車，並於購物車標記為「推薦組合」
+
+### 3. 🕒 積分到期提醒條（Points Expiration Warning）
+- 出現在積分頁面頂部，若有即將過期點數則顯示
+```json
+{
+  "expire_points": 80,
+  "expire_date": "2025-07-01"
+}
+```
+- 顯示樣式：「⚠️ 您有 80 點將於 7/1 過期，快來兌換優惠吧！」+ 立即兌換按鈕
+
+### 4. 📬 優惠券推薦整合提醒
+- 在使用者無動作狀態停留超過 15 秒時，自動推送優惠券建議提醒
+```json
+{
+  "coupon_type": "滿 200 折 50",
+  "message": "別錯過！這張券還可以幫你省 50 元！",
+  "cta": "套用到訂單"
+}
+```
+
+---
+
+📌 此互動設計將讓會員更直觀接收到推薦與提醒資訊，有效提升再消費轉換率與積分活化率。建議搭配 LINE OA 推播與個人成就頁面串接展現動態提醒歷史紀錄。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.4（Firebase Functions + 前台互動設計 + LINE Notify）
+
+...（保留前段內容）
+
+---
+
+## 🔧 Firebase Functions 實作建議（積分與推薦模組）
+
+...（保留前述函式內容）
+
+---
+
+## 💬 前台互動設計（積分推薦與提醒提示）
+
+...（保留前述互動模組內容）
+
+---
+
+## 📩 LINE Notify 與圖文訊息設計（會員互動推薦）
+
+### A. 🎯 LINE Notify 單行訊息範本
+| 類型 | 範例文字 |
+|------|-----------|
+| 推薦提示 | 您常點的雞腿排特價囉，今晚加點豆腐只要 $99！點我下單 🍗🍢 |
+| 積分即將過期 | ⚠️ 您的 80 點積分將於 7/1 過期，快來兌換優惠吧！👉 https://...
+| 優惠券提醒 | 🎁 滿 $200 折 $50 的優惠券即將到期！立即套用 👉 https://...
+
+### B. 📚 多欄圖文訊息（Flex Message）
+```json
+{
+  "type": "flex",
+  "altText": "本月推薦優惠",
+  "contents": {
+    "type": "bubble",
+    "hero": {
+      "type": "image",
+      "url": "https://cdn.nobearly.com/banner/chicken_combo.jpg",
+      "size": "full",
+      "aspectRatio": "20:13",
+      "aspectMode": "cover"
+    },
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        { "type": "text", "text": "你上次最愛的雞腿組合回來囉！", "weight": "bold", "size": "md" },
+        { "type": "text", "text": "雞腿+豆腐只要 $99，限時兩天！", "size": "sm", "color": "#555555" }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "horizontal",
+      "contents": [
+        {
+          "type": "button",
+          "style": "primary",
+          "color": "#ffcc00",
+          "action": {
+            "type": "uri",
+            "label": "立即點餐",
+            "uri": "https://order.nobearly.com"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### C. 🔄 推播流程建議
+- 由 `sendPersonalReminders()` Cloud Function 呼叫 `lineNotifyApi()`（內含 access token）
+- 預設每日最多一次推播，避免打擾
+- 特殊事件推播（生日、點數清空前日）可設定高優先權並插入圖文訊息
+
+---
+
+📌 LINE Notify 與 Flex Message 推播可提升資訊到達率與點擊轉換率，建議與 Firebase `personal_notifications` 結合，支援手動發送與自動排程同步整合。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.5（會員個人中心整合）
+
+...（保留前段內容）
+
+---
+
+## 🧭 會員個人中心｜整體架構與整合模組建議
+
+### 🧱 模組主畫面區塊配置建議
+| 區塊 | 說明 |
+|------|------|
+| 🎖️ 當前等級與積分 | 顯示目前會員等級（銅/銀/金/VIP）、總積分、即將過期積分提示 |
+| 🧩 我的任務 | 今日任務 / 本週任務進度條、兌獎按鈕、歷史任務徽章 |
+| 💸 我的優惠券 | 未使用優惠券清單（標示到期日）、立即使用按鈕 |
+| 📊 歷史紀錄 | 消費歷史、點數兌換紀錄、抽獎中獎紀錄、發票紀錄（如有） |
+| 🎯 個人推薦 | 本週推薦組合、點我加購按鈕、上次最愛提醒卡片 |
+| 🔔 系統通知紀錄 | 最近 7 筆個人提醒與 LINE 推播紀錄，可回顧與手動再次套用 |
+
+### 🧬 資料結構建議（可供前端一次撈取）
+```json
+{
+  "user_id": "uid_001",
+  "member_level": "金牌會員",
+  "points_total": 1360,
+  "points_expiring_soon": 80,
+  "tasks": [
+    { "task_id": "checkin", "title": "今日打卡", "status": "complete" },
+    { "task_id": "order_3x", "title": "本週下單 3 次", "status": "in_progress" }
+  ],
+  "coupons": [
+    { "id": "C1001", "title": "$50 折價券", "expires": "2025-07-01" }
+  ],
+  "history": {
+    "orders": [...],
+    "draws": [...],
+    "points_logs": [...]
+  },
+  "recommendations": [
+    "雞腿+豆腐套餐",
+    "今晚炸雞半價券還在喔！"
+  ],
+  "notifications": [
+    "6/3：您獲得生日券 $100",
+    "6/2：推薦雞腿套餐已上架"
+  ]
+}
+```
+
+### 🧰 UI 功能元件建議
+- ✅ Tab 切換或多欄式卡片排版（適合 PWA）
+- ✅ 每區塊支援點擊查看詳細（進入任務紀錄頁、優惠券兌換頁）
+- ✅ 導入 LINE 掃碼後直接進入會員中心（支援 deep link 導引）
+
+---
+
+📌 此設計整合所有獎勵／行銷／互動邏輯至單一視圖，可作為 LINE OA、網頁會員中心與 Web App 共用框架，建議同步整合 Firebase `customer_profiles`, `tasks`, `coupons`, `recommendations`, `notifications` 等集合進行資料合併查詢。
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.6（Security + 測試腳本 + UI 草圖）
+
+...（保留前段內容）
+
+---
+
+## 🔐 Firestore Security Rules（會員個資與互動模組）
+
+```ts
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 僅本人可讀寫個人資料
+    match /customer_profiles/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null;
+      allow delete: if false;
+    }
+
+    // 任務狀態讀寫
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.user_id;
+    }
+
+    // 優惠券僅本人讀取
+    match /coupons/{couponId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.user_id;
+      allow update: if request.auth.uid == resource.data.user_id;
+    }
+
+    // 系統推薦與通知
+    match /recommendations/{recId}, /notifications/{noteId} {
+      allow read: if request.auth.uid == resource.data.user_id;
+    }
+  }
+}
+```
+
+---
+
+## 🧪 測試資料與模擬腳本（QA／教學使用）
+
+### 📦 建立測試會員
+```json
+{
+  "user_id": "uid_test001",
+  "member_level": "銅牌會員",
+  "points_total": 500,
+  "points_expiring_soon": 50,
+  "tags": ["週五常客", "不吃辣"]
+}
+```
+
+### 🧩 模擬任務資料
+```json
+{
+  "task_id": "weekly_order_3x",
+  "user_id": "uid_test001",
+  "title": "一週下單 3 次",
+  "status": "in_progress",
+  "progress": 2,
+  "goal": 3
+}
+```
+
+### 🎁 測試用優惠券
+```json
+{
+  "coupon_id": "TEST_COUPON_50",
+  "user_id": "uid_test001",
+  "title": "$50 折價券",
+  "expires": "2025-07-01",
+  "is_used": false
+}
+```
+
+---
+
+## 🎨 畫面設計風格建議 + Figma 樣式說明
+
+### 🌈 主題方向：
+- 視覺風格：活潑卡片式介面 + 食物色調（炸雞金黃 / 豆腐米白 / 辣椒紅）
+- 字體搭配：標題使用 Noto Sans Bold、內文使用微軟正黑體
+- 元件風格：圓角卡片（16px）、陰影浮出、ICON 搭配 Emoji
+
+### 🖼️ Figma 範本建議（命名層級）
+- `Page: MemberCenter`
+  - `Card: LevelInfo`
+  - `Card: Tasks`
+  - `Card: Coupons`
+  - `Card: History`
+  - `Popup: NotificationBubble`
+  - `FlexMessage: LINE 推薦卡`
+
+📌 可依照元件進行開發切圖、UI Flow 模擬與多裝置適配展示。
+
+---
+
+📌 上述項目為會員模組的安全防護、測試示例與設計語言建議，能支援開發初期的驗證流程、後期的教學展示與整體 UI 統一風格建置。
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.6（Security + 測試腳本 + UI 草圖）
+
+...（保留前段內容）
+
+---
+
+## 🔐 Firestore Security Rules（會員個資與互動模組）
+
+```ts
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 僅本人可讀寫個人資料
+    match /customer_profiles/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null;
+      allow delete: if false;
+    }
+
+    // 任務狀態讀寫
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.user_id;
+    }
+
+    // 優惠券僅本人讀取
+    match /coupons/{couponId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.user_id;
+      allow update: if request.auth.uid == resource.data.user_id;
+    }
+
+    // 系統推薦與通知
+    match /recommendations/{recId}, /notifications/{noteId} {
+      allow read: if request.auth.uid == resource.data.user_id;
+    }
+  }
+}
+```
+
+---
+
+## 🧪 測試資料與模擬腳本（QA／教學使用）
+
+### 📦 建立測試會員
+```json
+{
+  "user_id": "uid_test001",
+  "member_level": "銅牌會員",
+  "points_total": 500,
+  "points_expiring_soon": 50,
+  "tags": ["週五常客", "不吃辣"]
+}
+```
+
+### 🧩 模擬任務資料
+```json
+{
+  "task_id": "weekly_order_3x",
+  "user_id": "uid_test001",
+  "title": "一週下單 3 次",
+  "status": "in_progress",
+  "progress": 2,
+  "goal": 3
+}
+```
+
+### 🎁 測試用優惠券
+```json
+{
+  "coupon_id": "TEST_COUPON_50",
+  "user_id": "uid_test001",
+  "title": "$50 折價券",
+  "expires": "2025-07-01",
+  "is_used": false
+}
+```
+
+---
+
+## 🎨 畫面設計風格建議 + Figma 樣式說明
+
+### 🌈 主題方向：
+- 視覺風格：活潑卡片式介面 + 食物色調（炸雞金黃 / 豆腐米白 / 辣椒紅）
+- 字體搭配：標題使用 Noto Sans Bold、內文使用微軟正黑體
+- 元件風格：圓角卡片（16px）、陰影浮出、ICON 搭配 Emoji
+
+### 🖼️ Figma 範本建議（命名層級）
+- `Page: MemberCenter`
+  - `Card: LevelInfo`
+  - `Card: Tasks`
+  - `Card: Coupons`
+  - `Card: History`
+  - `Popup: NotificationBubble`
+  - `FlexMessage: LINE 推薦卡`
+
+📌 可依照元件進行開發切圖、UI Flow 模擬與多裝置適配展示。
+
+---
+
+📌 上述項目為會員模組的安全防護、測試示例與設計語言建議，能支援開發初期的驗證流程、後期的教學展示與整體 UI 統一風格建置。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.7（POS 點餐系統與菜單擴充）
+
+...（保留前段內容）
+
+---
+
+## 🧩 POS 點餐系統與餐點設定擴充模組設計
+
+### 🍱 A. 套餐邏輯與菜單結構升級
+
+#### Firestore 結構：`menu_combos`
+```json
+{
+  "combo_id": "combo_set_A",
+  "title": "經典雞腿套餐",
+  "price": 135,
+  "required_groups": [
+    {
+      "label": "主餐",
+      "required": true,
+      "items": ["chicken_leg", "chicken_wing"]
+    },
+    {
+      "label": "副餐",
+      "required": false,
+      "items": ["fries", "tofu"]
+    },
+    {
+      "label": "飲料",
+      "required": true,
+      "items": ["drink_coke", "drink_tea"]
+    }
+  ]
+}
+```
+
+---
+
+### 🧂 B. 備註選單模組（標準化屬性）
+#### Firestore：`menu_options`
+```json
+{
+  "option_id": "spice_level",
+  "label": "辣度",
+  "values": ["不辣", "小辣", "中辣", "大辣"]
+}
+```
+- 每筆菜單品項可綁定多個 `option_id`
+- 前台點餐可彈出選擇視窗供使用者點選
+
+---
+
+### 📦 C. 原料庫存對接與自動停售
+#### Firestore：`inventory_items`
+```json
+{
+  "item_id": "chicken_leg",
+  "name": "雞腿原料",
+  "stock_qty": 48,
+  "linked_menu": ["chicken_leg", "combo_set_A"]
+}
+```
+- 每次下單即扣對應食材數量，若為 0 自動將菜單項目 `available: false`
+
+---
+
+### 🔄 D. 暫存訂單與快速複製前單
+#### Firestore：`draft_orders`
+```json
+{
+  "staff_id": "店員A",
+  "created_at": "2025-06-04T13:01",
+  "cart": [...],
+  "status": "draft"
+}
+```
+- 若 POS 關閉未送出，暫存可保留於 localStorage + Firestore 雙通道
+- 支援複製上一張訂單的快捷功能（for 熟客）
+
+---
+
+### 💬 E. 行銷互動模組建議（加購彈窗、首購提示）
+```json
+{
+  "trigger": "first_time_customer",
+  "popup": {
+    "title": "首次下單加價購 $20！",
+    "items": ["tofu", "drink_tea"]
+  },
+  "cta": "點我加購"
+}
+```
+- 條件包含：首次下單、金額達標、時間區段優惠等
+
+---
+
+### 🎛️ F. 多店菜單版本管理建議
+#### Firestore：`menu_versions`, `store_menu_assignments`
+```json
+{
+  "version_id": "menu_20250601",
+  "title": "六月夏季菜單",
+  "menu_items": ["chicken_leg", "fries", "combo_set_A"]
+}
+```
+```json
+{
+  "store_id": "中壢龍崗店",
+  "menu_version_id": "menu_20250601"
+}
+```
+- 支援品牌統一版本／分店個別客製版本切換
+
+---
+
+📌 上述擴充模組可與現有 POS 點餐系統整合，提升操作效率、行銷靈活度與庫存同步準確性。如需 UI 模板與快速切換 API 設計，可另補上。
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.8（POS 點餐 UI + API 設計）
+
+...（保留前段內容）
+
+---
+
+## 🧩 POS 點餐系統與餐點設定擴充模組設計
+
+...（保留既有結構）
+
+---
+
+## 🖼️ POS 點餐系統｜前台畫面草圖建議
+
+### A. 套餐組合畫面元件
+- 分三欄步驟式選擇（主餐 → 副餐 → 飲料）
+- 每一欄為 `OptionCardGroup`：顯示圖、品名、加價文字
+- 最下方 `ComboSummaryCard` 顯示已選項目與總價更新
+
+### B. 備註與標準屬性介面
+- 餐點點選後彈出 `MenuItemOptionModal`
+  - 預設列出綁定的 `menu_options`（如辣度、份量）
+  - 可切換為「自由輸入備註」區塊
+
+### C. 暫存訂單 UI（POS 主介面）
+- 側邊欄「草稿訂單」按鈕
+- 彈出 `DraftOrderListDrawer` 顯示目前暫存訂單清單
+- 每筆支援：恢復編輯、刪除、複製為新單
+
+### D. 首購加購彈窗元件（條件觸發）
+- 當顧客符合「首次下單」條件時：
+  - 彈出 `FirstTimeUpsellPopup`
+  - 顯示推薦炸物/飲料加購圖與「$20 加購」按鈕
+
+---
+
+## 🔌 API 呼叫結構設計
+
+### 1. 新增訂單 API `/api/orders/create`
+```json
+POST /orders/create
+{
+  "user_id": "uid_001",
+  "cart": [
+    { "item_id": "chicken_leg", "options": { "辣度": "小辣" }, "qty": 1 }
+  ],
+  "combo_id": null,
+  "total": 75,
+  "store_id": "中壢龍崗店"
+}
+```
+- 成功回傳：訂單編號與預估完成時間
+
+### 2. 草稿儲存 API `/api/orders/draft`
+```json
+POST /orders/draft
+{
+  "staff_id": "店員A",
+  "cart": [...],
+  "created_at": "timestamp"
+}
+```
+
+### 3. 套餐選項載入 `/api/menu/combo/{combo_id}`
+```json
+GET /menu/combo/combo_set_A
+→ 回傳主餐/副餐/飲料分組選項與品項資訊
+```
+
+---
+
+📌 上述為 POS 端 UI 元件構造建議與對應後端 API 規格範例，可直接交由前後端進行畫面與串接實作。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.8（POS 點餐 UI + API 設計）
+
+...（保留前段內容）
+
+---
+
+## 🧩 POS 點餐系統與餐點設定擴充模組設計
+
+...（保留既有結構）
+
+---
+
+## 🖼️ POS 點餐系統｜前台畫面草圖建議
+
+### A. 套餐組合畫面元件
+- 分三欄步驟式選擇（主餐 → 副餐 → 飲料）
+- 每一欄為 `OptionCardGroup`：顯示圖、品名、加價文字
+- 最下方 `ComboSummaryCard` 顯示已選項目與總價更新
+
+### B. 備註與標準屬性介面
+- 餐點點選後彈出 `MenuItemOptionModal`
+  - 預設列出綁定的 `menu_options`（如辣度、份量）
+  - 可切換為「自由輸入備註」區塊
+
+### C. 暫存訂單 UI（POS 主介面）
+- 側邊欄「草稿訂單」按鈕
+- 彈出 `DraftOrderListDrawer` 顯示目前暫存訂單清單
+- 每筆支援：恢復編輯、刪除、複製為新單
+
+### D. 首購加購彈窗元件（條件觸發）
+- 當顧客符合「首次下單」條件時：
+  - 彈出 `FirstTimeUpsellPopup`
+  - 顯示推薦炸物/飲料加購圖與「$20 加購」按鈕
+
+---
+
+## 🔌 API 呼叫結構設計
+
+### 1. 新增訂單 API `/api/orders/create`
+```json
+POST /orders/create
+{
+  "user_id": "uid_001",
+  "cart": [
+    { "item_id": "chicken_leg", "options": { "辣度": "小辣" }, "qty": 1 }
+  ],
+  "combo_id": null,
+  "total": 75,
+  "store_id": "中壢龍崗店"
+}
+```
+- 成功回傳：訂單編號與預估完成時間
+
+### 2. 草稿儲存 API `/api/orders/draft`
+```json
+POST /orders/draft
+{
+  "staff_id": "店員A",
+  "cart": [...],
+  "created_at": "timestamp"
+}
+```
+
+### 3. 套餐選項載入 `/api/menu/combo/{combo_id}`
+```json
+GET /menu/combo/combo_set_A
+→ 回傳主餐/副餐/飲料分組選項與品項資訊
+```
+
+---
+
+📌 上述為 POS 端 UI 元件構造建議與對應後端 API 規格範例，可直接交由前後端進行畫面與串接實作。
+
+接下來可以補強以下三個關鍵流程與技術設計，來完成整套 POS 點餐系統的閉環開發架構：
+
+---
+
+## ✅ 建議擴充模組（POS 完整化流程）
+
+### 1. 🔐 權限驗證與登入管理（POS 使用者）
+- **模組建議：** 員工登入（POS 專屬）支援 Firebase Auth + custom claims  
+- **用途：** 控管訂單建立者、暫存單關聯、打單記錄
+
+```ts
+// Firestore rules 擴充
+match /draft_orders/{docId} {
+  allow read, write: if request.auth != null && request.auth.token.role in ['staff', 'manager'];
+}
+```
+
+---
+
+### 2. 🧾 自動出單整合（含音訊與列印觸發）
+- **功能設計：**
+  - 完成下單 → `order.created` → Cloud Function 呼叫：
+    - 🖨️ 熱感應出單（串熱感印機藍牙/網路印表）
+    - 🔊 語音播報（如整合 LINE Things 或 MQTT 訊號）
+    - 🔔 前台顯示取餐號碼牌
+- **實作觸發建議：**
+```ts
+export const onOrderCreated = functions.firestore
+  .document('orders/{orderId}')
+  .onCreate(async (snap, context) => {
+    const data = snap.data();
+    await notifyPrinter(data);
+    await notifyAudioSystem(data.order_number);
+  });
+```
+
+---
+
+### 3. 📦 出餐狀態追蹤與編號管理
+- **狀態流程：**
+  1. 建立訂單：`created`
+  2. 製作中：`preparing`
+  3. 完成：`ready`
+  4. 顧客領取：`picked_up`
+- **前台管理建議：**
+  - 對應 `KitchenDashboard` 模組（顯示訂單進度）
+  - 支援「完成」與「取消」操作按鈕
+  - 每筆訂單應含 `order_number` + `store_id` + `created_at`
+
+---
+
+是否要我補上這三個模組的 UI 操作畫面結構 + 對應資料格式（Firestore + API）？
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v4.9（POS 點餐流程 + 出單控制 + 權限驗證）
+
+...（保留前段內容）
+
+---
+
+## 🧩 POS 點餐系統與餐點設定擴充模組設計
+
+...（保留既有結構）
+
+---
+
+## 🖼️ POS 點餐系統｜前台畫面草圖建議
+
+...（保留既有草圖模組）
+
+---
+
+## 🔌 API 呼叫結構設計
+
+...（保留既有 API 結構）
+
+---
+
+## 🔐 POS 員工權限登入模組 + 出單/語音整合
+
+### A. 員工登入與角色驗證
+```ts
+POST /auth/login
+{
+  "account": "staff001",
+  "password": "hashed_pw"
+}
+→ 回傳 Firebase customToken 與 role claim（staff / manager）
+```
+- 權限控制建議：
+```ts
+match /draft_orders/{docId} {
+  allow read, write: if request.auth != null && request.auth.token.role in ['staff', 'manager'];
+}
+```
+
+### B. 出單與語音 API 觸發
+```ts
+POST /order/notify_printer
+{
+  "order_id": "ORD2306-1220",
+  "store_id": "中壢龍崗店"
+}
+```
+```ts
+POST /order/notify_speaker
+{
+  "message": "A123號餐點完成，請取餐"
+}
+```
+- 可結合 WebSocket、MQTT、LINE Things 做即時出單與語音播報
+
+### C. 廚房出單進度畫面（Kitchen Dashboard）
+- 元件：`KitchenTicketCard`
+  - 顯示訂單編號、時間、品項摘要、備註
+  - 按鈕：✅ 完成製作、❌ 取消訂單、🔄 更新狀態
+- UI 建議：以「三欄格」為主（`製作中` / `已完成待取餐` / `已取餐`）
+- Firestore 結構：
+```json
+{
+  "order_id": "ORD2306-1220",
+  "status": "preparing",
+  "order_number": "A123",
+  "store_id": "中壢龍崗店",
+  "created_at": Timestamp
+}
+```
+
+---
+
+📌 此設計整合 POS 實體使用場景中的「打單 → 製作 → 播報 → 完成 → 領餐」全流程，並結合員工權限與多端裝置互通。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v5.0（POS 出單整合 + 自動列印模組）
+
+...（保留前段內容）
+
+---
+
+## 🧩 POS 點餐系統與餐點設定擴充模組設計
+
+...（保留既有結構）
+
+---
+
+## 🖼️ POS 點餐系統｜前台畫面草圖建議
+
+...（保留既有草圖模組）
+
+---
+
+## 🔌 API 呼叫結構設計
+
+...（保留既有 API 結構）
+
+---
+
+## 🔐 POS 員工權限登入模組 + 出單/語音整合
+
+...（保留既有模組）
+
+---
+
+## 🖨️ 自動出單模組設計（Firebase Functions + 樣板格式）
+
+### A. Firebase Function：訂單建立後自動列印
+```ts
+exports.printOnOrderCreated = functions.firestore
+  .document('orders/{orderId}')
+  .onCreate(async (snap) => {
+    const order = snap.data();
+    const printText = generatePrintText(order);
+    await axios.post('http://your-printer-host/api/feieyun-print', {
+      sn: order.printer_sn,
+      content: printText,
+      copies: 1
+    });
+  });
+```
+
+### B. 出單樣板格式轉換函數
+```ts
+function generatePrintText(order) {
+  const header = `\n【不早脆皮雞排】\n訂單編號：${order.order_number}\n時間：${new Date(order.created_at._seconds * 1000).toLocaleTimeString()}`;
+  const items = order.items.map(i => `\n${i.qty}x ${i.name} ${i.price * i.qty}元`).join('');
+  const footer = `\n--------------------\n總計：${order.total}元\n感謝光臨！\n`;
+  return header + items + footer;
+}
+```
+
+### C. 出單記錄資料結構（bonus_print_logs）
+```json
+{
+  "order_id": "ORD2306-1220",
+  "store_id": "內壢忠孝",
+  "printed_at": "2025-06-04T13:25",
+  "printer_sn": "printer1234",
+  "status": "success",
+  "copies": 1,
+  "content_hash": "a1b2c3d4"
+}
+```
+- 支援失敗重印功能（可透過管理後台觸發）
+- 可與 LINE Notify 搭配推播出單成功或異常警示
+
+---
+
+📌 此模組完成「訂單 → 自動列印 → 列印紀錄保存 → 重印控制」全流程，並支援雲端印表 API 接入與 Firebase Functions 自動執行。建議列印內容支援 QR 或店員標示備註一併呈現。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v5.1（出單監控 + 錯誤提示 + 重印 UI）
+
+...（保留前段內容）
+
+---
+
+## 🖨️ 自動出單模組設計（Firebase Functions + 樣板格式）
+
+...（保留既有列印流程）
+
+---
+
+## 📡 出單設備監控與重印功能設計
+
+### A. 印表機狀態監控（printer_status）
+```json
+{
+  "printer_sn": "printer1234",
+  "store_id": "中壢龍崗店",
+  "last_checkin": "2025-06-04T13:30",
+  "online": true,
+  "last_status": "ready"
+}
+```
+- 每 60 秒由 local server ping 印表機狀態並回報
+- 若超過 3 分鐘未更新 → 自動標記離線，前台出現「⚠️ 未連線」紅標
+
+### B. 列印錯誤提示流程（錯誤碼回傳處理）
+```ts
+try {
+  await axios.post('/api/feieyun-print', {...});
+} catch (err) {
+  await db.collection('bonus_print_logs').add({
+    order_id: order.id,
+    status: 'failed',
+    error_code: err.response.data.ret,
+    error_msg: err.response.data.msg || '列印失敗',
+    timestamp: Date.now()
+  });
+  await notifyAdminLINE(`❌ 訂單 ${order.order_number} 列印失敗：${err.response.data.msg}`);
+}
+```
+- 支援回報錯誤原因（如：餘紙不足、印表機離線）並推送給管理員
+
+### C. 後台重印操作介面（重印控制）
+- UI 模組：`PrintLogsListTable`
+  - 欄位：訂單編號、狀態（成功 / 失敗）、錯誤原因、列印時間、店別、操作人
+  - 按鈕：🔁 重新列印（僅限錯誤 / 管理員身份）
+
+```json
+POST /api/reprint
+{
+  "order_id": "ORD2306-1220",
+  "reason": "補列印失敗"
+}
+```
+- 成功後寫入新的列印記錄，並更新原始紀錄 `status: reprinted`
+
+---
+
+📌 此模組補足出單設備實際使用時的「狀態偵測」、「異常處理」、「重印控制」三大關鍵，並支援 LINE 通知與後台操作紀錄留存，建議搭配店員帳號與時間戳進行稽核補強。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v5.2（出單監控 + 錯誤提示 + 重印 UI + 前台圖示 + LINE 卡片）
+
+...（保留前段內容）
+
+---
+
+## 🖨️ 自動出單模組設計（Firebase Functions + 樣板格式）
+
+...（保留既有列印流程）
+
+---
+
+## 📡 出單設備監控與重印功能設計
+
+...（保留 printer_status / print_logs 記錄邏輯）
+
+---
+
+## 🖼️ 前台 UI：出單紀錄與重印圖示模組
+
+### A. 出單紀錄顯示區塊（for 管理員 / 店員）
+元件：`PrintHistoryCard`
+- 顯示：
+  - 訂單編號、列印時間、印表機 SN
+  - 狀態標籤：🟢 成功 / 🔴 失敗 / 🔁 已重印
+  - [🔁 重印] 按鈕（限權限）
+
+### B. 出單狀態氣泡（於訂單詳情內嵌）
+- 顯示於每筆訂單卡下方：
+  - 「🖨️ 正在列印中...」
+  - 「✅ 列印完成」
+  - 「❌ 列印失敗：請重印或檢查設備」
+
+---
+
+## 📬 LINE Notify 推播卡片設計（Flex Message）
+
+### 1. 成功提示卡片
+```json
+{
+  "type": "flex",
+  "altText": "訂單已列印成功",
+  "contents": {
+    "type": "bubble",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        { "type": "text", "text": "✅ 訂單 A123 已成功列印", "weight": "bold", "size": "lg", "color": "#00AA00" },
+        { "type": "text", "text": "列印時間：13:25", "size": "sm" }
+      ]
+    }
+  }
+}
+```
+
+### 2. 錯誤通知卡片
+```json
+{
+  "type": "flex",
+  "altText": "列印失敗通知",
+  "contents": {
+    "type": "bubble",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        { "type": "text", "text": "❌ 訂單 A123 列印失敗", "weight": "bold", "size": "lg", "color": "#FF3333" },
+        { "type": "text", "text": "原因：印表機離線" },
+        { "type": "button", "style": "primary", "action": { "type": "uri", "label": "重新列印", "uri": "https://admin.nobearly.com/reprint/A123" } }
+      ]
+    }
+  }
+}
+```
+
+---
+
+📌 本模組完成管理員可視覺化查看出單狀態、手動補列印與 LINE 即時通知介面，適用於門市即時處理流程與後勤支援。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v5.3（出單綁定設定 + 異常統計報表模組）
+
+...（保留前段內容）
+
+---
+
+## 🖨️ 自動出單模組設計（Firebase Functions + 樣板格式）
+
+...（保留既有列印流程）
+
+---
+
+## 📡 出單設備監控與重印功能設計
+
+...（保留 printer_status / print_logs 記錄邏輯）
+
+---
+
+## 🖼️ 前台 UI：出單紀錄與重印圖示模組
+
+...（保留 PrintHistoryCard 設計）
+
+---
+
+## 📬 LINE Notify 推播卡片設計（Flex Message）
+
+...（保留 LINE 卡片）
+
+---
+
+## ⚙️ 店面印表機與音響綁定設定介面（分店後台）
+
+### A. Firestore 結構：`store_devices`
+```json
+{
+  "store_id": "中壢龍崗店",
+  "printer_sn": "SN-PR1234",
+  "audio_module_id": "SPK-8899",
+  "location": "櫃檯後台",
+  "last_heartbeat": "2025-06-04T13:25",
+  "online": true
+}
+```
+
+### B. 管理後台介面
+元件：`StoreDeviceBindingPanel`
+- 下拉選擇印表機 SN / 音響模組 ID
+- 顯示目前綁定設備狀態（🟢 正常 / 🔴 離線）
+- [📎 綁定] 與 [🔄 解除綁定] 按鈕
+
+---
+
+## 📊 每日出單統計與異常報表模組
+
+### A. 報表範例（Firestore：`print_daily_summary`）
+```json
+{
+  "store_id": "中壢龍崗店",
+  "date": "2025-06-04",
+  "total_orders": 82,
+  "printed_success": 79,
+  "failed_count": 3,
+  "most_common_error": "印表機離線"
+}
+```
+
+### B. 報表介面建議元件
+- `PrintStatsCard`（顯示總數 + 異常數）
+- `PrintErrorTrendChart`（近 7 日錯誤趨勢）
+- `TopFailureStoresTable`（顯示錯誤率最高的店別 + 錯誤原因）
+
+📌 建議此報表模組結合 LINE Notify 定時推播給區域管理者，如：每日 21:00 統計昨日印表穩定性，並建議補救動作。
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v5.4（異常推播 + 設備維護建議）
+
+...（保留前段內容）
+
+---
+
+## 🖨️ 自動出單模組設計（Firebase Functions + 樣板格式）
+
+...（保留既有列印流程）
+
+---
+
+## 📡 出單設備監控與重印功能設計
+
+...（保留 printer_status / print_logs 記錄邏輯）
+
+---
+
+## 🖼️ 前台 UI：出單紀錄與重印圖示模組
+
+...（保留 PrintHistoryCard 設計）
+
+---
+
+## 📬 LINE Notify 推播卡片設計（Flex Message）
+
+...（保留 LINE 卡片）
+
+---
+
+## ⚙️ 店面印表機與音響綁定設定介面（分店後台）
+
+...（保留 store_devices 結構與綁定操作）
+
+---
+
+## 📊 每日出單統計與異常報表模組
+
+...（保留統計與報表介面）
+
+---
+
+## 🛎️ 出單異常 LINE 定時推播與設備維護提示
+
+### A. 每日定時統計推播設計（自動）
+> Firebase Functions `schedule('every day 21:00')`
+```ts
+exports.sendDailyPrinterStatus = functions.pubsub.schedule('0 21 * * *').timeZone('Asia/Taipei').onRun(async () => {
+  const summaries = await db.collection('print_daily_summary').where('date', '==', today()).get();
+  for (const doc of summaries.docs) {
+    const data = doc.data();
+    if (data.failed_count > 0) {
+      await sendLineNotify(data.store_id, `⚠️ ${data.store_id} 今日列印失敗 ${data.failed_count} 筆，請檢查印表機設定或重新綁定。`);
+    }
+  }
+});
+```
+
+### B. 推播內容設計建議
+- 正常店面：🟢「今日列印皆正常，累計 82 單。」
+- 異常店面：🔴「列印異常 3 次（印表機離線），請儘速處理。」
+
+### C. 維護建議模組（可視化）
+- 顯示連續異常店面清單（近 3 天）
+- 為每台印表機設立「維護狀態」欄位：`last_maintenance`、`issue_notes`
+- 元件：`PrinterMaintenancePanel`
+  - 管理員可記錄維修結果與下次檢查提醒
+
+📌 本模組將出單異常統計與 LINE 通報串接，強化門市與管理層設備監控反應機制，亦可進一步納入預防性維修排程與設備異常日誌。
+
+
+📄 不早脆皮雞排｜獎金制度邏輯設計 v5.5（維修排程 + 自動關閉設備 + 優先級排序）
+
+...（保留前段內容）
+
+---
+
+## 🖨️ 自動出單模組設計（Firebase Functions + 樣板格式）
+
+...（保留既有列印流程）
+
+---
+
+## 📡 出單設備監控與重印功能設計
+
+...（保留 printer_status / print_logs 記錄邏輯）
+
+---
+
+## 🖼️ 前台 UI：出單紀錄與重印圖示模組
+
+...（保留 PrintHistoryCard 設計）
+
+---
+
+## 📬 LINE Notify 推播卡片設計（Flex Message）
+
+...（保留 LINE 卡片）
+
+---
+
+## ⚙️ 店面印表機與音響綁定設定介面（分店後台）
+
+...（保留 store_devices 結構與綁定操作）
+
+---
+
+## 📊 每日出單統計與異常報表模組
+
+...（保留統計與報表介面）
+
+---
+
+## 🛎️ 出單異常 LINE 定時推播與設備維護提示
+
+...（保留每日推播與維修面板設計）
+
+---
+
+## 🔁 擴充模組：異常優先處理排序 + 自動設備鎖定 + 維修排程提醒
+
+### A. 出單異常優先級自動排序
+- 每台設備每日記錄異常指數（失敗次數 / 成功次數）
+- Firestore：`printer_status.priority_score`
+- 排序條件：
+  1. 三日內異常率高者優先
+  2. 最近從未維修者優先
+
+### B. 自動標記設備為「維修中」
+```ts
+if (printer.failed_streak >= 5) {
+  await db.collection('store_devices').doc(printer.id).update({
+    status: 'maintenance',
+    auto_flagged: true
+  });
+  await sendLineNotify(printer.store_id, `🚫 ${printer.name} 連續 5 筆列印失敗，已自動進入維修中狀態。`);
+}
+```
+- 前台將無法使用該設備直到解除維護標籤
+
+### C. 預約維修排程與檢查提醒
+- 為每台設備新增：`next_check_date`, `assigned_maintainer`
+```json
+{
+  "device_id": "printer123",
+  "next_check_date": "2025-06-08",
+  "assigned_maintainer": "技術員小黃"
+}
+```
+- 每日 9:00 推播今日預定檢查清單給指定技術人員
+
+📌 本段設計讓維修與風險控管自動化、可視化，並加入「設備自動停用機制」與優先處理建議，降低店面作業中斷風險。
 
