@@ -3,3 +3,30 @@
 2025-04-30 23:05:06 - P0-1.2.1: 確認/建立 Firebase 開發 (Dev) 專案，專案狀態：已建立，專案 ID：friedg-dev。
 2025-04-30 23:12:16 - P0-1.3.1: 在專案 friedg-dev 中啟用必要的 Firebase/Google Cloud APIs (Firestore, Functions, Auth, Pub/Sub, Secret Manager, Cloud Build 等)。
 2025-04-30 23:16:18 - P0-1.4.1: 在 D:\friedg 目錄下初始化 Firebase Hosting，設定 public 目錄為 'public'，設定為 SPA，並關聯至 friedg-dev 專案。已生成 firebase.json 與 .firebaserc。
+2025-04-30 23:27:36 - P0-1.5.1: 在 D:\friedg 初始化 Git 儲存庫，確立 Gitflow 分支策略，並建立 main 與 develop 分支。
+2025-04-30 23:37:58 - P0-1.6.1: 建立初始 cloudbuild.yaml 於 D:\friedg，包含基礎結構與註解。
+2025-05-01 00:02:58 - P0-1.7.1: 設定 Git remote origin 為 https://github.com/friedg-team/friedg.git，嘗試推送 main 與 develop 分支至遠端。遠端儲存庫不存在，需要先建立。
+2025-05-01 00:36:08 - P0-1.7.2: 成功推送 main 與 develop 分支至遠端儲存庫 https://github.com/chatscai10/friedg.git。
+2025-05-02 06:43:15 - P0-2.1.1: 設計核心資料模型與RBAC系統。建立設計文件目錄，並建立核心資料模型與RBAC_v1.md文件。文件包含完整的集合結構、子集合關係、索引設計、角色權限體系、JWT Claims設計、資料安全與擴展考量等內容。
+2025-05-02 08:24:36 - P0-2.2.1: 根據核心資料模型與RBAC設計實作完整的Firestore安全規則。更新firestore.rules檔案，實現基於角色的精細權限控制，包含檢查函數、多租戶隔離機制及各集合的存取規則。
+2025-05-02 10:17:42 - P0-2.3.1: 設計RBAC函式庫架構與API。建立RBAC函式庫設計_v1.md文件，詳細規劃了函式庫的架構、核心API、類型定義、權限檢查機制、緩存策略、使用示例及後續擴展計劃。函式庫將作為後端權限驗證的核心組件，提供統一的權限控制介面。
+2025-05-03 09:38:45 - P0-2.3.2: 實作RBAC函式庫核心功能。完成functions/src/libs/rbac目錄下的核心功能實作，包括權限解析層(permissionResolver.ts)、資料存取層(dataAccess.ts)和API入口(index.ts)。實作支援基於角色的精細權限控制、租戶/店鋪隔離、權限緩存機制、特殊業務規則處理以及Express/Firebase Functions中間件。建立基本單元測試框架以確保功能正確性。
+2025-05-03 14:27:30 - P0-2.4.1: 建立OpenAPI規格框架。在api-specs目錄下創建YAML格式的API規格文件，定義了服務基本資訊、共用組件(schemas)和安全機制。實作了認證(auth)、使用者管理(users)和員工管理(employees)三個核心模組的API端點定義，每個端點都包含詳細的請求/響應模型、權限需求和錯誤處理。採用了模塊化結構以便於維護，並通過主題文件(main.yaml)整合所有API定義，為後續前後端開發和協作奠定基礎。
+2025-05-04 10:15:22 - P0-3.1.1: 繪製三端線框圖。建立設計文件/wireframes目錄，並按客戶端類型分為Web管理後台、客戶APP和POS機三個子目錄。完成Web管理後台的員工列表頁面和新增員工表單的線框圖設計，採用Markdown格式描述。設計風格參考風格目錄下的多個指南，包括「輸入表格.txt」、「黑金 登入.txt」和「按鈕-紫色太空.txt」等，實現了深色系主題與紫色太空漸變的獨特視覺風格。線框圖詳細描述了頁面佈局、色彩方案、表格與表單設計、按鈕設計及各類互動元素的風格規範。這些設計將作為後續UI實現的基礎。
+2025-05-05 16:45:28 - P1-2.1.1: 完成菜單項目列表 UI (MenuItemList) 組件開發。在 web-admin/src/components/MenuManagement/ 目錄下實現了 MenuItemList.tsx 組件，採用卡片式佈局展示菜單項目，支援搜尋和分類篩選功能，並提供編輯和刪除操作按鈕。組件使用 Material UI Stack 和 Box 實現響應式佈局，並遵循設計風格指南，實現了視覺美觀的菜單項目展示頁面。同時更新了 App.tsx 和 MainLayout.tsx，實現了員工管理和菜單管理模塊間的切換功能。
+2025-05-05 18:30:15 - P1-2.2.1: 完成菜單項目表單 UI (MenuItemForm) 組件開發。在 web-admin/src/components/MenuManagement/ 目錄下實現了 MenuItemForm.tsx 組件，提供完整的菜單項目新增與編輯功能。表單包含基本信息（名稱、描述、分類、價格等）、圖片上傳區域（主圖和縮略圖）、營養信息（熱量、蛋白質、碳水化合物、脂肪和過敏原）、標籤管理和選項組配置等功能區塊。表單使用 Material UI 組件（如 TextField、Select、Switch、Chip 等）構建，並實現了良好的響應式佈局。同時更新了 App.tsx 和 MenuItemList.tsx，使得點擊新增或編輯按鈕時可切換到相應的表單頁面。
+2025-05-06 09:28:45 - P1-2.3.1: 設計菜單管理API規格。在api-specs目錄下創建menu.yaml文件，完整定義了菜單管理相關的API端點，包括菜單分類(menu-categories)和菜單項目(menu-items)的CRUD操作、狀態更新和圖片上傳功能。定義了詳細的請求和響應數據結構，包括MenuCategory、MenuItem、MenuOptionGroup等模型，並按照RESTful設計原則設計API路徑和HTTP方法。每個端點都設置了適當的RBAC權限控制。同時更新了main.yaml文件，將菜單管理API集成到整體API架構中。此API規格將作為前後端對接的依據。
+2025-05-06 15:20:36 - P1-2.4.1: 實現菜單管理服務層與UI連接。在web-admin/src/services目錄下創建menuService.ts文件，基於API規格實現了完整的菜單管理服務層，包括菜單項目和菜單分類的CRUD操作以及圖片上傳功能。服務層採用Axios進行HTTP請求，並提供了類型安全的接口定義。同時，更新了MenuItemList.tsx和MenuItemForm.tsx組件，將其從使用模擬數據(mockMenuItems)轉變為通過服務層連接後端API。實現了列表頁的數據加載、分頁、搜索和篩選功能，以及表單頁的數據提交、驗證和圖片上傳功能。完善了錯誤處理和加載狀態顯示，提供了良好的用戶體驗。這標誌著菜單管理模塊的前後端整合基本完成。
+2025-05-06 18:04:54 - P0-1.5.2: 核對 Firebase `friedg-dev` 專案狀態與本地設置。發現專案ID在.firebaserc中設置為「friedg」，不符合開發環境要求，已更新為「friedg-dev」。
+2025-05-06 18:05:23 - P0-1.5.3: 建立新的Firebase專案「friedg-dev」，顯示名稱為「Friedg Dev」，並成功將其關聯至本地目錄。
+2025-05-06 18:06:45 - P0-1.5.4: 初始化Firebase服務失敗，原因：尚未在Firebase控制台啟用Firestore服務。需要先透過控制台啟用核心服務（Firestore, Authentication, Functions）後再初始化本地配置。
+2025-05-06 18:07:12 - P0-1.5.5: 確認本地Firebase設定狀態：firebase.json配置檔已存在且已正確設定Hosting相關選項，public目錄也已建立並包含index.html基本頁面。需要在Firebase控制台中啟用核心服務後再進行本地配置。
+2025-05-07 14:30:25 - P2-1.2.1: 設計訂單API規格。在api-specs目錄下創建orders.yaml文件，定義了完整的訂單管理相關API，包括訂單創建、查詢、狀態更新、支付記錄和收據生成等功能。詳細定義了請求和響應數據結構，包括訂單、訂單項目、支付記錄等模型。同時更新main.yaml，將訂單API納入整體API架構。
+2025-05-07 16:45:38 - P2-1.2.2: 實現訂單管理核心服務層。在functions/src/orders/services目錄下創建orderService.ts，實現了訂單創建、查詢、狀態更新、支付記錄和統計功能。採用Firestore事務確保庫存和訂單數據一致性，實現了訂單編號生成、價格計算、稅金處理等核心邏輯。同時創建訂單相關的數據模型定義和枚舉類型。
+2025-05-07 18:20:52 - P2-1.2.3: 實現訂單Cloud Functions和HTTP路由。在functions/src/orders目錄下創建index.ts作為Cloud Functions入口，實現getOrders、getOrder、newOrder、updateStatus、recordPayment和getOrderStatistics等函數。同時創建orders.routes.js作為HTTP API路由處理器，並更新主函數入口導出Cloud Functions。完整實現了訂單管理API，提供了多種接口形式以滿足不同場景需求。
+2025-05-08 10:35:16 - P2-1.3.1: 實現訂單收據(電子發票)功能。創建receiptService.ts服務，實現收據編號生成、收據數據構建和多種格式輸出(JSON/HTML)等功能。擴展Order和Receipt數據模型，添加收據相關欄位。新增generateOrderReceipt和getOrderReceipt兩個Cloud Functions，支持按需生成收據和多格式獲取收據。同時創建測試腳本，實現完整訂單流程測試，包括創建、支付和收據生成。初始化Firebase模擬器環境，為本地測試做好準備。
+2025-05-08 14:45:10 - 推進前端開發與釐清現狀: 完成 functions 的 TS 環境初步設定與錯誤修復；釐清 UI 風格文件狀態與前端整合情況；修正 MenuItemList 的 Mock Data 依賴；實作 FloatingLabelInput 與 PsychedelicButton 元件。
+2025-05-03 11:54:41 - 持續推進前端 UI 元件實作: 根據風格文件，完成 RankingList, ShiningText, CommentBoard 元件的開發與範例頁面。
+2025-05-03 11:55:05 - 持續推進前端 UI 元件實作: 根據風格文件，完成 RankingList, ShiningText, CommentBoard 元件的開發與範例頁面。
+2025-05-03 14:04:41 問題簡述: Cloud Functions 啟動時發生 'Cannot find module' 錯誤。 解決方式: 修正 functions/index.js 中的 require 路徑指向 lib 目錄，並確認 tsc 編譯正常。
+2025-05-03 14:04:47 問題簡述: Cloud Functions 啟動時發生 'Cannot find module' 錯誤。 解決方式: 修正 functions/index.js 中的 require 路徑指向 lib 目錄，並確認 tsc 編譯正常。

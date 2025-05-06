@@ -1,0 +1,35 @@
+{
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc",
+    "buildverbose": "tsc --listFiles --diagnostics",
+    "buildcopy": "if not exist lib mkdir lib && xcopy /E /I /Y src lib",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase-admin": "^12.1.1",
+    "firebase-functions": "^5.0.1",
+    "luxon": "^3.4.4",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.4.2",
+    "@types/node": "^22.15.3",
+    "@types/uuid": "^9.0.8",
+    "eslint": "^8.57.0",
+    "eslint-config-google": "^0.14.0",
+    "typescript": "^5.8.3"
+  },
+  "private": true
+}

@@ -1,0 +1,726 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API - 員工管理模組
+  description: 吃雞排找不早系統的員工管理相關API
+  version: 1.0.0
+
+paths:
+  /employees:
+    get:
+      tags:
+        - employees
+      summary: 獲取員工列表
+      description: 獲取系統中的員工列表，支持分頁、排序和篩選
+      operationId: getEmployees
+      parameters:
+        - name: page
+          in: query
+          description: 頁碼 (從1開始)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: 每頁記錄數量
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: 排序欄位
+          schema:
+            type: string
+            enum: [createdAt, firstName, lastName, position, status, hireDate]
+            default: createdAt
+        - name: order
+          in: query
+          description: 排序方向
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: status
+          in: query
+          description: 按狀態篩選
+          schema:
+            type: string
+            enum: [active, inactive, on_leave, terminated]
+        - name: tenantId
+          in: query
+          description: 按租戶ID篩選
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          description: 按店鋪ID篩選
+          schema:
+            type: string
+        - name: employmentType
+          in: query
+          description: 按僱傭類型篩選
+          schema:
+            type: string
+            enum: [full_time, part_time, contract, intern, temporary]
+        - name: position
+          in: query
+          description: 按職位篩選
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: 搜尋關鍵字 (搜尋姓名、員工編號)
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: read
+      responses:
+        '200':
+          description: 成功獲取員工列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '../openapi.yaml#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '../openapi.yaml#/components/schemas/Employee'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+    
+    post:
+      tags:
+        - employees
+      summary: 創建新員工
+      description: 建立新員工記錄
+      operationId: createEmployee
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - tenantId
+                - storeId
+                - firstName
+                - lastName
+                - position
+                - employmentType
+                - status
+              properties:
+                userId:
+                  type: string
+                  description: 關聯的用戶ID
+                tenantId:
+                  type: string
+                  description: 所屬租戶ID
+                storeId:
+                  type: string
+                  description: 所屬店鋪ID
+                employeeCode:
+                  type: string
+                  description: 員工編號
+                firstName:
+                  type: string
+                  description: 名字
+                lastName:
+                  type: string
+                  description: 姓氏
+                position:
+                  type: string
+                  description: 職位
+                employmentType:
+                  type: string
+                  enum: [full_time, part_time, contract, intern, temporary]
+                  description: 雇傭類型
+                status:
+                  type: string
+                  enum: [active, inactive, on_leave, terminated]
+                  description: 員工狀態
+                hireDate:
+                  type: string
+                  format: date
+                  description: 雇傭日期
+                terminationDate:
+                  type: string
+                  format: date
+                  description: 離職日期
+                contactInfo:
+                  type: object
+                  properties:
+                    phone:
+                      type: string
+                    emergencyContact:
+                      type: string
+                    emergencyPhone:
+                      type: string
+                schedule:
+                  type: object
+                  description: 排班偏好
+                  properties:
+                    preferredShifts:
+                      type: array
+                      items:
+                        type: string
+                        enum: [morning, afternoon, evening, night]
+                    maxHoursPerWeek:
+                      type: integer
+                    daysUnavailable:
+                      type: array
+                      items:
+                        type: integer
+                        enum: [0, 1, 2, 3, 4, 5, 6]
+                payInfo:
+                  type: object
+                  properties:
+                    hourlyRate:
+                      type: number
+                      format: float
+                    salaryType:
+                      type: string
+                      enum: [hourly, monthly, annual]
+                    bankAccount:
+                      type: string
+      responses:
+        '201':
+          description: 員工創建成功
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Employee'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 員工記錄已存在
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /employees/{employeeId}:
+    get:
+      tags:
+        - employees
+      summary: 獲取員工詳情
+      description: 獲取特定員工的詳細資訊
+      operationId: getEmployeeById
+      parameters:
+        - name: employeeId
+          in: path
+          description: 員工ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: read
+        resourceId: '{employeeId}'
+      responses:
+        '200':
+          description: 成功獲取員工詳情
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Employee'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問此員工資訊
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - employees
+      summary: 更新員工資訊
+      description: 更新特定員工的資訊
+      operationId: updateEmployee
+      parameters:
+        - name: employeeId
+          in: path
+          description: 員工ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: update
+        resourceId: '{employeeId}'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId:
+                  type: string
+                  description: 所屬店鋪ID
+                employeeCode:
+                  type: string
+                  description: 員工編號
+                firstName:
+                  type: string
+                  description: 名字
+                lastName:
+                  type: string
+                  description: 姓氏
+                position:
+                  type: string
+                  description: 職位
+                employmentType:
+                  type: string
+                  enum: [full_time, part_time, contract, intern, temporary]
+                  description: 雇傭類型
+                status:
+                  type: string
+                  enum: [active, inactive, on_leave, terminated]
+                  description: 員工狀態
+                hireDate:
+                  type: string
+                  format: date
+                  description: 雇傭日期
+                terminationDate:
+                  type: string
+                  format: date
+                  description: 離職日期
+                contactInfo:
+                  type: object
+                  properties:
+                    phone:
+                      type: string
+                    emergencyContact:
+                      type: string
+                    emergencyPhone:
+                      type: string
+                schedule:
+                  type: object
+                  description: 排班偏好
+                  properties:
+                    preferredShifts:
+                      type: array
+                      items:
+                        type: string
+                        enum: [morning, afternoon, evening, night]
+                    maxHoursPerWeek:
+                      type: integer
+                    daysUnavailable:
+                      type: array
+                      items:
+                        type: integer
+                        enum: [0, 1, 2, 3, 4, 5, 6]
+                payInfo:
+                  type: object
+                  properties:
+                    hourlyRate:
+                      type: number
+                      format: float
+                    salaryType:
+                      type: string
+                      enum: [hourly, monthly, annual]
+                    bankAccount:
+                      type: string
+      responses:
+        '200':
+          description: 員工更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Employee'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權更新此員工
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+    
+    delete:
+      tags:
+        - employees
+      summary: 刪除員工
+      description: 刪除特定員工記錄 (標記為刪除或實際刪除，根據系統需求)
+      operationId: deleteEmployee
+      parameters:
+        - name: employeeId
+          in: path
+          description: 員工ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: delete
+        resourceId: '{employeeId}'
+      responses:
+        '200':
+          description: 員工刪除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 員工已成功刪除
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權刪除此員工
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /employees/{employeeId}/status:
+    put:
+      tags:
+        - employees
+      summary: 更新員工狀態
+      description: 更新特定員工的狀態 (在職、休假、離職等)
+      operationId: updateEmployeeStatus
+      parameters:
+        - name: employeeId
+          in: path
+          description: 員工ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: update
+        resourceId: '{employeeId}'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive, on_leave, terminated]
+                  description: 新的員工狀態
+                effectiveDate:
+                  type: string
+                  format: date
+                  description: 狀態變更生效日期
+                terminationDate:
+                  type: string
+                  format: date
+                  description: 離職日期 (當狀態為terminated時)
+                reason:
+                  type: string
+                  description: 狀態變更原因
+                notes:
+                  type: string
+                  description: 狀態變更附註
+      responses:
+        '200':
+          description: 員工狀態更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Employee'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權更新此員工狀態
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /employees/{employeeId}/transfer:
+    post:
+      tags:
+        - employees
+      summary: 員工調職
+      description: 將員工調職到不同的店鋪
+      operationId: transferEmployee
+      parameters:
+        - name: employeeId
+          in: path
+          description: 員工ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: update
+        resourceId: '{employeeId}'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetStoreId
+              properties:
+                targetStoreId:
+                  type: string
+                  description: 目標店鋪ID
+                effectiveDate:
+                  type: string
+                  format: date
+                  description: 調職生效日期
+                newPosition:
+                  type: string
+                  description: 新職位 (如有變化)
+                reason:
+                  type: string
+                  description: 調職原因
+                notes:
+                  type: string
+                  description: 調職附註
+      responses:
+        '200':
+          description: 員工調職成功
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Employee'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行調職操作
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 目標店鋪不存在或非同一租戶
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /employees/bulk-import:
+    post:
+      tags:
+        - employees
+      summary: 批量導入員工
+      description: 通過CSV或JSON文件批量導入員工記錄
+      operationId: bulkImportEmployees
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: create
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV或JSON格式的員工數據
+                tenantId:
+                  type: string
+                  description: 所屬租戶ID
+                storeId:
+                  type: string
+                  description: 所屬店鋪ID (如果文件中未指定)
+                options:
+                  type: object
+                  description: 導入選項
+                  properties:
+                    updateExisting:
+                      type: boolean
+                      default: false
+                      description: 是否更新已存在的員工
+                    generateUserAccounts:
+                      type: boolean
+                      default: true
+                      description: 是否自動創建用戶帳號
+                    defaultEmploymentType:
+                      type: string
+                      enum: [full_time, part_time, contract, intern, temporary]
+                      description: 預設僱傭類型
+                    defaultStatus:
+                      type: string
+                      enum: [active, inactive]
+                      description: 預設員工狀態
+      responses:
+        '200':
+          description: 批量導入成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  totalProcessed:
+                    type: integer
+                    description: 處理的總記錄數
+                  successCount:
+                    type: integer
+                    description: 成功導入的記錄數
+                  errorCount:
+                    type: integer
+                    description: 導入失敗的記錄數
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row:
+                          type: integer
+                          description: 錯誤行號
+                        message:
+                          type: string
+                          description: 錯誤訊息
+                        data:
+                          type: object
+                          description: 相關數據
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行批量導入
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error' 

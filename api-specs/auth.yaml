@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API - 認證模組
+  description: 吃雞排找不早系統的認證相關API
+  version: 1.0.0
+
+paths:
+  /auth/signin:
+    post:
+      tags:
+        - auth
+      summary: 用戶登入
+      description: 使用電子郵件和密碼登入系統
+      operationId: signIn
+      security: []  # 不需要認證
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: 用戶電子郵件
+                password:
+                  type: string
+                  format: password
+                  description: 用戶密碼
+      responses:
+        '200':
+          description: 登入成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  idToken:
+                    type: string
+                    description: JWT身份令牌
+                  refreshToken:
+                    type: string
+                    description: 刷新令牌
+                  expiresIn:
+                    type: string
+                    description: 令牌有效期（秒）
+                  user:
+                    $ref: '../openapi.yaml#/components/schemas/User'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 認證失敗
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /auth/signup:
+    post:
+      tags:
+        - auth
+      summary: 用戶註冊
+      description: 註冊新用戶（僅限顧客角色）
+      operationId: signUp
+      security: []  # 不需要認證
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - displayName
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: 用戶電子郵件
+                password:
+                  type: string
+                  format: password
+                  description: 用戶密碼
+                displayName:
+                  type: string
+                  description: 用戶顯示名稱
+                phoneNumber:
+                  type: string
+                  description: 電話號碼
+      responses:
+        '201':
+          description: 註冊成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  idToken:
+                    type: string
+                    description: JWT身份令牌
+                  refreshToken:
+                    type: string
+                    description: 刷新令牌
+                  user:
+                    $ref: '../openapi.yaml#/components/schemas/User'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 用戶已存在
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /auth/signout:
+    post:
+      tags:
+        - auth
+      summary: 用戶登出
+      description: 登出當前用戶
+      operationId: signOut
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /auth/reset-password:
+    post:
+      tags:
+        - auth
+      summary: 重設密碼
+      description: 發送重設密碼的郵件
+      operationId: resetPassword
+      security: []  # 不需要認證
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: 用戶電子郵件
+      responses:
+        '200':
+          description: 重設密碼郵件已發送
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 重設密碼郵件已發送到您的電子郵箱
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /auth/verify-email:
+    post:
+      tags:
+        - auth
+      summary: 發送驗證郵件
+      description: 發送電子郵件驗證郵件
+      operationId: verifyEmail
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                redirectUrl:
+                  type: string
+                  format: uri
+                  description: 驗證後的重定向URL
+      responses:
+        '200':
+          description: 驗證郵件已發送
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 驗證郵件已發送到您的電子郵箱
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /auth/refresh-token:
+    post:
+      tags:
+        - auth
+      summary: 刷新令牌
+      description: 使用刷新令牌獲取新的訪問令牌
+      operationId: refreshToken
+      security: []  # 不需要認證
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+                  description: 刷新令牌
+      responses:
+        '200':
+          description: 刷新令牌成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  idToken:
+                    type: string
+                    description: 新的JWT身份令牌
+                  refreshToken:
+                    type: string
+                    description: 新的刷新令牌
+                  expiresIn:
+                    type: string
+                    description: 令牌有效期（秒）
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 刷新令牌無效或已過期
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error'
+  
+  /auth/me:
+    get:
+      tags:
+        - auth
+      summary: 獲取當前用戶資訊
+      description: 獲取當前登入用戶的詳細資訊
+      operationId: getMe
+      responses:
+        '200':
+          description: 成功獲取用戶資訊
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/User'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.yaml#/components/schemas/Error' 

@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API
+  description: |
+    吃雞排找不早系統的完整API文檔，包含所有功能模組。
+    本API遵循RESTful設計原則，支援JWT認證，並基於RBAC權限控制。
+  version: 1.0.0
+  contact:
+    name: 吃雞排找不早系統開發團隊
+    email: dev@friedg.com
+
+# 引用主要OpenAPI定義文件
+components:
+  $ref: 'openapi.yaml#/components'
+
+# 合併所有路徑
+paths:
+  # 認證相關API
+  /auth/signin:
+    $ref: 'auth.yaml#/paths/~1auth~1signin'
+  /auth/signup:
+    $ref: 'auth.yaml#/paths/~1auth~1signup'
+  /auth/signout:
+    $ref: 'auth.yaml#/paths/~1auth~1signout'
+  /auth/reset-password:
+    $ref: 'auth.yaml#/paths/~1auth~1reset-password'
+  /auth/verify-email:
+    $ref: 'auth.yaml#/paths/~1auth~1verify-email'
+  /auth/refresh-token:
+    $ref: 'auth.yaml#/paths/~1auth~1refresh-token'
+  /auth/me:
+    $ref: 'auth.yaml#/paths/~1auth~1me'
+
+  # 用戶管理API
+  /users:
+    $ref: 'users.yaml#/paths/~1users'
+  /users/{userId}:
+    $ref: 'users.yaml#/paths/~1users~1{userId}'
+  /users/{userId}/reset-password:
+    $ref: 'users.yaml#/paths/~1users~1{userId}~1reset-password'
+  /users/{userId}/disable:
+    $ref: 'users.yaml#/paths/~1users~1{userId}~1disable'
+
+  # 員工管理API
+  /employees:
+    $ref: 'employees.yaml#/paths/~1employees'
+  /employees/{employeeId}:
+    $ref: 'employees.yaml#/paths/~1employees~1{employeeId}'
+  /employees/{employeeId}/status:
+    $ref: 'employees.yaml#/paths/~1employees~1{employeeId}~1status'
+  /employees/{employeeId}/transfer:
+    $ref: 'employees.yaml#/paths/~1employees~1{employeeId}~1transfer'
+  /employees/bulk-import:
+    $ref: 'employees.yaml#/paths/~1employees~1bulk-import'
+    
+  # 菜單管理API
+  /menu-categories:
+    $ref: 'menu.yaml#/paths/~1menu-categories'
+  /menu-categories/{categoryId}:
+    $ref: 'menu.yaml#/paths/~1menu-categories~1{categoryId}'
+  /menu-items:
+    $ref: 'menu.yaml#/paths/~1menu-items'
+  /menu-items/{itemId}:
+    $ref: 'menu.yaml#/paths/~1menu-items~1{itemId}'
+  /menu-items/{itemId}/status:
+    $ref: 'menu.yaml#/paths/~1menu-items~1{itemId}~1status'
+  /menu-items/images/upload:
+    $ref: 'menu.yaml#/paths/~1menu-items~1images~1upload'
+  /menu-options:
+    $ref: 'menu.yaml#/paths/~1menu-options'
+    
+  # 訂單管理API
+  /orders:
+    $ref: 'orders.yaml#/paths/~1orders'
+  /orders/{orderId}:
+    $ref: 'orders.yaml#/paths/~1orders~1{orderId}'
+  /orders/{orderId}/status:
+    $ref: 'orders.yaml#/paths/~1orders~1{orderId}~1status'
+  /orders/{orderId}/payment:
+    $ref: 'orders.yaml#/paths/~1orders~1{orderId}~1payment'
+  /orders/{orderId}/receipt:
+    $ref: 'orders.yaml#/paths/~1orders~1{orderId}~1receipt'
+  /orders/stats:
+    $ref: 'orders.yaml#/paths/~1orders~1stats'
+
+# 引用全局安全性定義
+security:
+  - BearerAuth: []
+
+# 引用tags定義
+tags:
+  $ref: 'openapi.yaml#/tags'
+
+# 引用servers定義
+servers:
+  $ref: 'openapi.yaml#/servers' 
