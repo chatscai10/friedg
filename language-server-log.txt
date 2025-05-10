@@ -2,6 +2,7 @@
 20:57:25 stream.go:37: Sent: {"jsonrpc":"2.0","result":{"capabilities":{"textDocumentSync":{"openClose":true,"change":1,"save":{}},"completionProvider":{"triggerCharacters":[" ",":","+","-","*","/","%","=","^","\u003e","\u003c"]},"signatureHelpProvider":{},"documentFormattingProvider":true,"documentOnTypeFormattingProvider":{"firstTriggerCharacter":""},"workspace":{"workspaceFolders":{}}}},"id":0}
 20:57:25 stream.go:85: Received: {"jsonrpc":"2.0","method":"initialized","params":{}}
 20:57:25 stream.go:85: Received: {"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{"settings":{"yolol":{"autoopen":{"enable":true},"formatting":{"mode":"Compact"},"lengthChecking":{"mode":"Strict"},"chipType":"Professional","debug":{"enable":true},"hotkeys":{"enable":true}},"nolol":{}}}}
+<<<<<<< HEAD
 23:15:48 stream.go:85: Received: {"jsonrpc":"2.0","id":1,"method":"workspace/executeCommand","params":{"command":"activeDocument","arguments":["file:///d%3A/friedg/firebase.json"]}}
 23:15:48 stream.go:37: Sent: {"jsonrpc":"2.0","result":null,"id":1}
 23:47:02 stream.go:85: Received: {"jsonrpc":"2.0","id":2,"method":"workspace/executeCommand","params":{"command":"activeDocument","arguments":["file:///d%3A/friedg/cloudbuild.yaml"]}}
@@ -260,3 +261,5 @@
 10:33:39 stream.go:37: Sent: {"jsonrpc":"2.0","result":null,"id":3}
 10:51:49 stream.go:85: Received: {"jsonrpc":"2.0","id":4,"method":"workspace/executeCommand","params":{"command":"activeDocument","arguments":["file:///d%3A/friedg/package.json"]}}
 10:51:49 stream.go:37: Sent: {"jsonrpc":"2.0","result":null,"id":4}
+=======
+>>>>>>> 859f8d382ade2df969826006963383109f2e15f5

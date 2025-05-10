@@ -1,8 +1,14 @@
 {
   "projects": {
+<<<<<<< HEAD
     "default": "friedg",
     "friedg": "friedg"
   },
   "targets": {},
   "etags": {}
 }
+=======
+    "default": "friedg-dev"
+  }
+} 
+>>>>>>> 859f8d382ade2df969826006963383109f2e15f5

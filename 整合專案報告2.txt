@@ -1,0 +1,413 @@
+好的，各位開發夥伴：
+
+這是一份基於現有專案資料，由我以技術專案開發經理的角色為大家規劃整理的專案技術開發報告書。本報告旨在提供專案的全貌、核心架構、模組細節、技術標準、安全性考量、部署建議與已知風險，以便各位能清晰理解專案需求，並依據建議的開發流程順序推進工作。請務必仔細閱讀，確保所有關鍵資訊被理解與遵循。
+
+本專案的核心目標是為「吃雞排找不早」打造一套集 POS 點餐與後台管理於一體，並具備高度彈性與擴展性的智慧餐飲解決方案，最終願景是成為店家的「經營大腦」與成長夥伴。系統採用多租戶 (Multi-Tenant) SaaS 架構，基於 Firebase 無伺服器平台構建。
+
+為了讓專案能夠穩健推進並符合業務優先級，我們的建議開發流程順序將依照以下階段進行：
+
+1.  **員工管理系統 (包含核心身份驗證與權限)**
+2.  **線上點餐系統 (顧客端)**
+3.  **會員管理系統**
+4.  **現場 POS 點餐系統 (員工端)**
+
+這樣的順序安排是基於先建立內部運營基礎（員工管理），再開放外部服務（線上點餐），接著強化顧客關係（會員），最後完善現場營運工具（POS），逐步累積使用者與業務流程。
+
+以下是根據提供的來源資料，為各位開發夥伴詳細整理的專案技術開發報告書：
+
+---
+
+**「吃雞排找不早」POS 與後台管理系統 - 專案技術開發報告書**
+
+**日期：** 2024 年 05 月 31 日
+
+**文件版本：** V1.1 (基於 V1.0 補充詳細開發流程與整合需求)
+
+**來源文件依據：** 本報告書整合編寫自多份專案規劃與技術文件，包含對系統核心理念、技術架構、各功能模組的詳細描述、安全性考量、部署維運建議、已知問題與風險，以及未來的擴展規劃。
+
+---
+
+**1. 專案概述 (Project Overview)**
+
+**1.1. 專案核心理念與目標**
+
+本專案的核心理念是打造一套全方位、高度客製化的智慧餐飲解決方案，不僅處理訂單，更能驅動成長、增加營收、優化顧客關係、降低營運成本。目標是成為店家的「經營大腦」與成長夥伴。
+
+系統設計採用多租戶 (Multi-Tenant) SaaS 架構，為眾多獨立店家（租戶）提供服務。核心策略是提供媲美高階付費系統的功能，但以免費註冊使用吸引用戶基礎，再透過增值服務獲利。系統需具備高度靈活性與擴展性，並確保租戶擁有高度自主設定權。即使無專用硬體，也能流暢使用.
+
+具體目標包括：提升營運效率（自動化日常流程）、實現數據整合透明（集中管理數據提供決策支援）、強化內部管理（標準化員工、流程、庫存、溝通）、改善內部溝通、支援行動操作 (PWA)、建立激勵機制、優化人力資源。
+
+**1.2. 專案範圍 (In Scope)**
+
+主要功能模組包括：
+*   超級管理後台 (Super Admin)
+*   租戶後台 (店家管理後台)
+*   線上點餐 & 會員中心 & 租戶探索平台
+*   線下點餐模組 (員工端 - PWA)
+*   身份認證、職位與權限管理
+*   GPS 定位打卡系統
+*   庫存管理系統 (月度盤點與內部叫貨)
+*   排班與請假系統
+*   銷售回報系統
+*   薪資與獎金系統
+*   績效考核、提升與降級系統
+*   顧客評價系統
+*   內部溝通系統 (公告、知識庫、投票)
+*   系統管理功能 (審核、參數設定、日誌、基本分析)
+*   取餐編號管理模組
+*   硬體周邊整合模組 (雲端出單模式)
+*   推薦註冊與自動獎勵機制
+*   廣告投放與管理系統
+*   租戶探索平台
+*   系統安全框架
+
+請注意，完整的即時進銷存管理、完整的顧客關係管理系統 (CRM)、完整的線下 POS 硬體整合 (專注 PWA/雲端出單)、全面的財務會計系統整合、原生行動 App 開發、詳細的高階數據分析儀表板等目前為範圍外 (Out of Scope)。
+
+**1.3. 目標使用者**
+
+系統服務於四類主要使用者：
+*   服務商/超級管理員 (Super Admin): 最高權限，管理所有租戶、全局設定等.
+*   租戶管理員 (店家管理員)/分店經理: 管理所屬店家員工、菜單、訂單等.
+*   分店員工/夥伴: 處理日常點餐、打卡、排班、查看薪資等.
+*   顧客: 線上點餐、會員管理、提交評價.
+
+**1.4. 文件目的**
+
+本報告旨在明確定義系統架構、技術選型、開發標準、安全要求、部署維運策略及已知風險，作為開發團隊的共同依循準則. 特別著重提供細節與注意事項，使新的開發團隊能夠順利接手專案.
+
+---
+
+**2. 技術架構 (Architectural Design)**
+
+系統採用基於 Firebase 的無伺服器 (Serverless) 和多租戶 (Multi-Tenant) SaaS 架構.
+
+**2.1. 宏觀架構**
+
+*   **前端 (PWA):** 部署於 Firebase Hosting，使用標準 HTML/CSS/JavaScript (未指定框架). 透過 Firebase Client SDK 與後端溝通.
+*   **後端 (Firebase Functions):** 使用 Node.js 20 LTS，部署於 Cloud Functions V2. 處理業務邏輯、第三方整合、排程與背景任務.
+*   **資料庫 (Firestore):** NoSQL 文件型資料庫. 儲存所有結構化數據. 採用共享資料庫、共享 Schema，並透過**強制 TenantID 或 StoreID 過濾**實現多租戶資料隔離.
+*   **身份驗證 (Authentication):** 主要整合 LINE Login，透過 Cloud Function 換取 Firebase 自定義 Token. 員工可能採用其他方式 (待定義).
+*   **訊息推送 (Cloud Messaging):** 用於即時通知 PWA 或透過 Cloud Functions 觸發 LINE/Telegram 通知.
+*   **外部整合:** 外送平台 (Uber Eats, Foodpanda - API/Webhook)、金流 (LINE Pay API)、通知 (LINE Notify, Telegram Bot API)、LINE Login (LIFF SDK)、LINE Messaging API (可能用於評價).
+
+**2.2. 前端架構 (PWA)**
+
+*   技術棧：HTML/CSS/JavaScript，無特定框架.
+*   核心：Service Worker (離線快取/安裝)、Manifest file.
+*   Firebase 整合：必須使用 Firebase Client SDK v9.x.x Compat 版本 (建議 v9.22.2 短期統一)，長期規劃 v9+ 模組化 SDK v11.6.1+.
+*   UI/UX：需高度直觀、可配置、響應式. **關鍵風險：缺乏 UI/UX 設計稿**.
+
+**2.3. 後端架構 (Firebase Functions)**
+
+*   技術棧：Node.js 20 LTS, Cloud Functions V2.
+*   觸發器：HTTPS (API)、Authentication (用戶初始化)、Pub/Sub & Scheduler (定時/批次).
+*   部署：建議 asia-east1 (彰化) 或 asia-northeast1 (東京) 區域降低延遲. 組織功能相關函數.
+*   冷啟動：記憶體 >= 256MB, 可設定最小實例數.
+
+**2.4. 資料庫設計 (Firestore)**
+
+*   類型：NoSQL Document DB.
+*   原則：共享資料庫、共享 Schema. **所有租戶/分店數據必須強制包含 TenantID 或 StoreID 並過濾**. 需定義複合索引 (`firestore.indexes.json`).
+*   限制：不支援複雜 Join/聚合，查詢筆數/大小限制 (1MB)，單文件寫入頻率限制. 需透過結構優化、批次處理克服.
+
+**2.5. 外部整合 (Integrations)**
+
+必須整合外送平台 (Uber Eats, Foodpanda)、金流 (LINE Pay)、通知 (LINE Notify, Telegram Bot)、LINE Login/LIFF. 注意第三方依賴、配額限制、延遲.
+
+---
+
+**3. 技術標準與規範 (Technical Standards & Specifications)**
+
+為確保專案一致性、可維護性與穩定性，需嚴格遵循以下標準：
+
+**3.1. 版本控制與依賴管理**
+
+*   SDK 版本統一：Firebase Client SDK (v9.22.2 Compat 短期，v11.6.1+ Modular 長期)、LIFF SDK (2.21.4+). Admin SDK (v13.x+). Functions V2 SDK.
+*   Node.js：20 LTS.
+*   NPM：強制使用並提交 `package-lock.json`.
+*   Firebase CLI：最新穩定版 (v12+).
+
+**3.2. 編碼風格與文件**
+
+*   風格：一致的 JavaScript 函數命名/宣告. 建議 ESLint + Prettier.
+*   文件：JSDoc 註解、技術規格書、API 規格、安全規則、索引定義需及時更新. **API 詳細規格文件缺失為關鍵待辦事項**.
+
+**3.3. 開發實踐**
+
+*   集中初始化：Firebase/LIFF 初始化邏輯集中管理，用 Promise/async/await 確保初始化完成，**嚴禁 setTimeout 輪詢**.
+*   **模組化開發 (Cloud Functions):** 強烈建議將 Cloud Functions 的邏輯按功能或觸發器類型拆分到不同的檔案或模組中，**避免將所有函數邏輯集中在單一的 `index.js` (或其他主檔案) 中**。採用清晰的目錄結構組織函數程式碼，以提高可讀性、可維護性與可測試性。
+*   安全性：實施深度防禦、最小權限、安全左移. 強制 HTTPS. **Firestore 安全規則 (`firestore.rules`) 是極高優先度**. **Cloud Functions 內部必須再次驗證權限**. 對輸入進行嚴格驗證清理防注入. 輸出數據適當編碼防 XSS. **禁止硬編碼敏感資訊**. 敏感資訊加密存儲或用 Secret Manager. **詳細操作日誌記錄是核心待實現邏輯**.
+*   錯誤處理：定義統一的 API 錯誤回傳格式.
+
+---
+
+**4. 多分店資訊整合與點餐入口 (Multi-Store Integration & Ordering Entry Points)**
+
+本系統設計基於多租戶/多分店架構，這是所有模組的基礎.
+
+*   **資料隔離**: 所有與店家相關的數據 (菜單、訂單、員工、排班、庫存、設定等) 都必須包含 `tenantId` 或 `storeId` 欄位，並在讀寫時透過 Firestore 安全規則與後端 Function 邏輯強制過濾，確保資料安全與隔離.
+*   **分店設定**: 租戶管理員可以在後台設定各分店的詳細資訊，包括名稱、地址、經緯度 (用於打卡圍欄)、營業時間、聯絡方式、雲端印表機設定、支付方式、線上訂餐開關、排班/薪資參數等. 這些設定應分層管理 (全局 > 租戶 > 分店).
+*   **員工跨店**: 系統支援員工跨分店任職. 員工登入後需選擇當前工作分店進行操作，其打卡、訂單、庫存等操作記錄將關聯至該分店.
+
+**點餐入口**：顧客和員工可透過不同入口進入系統進行點餐或相關操作.
+
+1.  **租戶探索平台 (Tenant Discovery Platform)**:
+    *   **功能**: 面向終端消費者，展示平台上的店家，為租戶導流.
+    *   **整合**: 顯示店家詳細公開資訊、菜單預覽、活動、營業時間、聯繫方式. 提供「線上點餐連結」導向特定店家的線上點餐 PWA. 支援基於地理位置、關鍵字等的搜尋與篩選.
+    *   **資料來源**: 整合所有選擇發布公開資訊的租戶/分店資料.
+2.  **店家專屬線上點餐 PWA**:
+    *   **功能**: 顧客透過掃描店家提供的 QR Code 或點擊連結，直接進入特定分店的線上點餐頁面.
+    *   **整合**: 此 PWA 與會員中心綁定. 載入該分店的菜單、進行中的活動、設定的點餐規則. 處理顧客的瀏覽、選餐、加入購物車、結帳流程.
+3.  **員工端現場 POS 點餐模組 (PWA)**:
+    *   **功能**: 員工在現場透過 PWA 進行點餐、結帳、出單等操作.
+    *   **整合**: 員工登入後選擇工作分店，系統載入該分店的菜單、點餐設定、排班等資訊. 介面針對觸控優化，支援離線操作緩存訂單草稿，網路恢復後同步. 支援雲端出單或螢幕顯示叫號.
+
+這些入口都必須確保正確載入或操作的是**當前租戶/分店**的數據，這依賴於嚴格的 `TenantID`/`StoreID` 過濾邏輯.
+
+---
+
+**5. 開發流程架構順序與模組細節 (Development Flow & Module Details)**
+
+我們將依據建議的順序，詳述各階段的核心模組及其要點。
+
+**階段 1: 員工管理系統 (基礎)**
+
+此階段目標是建立系統的內部基礎，確保員工數據、權限、考勤與基礎薪資管理的可用性。
+
+*   **5.1.1. 身份認證、職位與權限管理 (Partner Management & Auth)**:
+    *   **核心**: 建立 6 級職等體系. 管理員設定各職等權限範圍. 前後端雙重實施權限控制 (Firestore Rules + Function 內部驗證).
+    *   **驗證**: 整合 LINE Login 驗證夥伴身份. 初次登入需管理員審核綁定帳號.
+    *   **功能**: 夥伴基本資料管理. 夥伴招募與審核流程. 支援跨店分派夥伴.
+    *   **API 要點**: `/api/auth/employee-login` (LINE Token 換 Firebase Token). `/api/admin/employees/` (管理員工資料), `/api/admin/roles/` (管理職位權限).
+    *   **數據**: `users` 或 `employees` 集合 (含 `uid`, `role`, `storeId` 等).
+*   **5.1.2. 打卡考勤模組 (Clock-in)**:
+    *   **核心**: GPS 定位打卡，需在分店地理圍欄內. 記錄時間戳、位置. 自動判定狀態 (準時/遲到/早退/加班/缺勤).
+    *   **功能**: 跨店打卡支援. 漏打卡補登申請審核. 打卡提醒.
+    *   **API 要點**: `/api/attendance/clock` (打卡請求). `/api/attendance/reports/{employeeId}/{month}` (個人考勤報告). `/api/admin/attendance/{storeId}/{date}` (管理端考勤報表). `/api/admin/attendance/makeup` (補登申請審核).
+    *   **數據**: `attendanceRecords` 集合 (含 `type`, `timestamp`, `location`, `storeId`, `employeeId`, `status`).
+    *   **驗證**: 需後端驗證 GPS 座標是否在圍欄內 (`storeId` 關聯 `stores` 集合的 `latitude`/`longitude`/`radius`).
+*   **5.1.3. 排班與請假系統 (Scheduling & Leave)**:
+    *   **核心**: 提供班表排定 (手動/自動). 班表發布與通知. 請假申請與審批流程. 禁休日期管理. 調班/代班支援.
+    *   **自動化**: 自動排班演算法為**關鍵待辦事項**. 請假餘額扣減邏輯需明確.
+    *   **API 要點**: `/api/admin/schedules/{storeId}/{month}` (管理班表). `/api/schedules/employee/{employeeId}/{month}` (查看個人班表). `/api/leave/request` (請假申請). `/api/admin/leave/{storeId}/approve` (請假審批).
+    *   **數據**: `schedules`, `leaveRequests`, `blackoutDates` 集合.
+*   **5.1.4. 薪資與獎金系統 (Payroll & Bonus)**:
+    *   **核心**: 根據出勤、績效、獎金自動計算薪資. 提供管理員審核修正. 夥伴可查看明細.
+    *   **獎金**: 自訂多維度績效指標. 配置可配置化獎金任務與自動計入. **獎金評估邏輯為核心待實現**.
+    *   **自動化**: 每月自動觸發薪資計算 (Cloud Function).
+    *   **API 要點**: `/api/payroll/employee/{employeeId}` (查詢個人薪資). `/api/admin/payroll/{storeId}/{month}` (管理端薪資報表). `/api/admin/bonus-tasks/{storeId}` (管理獎金任務). `/api/admin/payroll/{storeId}/{month}/approve` (薪資審核).
+    *   **數據**: `payrolls`, `bonusTasks`, `bonusRecords`, `performanceMetrics` 集合.
+*   **5.1.5. 績效考核、提升與降級 (Performance)**:
+    *   **核心**: 提供公平評估與職位調整機制. 支援自動觸發投票 (實習轉正). 支援全員投票、老闆指派/投票降級流程. 結果記錄並更新夥伴職位.
+    *   **功能**: 夥伴參與績效評審與投票. 管理員後台操作流程管理. **核心後端邏輯待實現**.
+    *   **API 要點**: `/api/admin/performance/{storeId}/evaluations` (管理評估). `/api/admin/performance/{storeId}/promotions` (管理晉升/降級). `/api/performance/employee/{employeeId}` (個人績效查看). `/api/votes/submit` (提交投票).
+    *   **數據**: `evaluations`, `promotions`, `demotions`, `votes` 集合.
+*   **5.1.6. 內部溝通系統 (Internal Comms)**:
+    *   **功能**: 公告發布/管理、知識庫 (含測驗)、投票系統.
+    *   **API 要點**: `/api/announcements/{storeId}` (查看公告). `/api/knowledgebase/{storeId}` (查看知識庫). `/api/admin/announcements/{storeId}` (發布公告). `/api/admin/knowledgebase/{storeId}` (管理知識庫).
+
+**階段 2: 線上點餐系統 (顧客端)**
+
+此階段目標是讓外部顧客能夠透過線上管道瀏覽菜單、點餐、付款、追蹤訂單。
+
+*   **5.2.1. 線上點餐模組 (顧客端)**:
+    *   **核心**: 顧客透過 PWA 瀏覽菜單、選餐、加入購物車、結帳. 支援 LINE Pay 付款. 訂單狀態追蹤與顯示.
+    *   **功能**: 餐點選項自訂 (加料/去冰等). 售完餐點自動標記.
+    *   **API 要點**: `/api/menus/{storeId}` (載入菜單). `/api/order/create` (建立新訂單). `/api/payment/linepay/request` (建立 LINE Pay 交易). `/api/payment/linepay/confirm` (確認付款). `/api/order/status/{orderId}` (查詢訂單狀態).
+    *   **數據**: `menus`, `products`, `orders`, `payments` 集合.
+    *   **流程**: 顧客選餐 -> 建立訂單請求 (含商品、總金額、付款方式) -> 後端驗證建立訂單記錄 (狀態 pending) -> 若 LINE Pay，呼叫 LINE Pay API -> 導向 LINE Pay -> 顧客完成付款 -> LINE Pay 回調通知後端 -> 後端驗證並更新訂單狀態.
+    *   **狀態機**: 定義完整的訂單狀態流轉 (Draft, PendingPayment, Paid, Preparing, ReadyForPickup, Completed, Cancelled).
+*   **5.2.2. 取餐編號管理模組 (Pickup Number)**:
+    *   **核心**: 產生並顯示訂單取餐號碼. 清晰展示訂單狀態. **支援無實體螢幕的運作模式** (透過 LINE 通知顧客).
+    *   **API 要點**: `/api/pickup/call` (叫號/發送通知).
+    *   **數據**: `orders` 集合 (含 `pickupNumber`, `status`).
+*   **5.2.3. 外送平台串接 (Delivery Integration)**:
+    *   **核心**: 從外送平台 (Uber Eats, Foodpanda) 匯入訂單. 夥伴在系統中處理外送訂單. 支援取消/拒單並同步平台.
+    *   **整合**: 透過 API 或 Webhook 模擬. 租戶後台設定 API 憑證.
+    *   **API 要點**: `/api/webhook/ubereats/order`, `/api/webhook/foodpanda/order` (接收訂單 Webhook). `/api/ubereats/update`, `/api/foodpanda/update` (更新平台狀態).
+    *   **數據**: `orders` 集合 (標示來源 source: delivery).
+*   **5.2.4. 顧客評價機制 (Customer Feedback)**:
+    *   **核心**: 收集顧客對服務/產品的反饋. LINE Bot 問卷方式. 評價匿名儲存關聯訂單夥伴. 外部評價匯入.
+    *   **功能**: 員工端展示評價. 影響夥伴績效. 申訴機制. **LINE Bot 互動流程及 webhook 邏輯待實現**.
+    *   **API 要點**: `/api/webhook/line/feedback` (接收 LINE Bot 回饋). `/api/admin/feedback/{storeId}` (管理評價).
+    *   **數據**: `feedbacks` 集合 (含 `storeId`, `orderId`, `uid`, `rating`, `comment` 等).
+
+**階段 3: 會員管理系統**
+
+此階段在線上點餐基礎上，強化顧客關係與忠誠度功能。
+
+*   **5.3.1. 會員系統模組**:
+    *   **核心**: 建立忠誠度，收集數據. 會員綁定與登入 (LINE - **租戶獨立 Channel**). 點數計算與兌換 (租戶可設定規則). 訂單追蹤與歷史查詢. 會員分眾標籤管理.
+    *   **活動**: 優惠券/兌換券系統 (租戶可定義). 自動化活動設定 (生日禮、發放活動券等). 這些由後端任務定時觸發. 成就系統 (顧客與員工共用). 成就商店兌換獎勵.
+    *   **API 要點**: `/api/member/profile` (需驗證 Tenant). `/api/member/points` (需驗證 Tenant). `/api/member/orders` (需驗證 Tenant). `/api/member/coupons` (需驗證 Tenant). `/api/redeem` (需驗證 Tenant). `/api/achievement-store` (需驗證 Tenant). `/api/achievement-progress/{uid}` (需驗證 Tenant).
+    *   **數據**: `users` 或 `customers` 集合 (含 `points`, `memberTags`, `tenantId`). `pointRules` (含 `tenantId`), `coupons` (含 `tenantId`), `campaigns` (含 `tenantId`), `achievement_store` (含 `tenantId`), `achievement_record` (含 `tenantId`), `redeem_history` (含 `tenantId`), `user_points` (含 `tenantId`) 集合.
+    *   **隱私**: 注意數據隱私與法規遵循.
+
+*   **5.3.2. 顧客推薦獎勵機制 (Customer Referral Program - 新增)**:
+    *   **核心**: 激勵現有顧客推薦新顧客，擴大**租戶**的客戶基礎。**此機制在租戶內部運作**。
+    *   **運作流程**:
+        1.  **生成推薦碼**: 已註冊顧客可在**該租戶**的會員中心生成個人專屬推薦碼。推薦碼需確保在**租戶內唯一**。
+        2.  **新顧客使用**: 新顧客在首次註冊**該租戶**會員或首次在**該租戶**下單結帳時輸入推薦碼。
+        3.  **驗證與綁定**: 後端驗證推薦碼在**該租戶內**的有效性，記錄推薦關係 (`tenantId`, `referrerUid`, `refereeUid`, `status: pending`)。
+        4.  **激活條件**: 新顧客 (Referee) 成功完成在**該租戶下**的第一筆訂單 (狀態變為 `Completed` 或類似終態)。
+        5.  **獎勵觸發**: 後端監聽訂單狀態變化或定時檢查，當 Referee 在**該租戶**的首單完成時，觸發獎勵發放。
+        6.  **獎勵執行**:
+            *   向推薦人 (Referrer) 發放一張**該租戶**的優惠券。
+            *   向新顧客 (Referee) 發放一張**該租戶**的優惠券。
+            *   更新推薦關係狀態 (`status: completed`)。
+    *   **API 要點**:
+        *   `/api/referral/my-code` (GET): 獲取當前登入顧客在**當前租戶**的推薦碼。
+        *   `/api/referral/apply` (POST): 新顧客提交推薦碼進行**租戶內**綁定 (請求需含 `tenantId`)。
+        *   `/api/tenant-admin/referral/rules` (GET/POST): **租戶管理員**管理其推薦活動規則 (請求需含 `tenantId`)。
+        *   (後端內部邏輯): 監聽訂單完成事件 (需檢查 `tenantId`)，觸發獎勵發放函數。
+    *   **數據模型概念**:
+        *   `customers`: 增加 `referralCode` 欄位 (或獨立集合 `customerReferralCodes` 含 `tenantId`, `uid`, `code`)。
+        *   `referrals`: 記錄推薦關係 (含 `tenantId`, `referrerUid`, `refereeUid`, `codeUsed`, `status`, `createdAt`, `completedAt`).
+        *   `coupons`: 見下一節。
+
+*   **5.3.3. 優惠券結構規劃 (Coupon Structure - 新增)**:
+    *   **核心**: 定義靈活的優惠券系統，支持推薦獎勵及租戶自訂的行銷活動。
+    *   **數據模型 (`coupons` 集合)**:
+        *   `couponId`: (string) 唯一 ID。
+        *   `tenantId`: (string) **必須，所屬租戶 ID**。
+        *   `userId`: (string) 所屬用戶 UID。
+        *   `code`: (string, optional) 優惠券代碼。
+        *   `title`: (string) 優惠券標題。
+        *   `description`: (string) 描述。
+        *   `type`: (string enum) 類型 (e.g., `PERCENTAGE`, `FIXED_AMOUNT`)。
+        *   `discountValue`: (number) 折扣值。
+        *   `minOrderAmount`: (number, optional) 最低訂單金額要求。
+        *   `applicableStoreIds`: (array of strings, optional) 適用分店 ID 列表 (**必須屬於該 tenantId**)。
+        *   `applicableProductIds`: (array of strings, optional) 適用商品 ID 列表 (**需驗證商品屬於該 tenantId**)。
+        *   `validFrom`: (Timestamp) 生效日期。
+        *   `validUntil`: (Timestamp) 失效日期。
+        *   `status`: (string enum) 狀態 (`active`, `used`, `expired`)。
+        *   `source`: (string enum, optional) 來源 (`REFERRAL_REFERRER`, `REFERRAL_REFEREE`, `CAMPAIGN`, `MANUAL`, etc.)。
+        *   `createdAt`: (Timestamp)。
+        *   `usedAt`: (Timestamp, optional)。
+        *   `usedOrderId`: (string, optional)。
+    *   **優惠券模板 (`couponTemplates` 集合, Optional):** 可考慮建立模板 (可全局或租戶自訂，需含 `tenantId` 區分)。租戶管理員設定推薦獎勵時選擇或創建模板。
+    *   **發放邏輯 (推薦獎勵)**: 當推薦激活條件滿足時，後端 Cloud Function 根據**該租戶**設定的推薦獎勵優惠券模板，為 `referrerUid` 和 `refereeUid` 在 `coupons` 集合中各創建一條記錄 (含 `tenantId`)。
+    *   **使用邏輯**:
+        1.  顧客在**某租戶**結帳時，前端 API (`/api/member/coupons?status=active&tenantId=...`) 獲取可用優惠券。
+        2.  顧客選擇優惠券。
+        3.  前端提交 `couponId`。
+        4.  後端驗證 `couponId` 的有效性 (含 `tenantId` 匹配)。
+        5.  驗證通過，計算折扣。
+        6.  訂單完成後，更新 `coupon` 狀態。
+
+*   **5.3.4. 推薦註冊與自動獎勵機制 (Tenant Referral - 原 5.3.2)**:
+    *   **核心**: 激勵推廣**平台本身**，降低**新租戶**獲客成本. 推薦碼生成、驗證綁定關係. 激活條件追蹤 (可配置). 獎勵觸發與執行 (自動提升**租戶**資源/解鎖功能/延長服務期).
+    *   **API 要點**: `/api/referral/register-tenant` (新租戶註冊使用推薦碼). `/api/superadmin/referral/rules` (Super Admin 管理推薦規則).
+    *   **數據**: `ReferralCodes` (for tenants), `ReferralUsages` (for tenants), `ReferralRules` (for tenants) 集合.
+
+**階段 4: 現場 POS 點餐系統 (員工端)**
+
+此階段完善門市現場營運工具，利用 PWA 特性提升效率。
+
+*   **5.4.1. 線下點餐模組 (員工端 - PWA)**:
+    *   **核心**: 提升效率，減少錯誤. 利用 PWA 離線操作. 介面直觀可配置 (大按鈕、觸控優化). 支援離線模式下的點餐、暫存訂單. 網路恢復後自動同步離線數據.
+    *   **功能**: 開單與選桌. 點餐操作 (含備註、套餐替換). 訂單管理 (暫存、送單、劃單、修改/取消 - 需權限+Log). 結帳 (含混合支付、折扣/招待 - 需權限+Log、發票、觸發評分). 現金抽屜管理與班別結算. 訓練模式. 資源限制檢查. 出單 (雲端列印或螢幕顯示). **高度自訂性是賣點**.
+    *   **API 要點**: 重用 `/api/order/create` (員工端下單). `/api/order/update/{orderId}/status` (更新狀態). `/api/order/{orderId}` (查詢訂單詳情). `/api/shift/closeout/{storeId}` (班別結算). `/api/cashdrawer/{storeId}` (現金抽屜管理).
+    *   **數據**: `orders` 集合 (source: local). `shifts`, `cashDrawerLogs` 集合.
+    *   **PWA 特性**: Service Worker 實現離線快取菜單/設定/草稿訂單. IndexedDB 儲存待同步離線操作隊列. Background Sync API 或手動機制進行後台同步. 資料衝突處理策略. 狀態管理機制.
+*   **5.4.2. 硬體周邊整合模組 (雲端出單模式)**:
+    *   **核心**: 將列印任務發送至租戶指定的雲端印表機伺服器. **即使無印表機也能運作** (透過 KDS/PWA 介面顯示，電子憑證等).
+    *   **功能**: 租戶後台配置雲端印表機 API URL/Key/模板. POS 後端格式化數據並調用指定 API. 響應處理與錯誤重試.
+    *   **API 要點**: `/api/print/order/{orderId}` (觸發列印).
+    *   **數據**: `stores` 集合 (含打印機配置).
+*   **5.4.3. 庫存管理 (Inventory Management)**:
+    *   **核心**: 基本庫存追蹤，月度盤點與內部叫貨流程. 按 TenantID 隔離數據.
+    *   **功能**: 月度盤點流程管理、線上填報、生成報告. 內部叫貨流程管理、填寫叫貨單、物流審核、記錄歷史. 租戶可選啟用原料級或成品庫存管理.
+    *   **範圍外**: 不含完整的即時進銷存管理或成本計算.
+    *   **API 要點**: `/api/inventory/monthly-count/{storeId}/{month}` (月度盤點). `/api/inventory/order-request/{storeId}` (內部叫貨). `/api/admin/inventory/{storeId}/report` (庫存報告).
+    *   **數據**: `inventoryItems`, `monthlyCounts`, `internalOrderRequests` 集合.
+*   **5.4.4. 銷售回報系統 (Sales Report)**:
+    *   **核心**: 為未完全導入 POS 或需人工校正情境提供回報機制. 分店每日提交標準化銷售數據表單. 支援自定義欄位.
+    *   **API 要點**: `/api/sales/report/{storeId}/{date}` (提交銷售回報). `/api/admin/sales/{storeId}/{date}` (管理端檢視).
+    *   **數據**: `salesReports` 集合.
+
+**6. 系統管理與監控**
+
+此部分功能支援整個系統的運維和管理。
+
+*   **核心**: 提供管理員配置、監控、審核的集中入口.
+*   **功能**: 審核中心 (集中處理請假、補卡、獎金、晉升/降級等). 參數設定 (全局、租戶、分店層級參數管理). **必須解決參數配置來源衝突問題**. 系統監控 (操作日誌、錯誤日誌、即時通知). **詳細操作日誌記錄是核心待實現邏輯**. 基本分析數據檢視 (與薪資/績效相關). 手動輸入外部平台評價. 廣告投放與管理系統. 租戶管理 (Super Admin 新增/編輯/停用租戶).
+*   **API 要點**: `/api/admin/approval/pending/{storeId}` (待審核列表). `/api/admin/settings` (參數管理). `/api/admin/logs` (查看日誌). `/api/admin/analytics/{storeId}` (基本分析). `/api/admin/ads` (廣告管理). `/api/superadmin/tenants` (租戶管理).
+*   **數據**: `settings`, `system_config`, `auditLogs`, `errorLogs` 集合.
+
+---
+
+**7. 系統安全框架 (System Security Framework)**
+
+安全性是 SaaS 服務的基石，必須達到企業級安全標準.
+
+*   **原則**: 深度防禦、最小權限、安全左移.
+*   **措施**: 強密碼、MFA (管理員可選). 安全 Session/JWT. **Firestore 安全規則 (Firestore Rules) 極高優先度，需提供具體範例和測試計劃**. 所有 Cloud Functions 內部**必須再次驗證權限**. **強制 TenantID/StoreID 過濾**. 敏感資訊加密存儲或 Secret Manager. 傳輸加密 (HTTPS). 定期數據備份加密. 基礎設施安全加固、弱點掃描. App Check 防濫用. HTTP 函數入口加頻率限制/DDoS 防護. 依賴庫安全掃描更新. **詳細操作日誌 (Audit Log) 記錄**. 開發安全 (安全設計、Code Review、**禁止硬編碼敏感資訊**、嚴格輸入驗證清理、輸出適當編碼防 XSS).
+*   **風險與對策**: 安全漏洞攻擊、Firestore 規則錯誤、DDoS. 對策：定期掃描滲透測試、驗證規則、啟用 App Check、頻率限制、應變流程. XSS 防護不足：全面覆蓋輸入驗證和輸出編碼.
+
+---
+
+**8. 部署與維運建議 (Deployment & Operations Recommendations)**
+
+確保系統順利上線並長期穩定運行。
+
+*   **部署平台**: 前端 Firebase Hosting, 後端 Cloud Functions V2 (asia-east1 / asia-northeast1).
+*   **環境管理**: **必須** 區分開發 (Dev) 和生產 (Prod)，建議獨立 Firebase 專案. 可考慮 Staging.
+*   **部署流程**: 手動 CLI，**建議建立 CI/CD Pipeline** 自動化測試部署.
+*   **版本升級**: 語意化版本管理. 資料庫結構升級需遷移腳本或兼容讀取.
+*   **監控日誌**: Firebase 控制台、Cloud Logging 監控狀態/錯誤/性能. 定期檢視操作/錯誤日誌. 設定安全事件告警 (Telegram).
+*   **效能優化**: Firestore 索引. 快取機制. Functions 並行執行、最低實例數、提升記憶體.
+*   **測試策略**: 單元測試 (模擬器)、整合測試、端對端測試 (關鍵流程 E2E 案例需細化). **安全性測試 (Firestore Rules 驗證)** **高優先度**. 使用者驗收測試 (UAT)、訓練模式.
+*   **資料庫備份恢復**: Firestore 定期備份機制 (Cloud Storage 或導出). 資料保留策略. 恢復測試計劃.
+*   **容錯備援**: 針對單點故障設計方案.
+
+---
+
+**9. 風險與挑戰 (Risks & Challenges)**
+
+開發與維運過程中需特別關注的風險：
+
+*   **基礎設施限制**: Firestore 寫入/查詢頻率與複雜查詢效能限制. Node.js 單執行緒在 CPU 密集任務下的瓶頸.
+    *   **對策**: 優化資料結構/索引、複雜計算轉批次處理、使用 Cloud Tasks/Cloud Run.
+*   **第三方服務依賴**: 外送/金流/通知平台 API 配額限制、穩定性、延遲.
+    *   **對策**: 請求緩存、錯誤重試、過載保護.
+*   **開發與管理**: **缺乏 UI/UX 設計稿是關鍵風險**. **核心後端邏輯大量缺失或待完善** (自動排班、請假扣減、獎金計算、操作日誌、審批流程等). **缺失 API 詳細規格文件**. **缺失 Firestore 安全規則範例與測試計劃**. **Firestore 複合索引未定義**. **系統參數配置來源衝突與保存邏輯未解決**.
+    *   **對策**: **優先解決上述關鍵待辦事項**. 盡快取得設計稿. 強化測試.
+*   **安全性**: 安全漏洞與攻擊 (JWT 劫持、規則錯誤、DDoS). XSS 防護不足. 資料衝突處理 (尤其離線模式).
+    *   **對策**: 定期安全掃描/滲透測試、驗證規則、App Check、頻率限制. 全面輸入驗證/輸出編碼.
+*   **PWA 離線同步**: 離線操作的可靠性、同步衝突處理.
+    *   **對策**: 嚴謹設計離線隊列與同步邏輯，基於時間戳/版本號或後端權威處理衝突.
+
+---
+
+**10. 優化與擴展規劃 (Optimization & Expansion Plan)**
+
+*   **短期優化**: 優先解決上述關鍵待辦與風險. 優化現有功能 (介面自訂性、效能). 強化安全防護 (XSS、敏感資訊、後端權限).
+*   **未來擴展**: Kiosk 自助點餐. 進階數據分析與 BI. 會員儲值/電子錢包. 更多外部平台串接 (支付、政府發票、社群). 多語言/海外展店支持. SaaS 平台化 (加強超管、租戶自助、數據隔離、計費模組). 排隊叫號系統. 顧客取餐進度看板. 跨店任務系統. 預約訂餐模組.
+*   **技術演進**: 採用 Cloud Functions V2 新功能. 考慮 Serverless Containers (Cloud Run). 持續更新 SDK/依賴.
+
+---
+
+**11. 總結與後續步驟 (Conclusion & Next Steps)**
+
+本報告基於現有資料，詳細闡述了專案的核心概念、技術架構、功能模組、安全性要求、部署維運建議、已知風險與未來規劃. 旨在提供足夠的廣度和深度，使新的開發團隊能夠快速全面了解專案並接手.
+
+為了讓新團隊能夠順暢接手並完成剩餘部分，以下文件和工作是**最高優先級的待辦事項**，請各位開發夥伴務必優先處理：
+
+1.  **完成 API 詳細規格文件：** 針對所有後端 Cloud Functions API，詳細記錄用途、方法、URL、輸入參數、成功/錯誤回應格式範例等.
+2.  **定義並測試 Firestore 安全規則：** 編寫完整的 `firestore.rules` 文件，提供說明與測試範例，確保所有 Collection 讀寫權限得到嚴格控制. 必須使用 Emulator Suite 進行徹底測試.
+3.  **定義 Firestore 複合索引：** 根據預期查詢模式，在 `firestore.indexes.json` 中定義所有必要的複合索引.
+4.  **補齊缺失的核心後端邏輯：** 優先實現標記為「關鍵」或「核心修正重點」的 Cloud Functions，特別是薪資計算、獎金評估、請假扣減、操作日誌記錄、審批流程、分析數據獲取、LINE Bot 評價處理、自動排班演算法等. **開發過程中務必遵循模組化原則，避免將邏輯集中在單一檔案。**
+5.  **解決系統參數配置的衝突與保存邏輯問題：** 確保參數設定有唯一可靠的入口和保存機制.
+6.  **落實全面的安全性措施：** 特別是輸入驗證、輸出編碼 (XSS)、敏感資訊管理、後端權限檢查等，並進行安全性測試.
+7.  **產出關鍵介面的 UI/UX 設計稿：** 即使是線框圖，也能極大幫助前端開發，減少返工.
+8.  **建立 CI/CD Pipeline：** 自動化測試與部署流程.
+9.  **規劃詳細的部署與維運策略：** 包含環境管理、監控告警、資料備份與恢復計劃.
+
+完成上述事項後，專案將具備更清晰的開發方向、更穩定的架構和更可靠的基礎，為後續功能完善與擴展奠定堅實基礎.
+
+請各位開發夥伴立即開始審閱此報告，並針對上述高優先級事項展開工作。若有任何疑問或需要進一步釐清，請隨時提出。我們將共同努力，推進專案成功！
+
+---
+*(報告結束)*
