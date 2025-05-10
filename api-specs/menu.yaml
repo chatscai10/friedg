@@ -1,0 +1,1094 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API - 菜單管理模組
+  description: 吃雞排找不早系統的菜單管理相關API
+  version: 1.0.0
+
+paths:
+  /menu-categories:
+    get:
+      tags:
+        - menu
+      summary: 獲取菜單分類列表
+      description: 獲取系統中的菜單分類列表，支持排序和篩選
+      operationId: getMenuCategories
+      parameters:
+        - name: tenantId
+          in: query
+          description: 按租戶ID篩選
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          description: 按店鋪ID篩選
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          description: 按啟用狀態篩選
+          schema:
+            type: boolean
+        - name: type
+          in: query
+          description: 按分類類型篩選
+          schema:
+            type: string
+            enum: [main_dish, side_dish, drink, dessert, combo, seasonal]
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuCategories
+        action: read
+      responses:
+        '200':
+          description: 成功獲取菜單分類列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MenuCategory'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    post:
+      tags:
+        - menu
+      summary: 創建新菜單分類
+      description: 創建新的菜單分類
+      operationId: createMenuCategory
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuCategories
+        action: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryInput'
+      responses:
+        '201':
+          description: 菜單分類創建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuCategory'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /menu-categories/{categoryId}:
+    get:
+      tags:
+        - menu
+      summary: 獲取菜單分類詳情
+      description: 獲取特定菜單分類的詳細資訊
+      operationId: getMenuCategoryById
+      parameters:
+        - name: categoryId
+          in: path
+          description: 菜單分類ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuCategories
+        action: read
+      responses:
+        '200':
+          description: 成功獲取菜單分類詳情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuCategory'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 找不到菜單分類
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - menu
+      summary: 更新菜單分類
+      description: 更新特定菜單分類的資訊
+      operationId: updateMenuCategory
+      parameters:
+        - name: categoryId
+          in: path
+          description: 菜單分類ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuCategories
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryInput'
+      responses:
+        '200':
+          description: 菜單分類更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuCategory'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 找不到菜單分類
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    delete:
+      tags:
+        - menu
+      summary: 刪除菜單分類
+      description: 刪除特定菜單分類
+      operationId: deleteMenuCategory
+      parameters:
+        - name: categoryId
+          in: path
+          description: 菜單分類ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuCategories
+        action: delete
+      responses:
+        '200':
+          description: 菜單分類刪除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 找不到菜單分類
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+
+  /menu-items:
+    get:
+      tags:
+        - menu
+      summary: 獲取菜單項目列表
+      description: 獲取系統中的菜單項目列表，支持分頁、排序和篩選
+      operationId: getMenuItems
+      parameters:
+        - name: page
+          in: query
+          description: 頁碼 (從1開始)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: 每頁記錄數量
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: 排序欄位
+          schema:
+            type: string
+            enum: [name, price, createdAt, updatedAt]
+            default: createdAt
+        - name: order
+          in: query
+          description: 排序方向
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: tenantId
+          in: query
+          description: 按租戶ID篩選
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          description: 按店鋪ID篩選
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          description: 按分類ID篩選
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          description: 按啟用狀態篩選
+          schema:
+            type: boolean
+        - name: isRecommended
+          in: query
+          description: 按推薦狀態篩選
+          schema:
+            type: boolean
+        - name: isSpecial
+          in: query
+          description: 按特選狀態篩選
+          schema:
+            type: boolean
+        - name: stockStatus
+          in: query
+          description: 按庫存狀態篩選
+          schema:
+            type: string
+            enum: [in_stock, low_stock, out_of_stock]
+        - name: query
+          in: query
+          description: 搜尋關鍵字 (搜尋name、description)
+          schema:
+            type: string
+        - name: tags
+          in: query
+          description: 按標籤篩選 (逗號分隔的標籤列表)
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuItems
+        action: read
+      responses:
+        '200':
+          description: 成功獲取菜單項目列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MenuItem'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    post:
+      tags:
+        - menu
+      summary: 創建新菜單項目
+      description: 創建新的菜單項目
+      operationId: createMenuItem
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuItems
+        action: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuItemInput'
+      responses:
+        '201':
+          description: 菜單項目創建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /menu-items/{itemId}:
+    get:
+      tags:
+        - menu
+      summary: 獲取菜單項目詳情
+      description: 獲取特定菜單項目的詳細資訊
+      operationId: getMenuItemById
+      parameters:
+        - name: itemId
+          in: path
+          description: 菜單項目ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuItems
+        action: read
+      responses:
+        '200':
+          description: 成功獲取菜單項目詳情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 找不到菜單項目
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - menu
+      summary: 更新菜單項目
+      description: 更新特定菜單項目的資訊
+      operationId: updateMenuItem
+      parameters:
+        - name: itemId
+          in: path
+          description: 菜單項目ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuItems
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuItemInput'
+      responses:
+        '200':
+          description: 菜單項目更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 找不到菜單項目
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    delete:
+      tags:
+        - menu
+      summary: 刪除菜單項目
+      description: 刪除特定菜單項目
+      operationId: deleteMenuItem
+      parameters:
+        - name: itemId
+          in: path
+          description: 菜單項目ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuItems
+        action: delete
+      responses:
+        '200':
+          description: 菜單項目刪除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 找不到菜單項目
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+                
+  /menu-items/{itemId}/status:
+    patch:
+      tags:
+        - menu
+      summary: 更新菜單項目狀態
+      description: 更新特定菜單項目的啟用狀態或庫存狀態
+      operationId: updateMenuItemStatus
+      parameters:
+        - name: itemId
+          in: path
+          description: 菜單項目ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuItems
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isActive:
+                  type: boolean
+                  description: 是否啟用
+                stockStatus:
+                  type: string
+                  description: 庫存狀態
+                  enum: [in_stock, low_stock, out_of_stock]
+                stockQuantity:
+                  type: integer
+                  description: 庫存數量
+      responses:
+        '200':
+          description: 菜單項目狀態更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 找不到菜單項目
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+                
+  /menu-items/images/upload:
+    post:
+      tags:
+        - menu
+      summary: 上傳菜單項目圖片
+      description: 上傳菜單項目的圖片或縮略圖
+      operationId: uploadMenuItemImage
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuItems
+        action: create
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - type
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 圖片文件
+                type:
+                  type: string
+                  enum: [main, thumbnail]
+                  description: 圖片類型 (主圖或縮略圖)
+                tenantId:
+                  type: string
+                  description: 租戶ID
+                storeId:
+                  type: string
+                  description: 店鋪ID
+      responses:
+        '200':
+          description: 圖片上傳成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imageUrl:
+                    type: string
+                    format: uri
+                    description: 上傳後的圖片URL
+                  thumbnailUrl:
+                    type: string
+                    format: uri
+                    description: 生成的縮略圖URL (如果上傳的是主圖)
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+                
+  /menu-options:
+    get:
+      tags:
+        - menu
+      summary: 獲取菜單選項組列表
+      description: 獲取系統中的菜單選項組列表
+      operationId: getMenuOptions
+      parameters:
+        - name: tenantId
+          in: query
+          description: 按租戶ID篩選
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          description: 按店鋪ID篩選
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: menuOptions
+        action: read
+      responses:
+        '200':
+          description: 成功獲取菜單選項組列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MenuOptionGroup'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+                
+# 組件定義
+components:
+  schemas:
+    # 菜單分類
+    MenuCategory:
+      type: object
+      required:
+        - id
+        - name
+        - displayOrder
+        - type
+        - isActive
+      properties:
+        id:
+          type: string
+          description: 分類ID
+        name:
+          type: string
+          description: 分類名稱
+        description:
+          type: string
+          description: 分類描述
+        displayOrder:
+          type: integer
+          description: 顯示順序
+        type:
+          type: string
+          enum: [main_dish, side_dish, drink, dessert, combo, seasonal]
+          description: 分類類型
+        imageUrl:
+          type: string
+          format: uri
+          description: 分類圖片URL
+        isActive:
+          type: boolean
+          description: 是否啟用
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 菜單分類輸入
+    MenuCategoryInput:
+      type: object
+      required:
+        - name
+        - displayOrder
+        - type
+      properties:
+        name:
+          type: string
+          description: 分類名稱
+        description:
+          type: string
+          description: 分類描述
+        displayOrder:
+          type: integer
+          description: 顯示順序
+        type:
+          type: string
+          enum: [main_dish, side_dish, drink, dessert, combo, seasonal]
+          description: 分類類型
+        imageUrl:
+          type: string
+          format: uri
+          description: 分類圖片URL
+        isActive:
+          type: boolean
+          description: 是否啟用
+          default: true
+    
+    # 菜單選項組
+    MenuOptionGroup:
+      type: object
+      required:
+        - id
+        - name
+        - required
+        - multiSelect
+        - minSelect
+        - maxSelect
+        - options
+      properties:
+        id:
+          type: string
+          description: 選項組ID
+        name:
+          type: string
+          description: 選項組名稱
+        description:
+          type: string
+          description: 選項組描述
+        required:
+          type: boolean
+          description: 是否必選
+        multiSelect:
+          type: boolean
+          description: 是否可多選
+        minSelect:
+          type: integer
+          description: 最少選擇數量
+        maxSelect:
+          type: integer
+          description: 最多選擇數量
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuOption'
+          description: 選項列表
+    
+    # 菜單選項
+    MenuOption:
+      type: object
+      required:
+        - id
+        - name
+        - price
+      properties:
+        id:
+          type: string
+          description: 選項ID
+        name:
+          type: string
+          description: 選項名稱
+        description:
+          type: string
+          description: 選項描述
+        price:
+          type: number
+          format: float
+          description: 附加價格
+        isDefault:
+          type: boolean
+          description: 是否為預設選項
+    
+    # 菜單項目
+    MenuItem:
+      type: object
+      required:
+        - id
+        - name
+        - categoryId
+        - price
+        - stockStatus
+        - isRecommended
+        - isSpecial
+        - isActive
+      properties:
+        id:
+          type: string
+          description: 菜單項目ID
+        name:
+          type: string
+          description: 菜單項目名稱
+        description:
+          type: string
+          description: 菜單項目描述
+        categoryId:
+          type: string
+          description: 所屬分類ID
+        categoryName:
+          type: string
+          description: 所屬分類名稱 (冗餘欄位，便於顯示)
+        price:
+          type: number
+          format: float
+          description: 價格
+        discountPrice:
+          type: number
+          format: float
+          description: 折扣價格
+        costPrice:
+          type: number
+          format: float
+          description: 成本價格
+        imageUrl:
+          type: string
+          format: uri
+          description: 圖片URL
+        thumbnailUrl:
+          type: string
+          format: uri
+          description: 縮略圖URL
+        stockStatus:
+          type: string
+          enum: [in_stock, low_stock, out_of_stock]
+          description: 庫存狀態
+        stockQuantity:
+          type: integer
+          description: 庫存數量
+        unit:
+          type: string
+          description: 計量單位
+        preparationTime:
+          type: integer
+          description: 準備時間 (分鐘)
+        isRecommended:
+          type: boolean
+          description: 是否推薦
+        isSpecial:
+          type: boolean
+          description: 是否特選
+        isActive:
+          type: boolean
+          description: 是否啟用
+        nutritionInfo:
+          type: object
+          properties:
+            calories:
+              type: number
+              description: 熱量 (卡路里)
+            protein:
+              type: number
+              description: 蛋白質 (克)
+            carbs:
+              type: number
+              description: 碳水化合物 (克)
+            fat:
+              type: number
+              description: 脂肪 (克)
+            allergens:
+              type: array
+              items:
+                type: string
+              description: 過敏原列表
+        optionGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuOptionGroup'
+          description: 選項組列表
+        tags:
+          type: array
+          items:
+            type: string
+          description: 標籤列表
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 菜單項目輸入
+    MenuItemInput:
+      type: object
+      required:
+        - name
+        - categoryId
+        - price
+        - stockStatus
+      properties:
+        name:
+          type: string
+          description: 菜單項目名稱
+        description:
+          type: string
+          description: 菜單項目描述
+        categoryId:
+          type: string
+          description: 所屬分類ID
+        price:
+          type: number
+          format: float
+          description: 價格
+        discountPrice:
+          type: number
+          format: float
+          description: 折扣價格
+        costPrice:
+          type: number
+          format: float
+          description: 成本價格
+        imageUrl:
+          type: string
+          format: uri
+          description: 圖片URL
+        thumbnailUrl:
+          type: string
+          format: uri
+          description: 縮略圖URL
+        stockStatus:
+          type: string
+          enum: [in_stock, low_stock, out_of_stock]
+          description: 庫存狀態
+          default: in_stock
+        stockQuantity:
+          type: integer
+          description: 庫存數量
+        unit:
+          type: string
+          description: 計量單位
+        preparationTime:
+          type: integer
+          description: 準備時間 (分鐘)
+        isRecommended:
+          type: boolean
+          description: 是否推薦
+          default: false
+        isSpecial:
+          type: boolean
+          description: 是否特選
+          default: false
+        isActive:
+          type: boolean
+          description: 是否啟用
+          default: true
+        nutritionInfo:
+          type: object
+          properties:
+            calories:
+              type: number
+              description: 熱量 (卡路里)
+            protein:
+              type: number
+              description: 蛋白質 (克)
+            carbs:
+              type: number
+              description: 碳水化合物 (克)
+            fat:
+              type: number
+              description: 脂肪 (克)
+            allergens:
+              type: array
+              items:
+                type: string
+              description: 過敏原列表
+        optionGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuOptionGroup'
+          description: 選項組列表
+        tags:
+          type: array
+          items:
+            type: string
+          description: 標籤列表 

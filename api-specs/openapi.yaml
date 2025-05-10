@@ -1,0 +1,556 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API
+  description: |
+    吃雞排找不早系統的後端API，提供完整的企業管理功能。
+    包含使用者管理、租戶管理、店鋪管理、菜單管理、訂單管理、庫存管理、
+    員工管理、排班管理、簽到打卡、績效管理等功能。
+  version: 1.0.0
+  contact:
+    name: 吃雞排找不早系統開發團隊
+    email: dev@friedg.com
+    
+servers:
+  - url: https://api.friedg-dev.web.app/v1
+    description: 開發環境
+  - url: https://api.friedg-staging.web.app/v1
+    description: 測試環境
+  - url: https://api.friedg.com/v1
+    description: 生產環境
+
+tags:
+  - name: auth
+    description: 認證相關操作
+  - name: users
+    description: 使用者管理
+  - name: tenants
+    description: 租戶管理
+  - name: stores
+    description: 店鋪管理
+  - name: employees
+    description: 員工管理
+  - name: menu
+    description: 菜單管理
+  - name: orders
+    description: 訂單管理
+  - name: inventory
+    description: 庫存管理
+  - name: schedules
+    description: 排班管理
+  - name: attendances
+    description: 出勤管理
+  - name: payroll
+    description: 薪資管理
+
+# 通用組件定義
+components:
+  # 認證方案
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 使用JWT進行認證，需在Authorization頭中提供Bearer token
+
+  # 共用資料模型定義
+  schemas:
+    # 錯誤響應
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: 錯誤代碼
+        message:
+          type: string
+          description: 錯誤訊息
+        details:
+          type: object
+          description: 詳細錯誤信息
+          
+    # 分頁響應包裝
+    PaginatedResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+          description: 實際數據列表
+        pagination:
+          type: object
+          required:
+            - total
+            - page
+            - limit
+          properties:
+            total:
+              type: integer
+              format: int32
+              description: 總記錄數
+            page:
+              type: integer
+              format: int32
+              description: 當前頁碼
+            limit:
+              type: integer
+              format: int32
+              description: 每頁記錄數
+            hasNext:
+              type: boolean
+              description: 是否有下一頁
+              
+    # 用戶基本模型
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - role
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          description: 用戶ID
+        email:
+          type: string
+          format: email
+          description: 用戶電子郵件
+        displayName:
+          type: string
+          description: 用戶顯示名稱
+        role:
+          type: string
+          enum: [super_admin, tenant_admin, store_manager, shift_leader, senior_staff, staff, trainee, customer]
+          description: 用戶角色
+        phoneNumber:
+          type: string
+          description: 電話號碼
+        photoURL:
+          type: string
+          format: uri
+          description: 頭像URL
+        tenantId:
+          type: string
+          description: 所屬租戶ID
+        storeId:
+          type: string
+          description: 主要所屬店鋪ID
+        additionalStoreIds:
+          type: array
+          items:
+            type: string
+          description: 額外可管理的店鋪ID列表
+        customClaims:
+          type: object
+          description: 自定義權限聲明
+        disabled:
+          type: boolean
+          description: 是否停用
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 租戶模型
+    Tenant:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 租戶ID
+        name:
+          type: string
+          description: 租戶名稱
+        description:
+          type: string
+          description: 租戶描述
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+          description: 租戶狀態
+        logo:
+          type: string
+          format: uri
+          description: 租戶logo URL
+        primaryColor:
+          type: string
+          description: 主要品牌顏色
+        secondaryColor:
+          type: string
+          description: 次要品牌顏色
+        contactInfo:
+          type: object
+          properties:
+            email:
+              type: string
+              format: email
+            phone:
+              type: string
+            address:
+              type: string
+        subscriptionPlan:
+          type: string
+          enum: [free, basic, premium, enterprise]
+          description: 訂閱計劃
+        subscriptionExpiry:
+          type: string
+          format: date-time
+          description: 訂閱過期時間
+        allowedFeatures:
+          type: array
+          items:
+            type: string
+          description: 允許使用的功能列表
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 店鋪模型
+    Store:
+      type: object
+      required:
+        - id
+        - tenantId
+        - name
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 店鋪ID
+        tenantId:
+          type: string
+          description: 所屬租戶ID
+        name:
+          type: string
+          description: 店鋪名稱
+        storeCode:
+          type: string
+          description: 店鋪代碼
+        description:
+          type: string
+          description: 店鋪描述
+        status:
+          type: string
+          enum: [active, inactive, temporary_closed, permanently_closed]
+          description: 店鋪狀態
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            city:
+              type: string
+            state:
+              type: string
+            postalCode:
+              type: string
+            country:
+              type: string
+        location:
+          type: object
+          properties:
+            latitude:
+              type: number
+              format: double
+            longitude:
+              type: number
+              format: double
+        contactInfo:
+          type: object
+          properties:
+            email:
+              type: string
+              format: email
+            phone:
+              type: string
+            managerId:
+              type: string
+              description: 店長用戶ID
+        operatingHours:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: integer
+                minimum: 0
+                maximum: 6
+                description: 星期幾 (0=星期日, 6=星期六)
+              isOpen:
+                type: boolean
+              openTime:
+                type: string
+                pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                description: 開店時間 (HH:MM 24小時制)
+              closeTime:
+                type: string
+                pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                description: 關店時間 (HH:MM 24小時制)
+        gpsFence:
+          type: object
+          description: GPS打卡圍欄設定
+          properties:
+            enabled:
+              type: boolean
+              description: 是否啟用GPS打卡圍欄
+            radius:
+              type: number
+              format: float
+              description: 圍欄半徑（單位：公尺）
+            center:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                  format: double
+                  description: 圍欄中心點緯度
+                longitude:
+                  type: number
+                  format: double
+                  description: 圍欄中心點經度
+        printerSettings:
+          type: object
+          description: 雲端出單設定
+          properties:
+            enabled:
+              type: boolean
+              description: 是否啟用雲端出單
+            apiUrl:
+              type: string
+              format: uri
+              description: 雲端印表機API網址
+            apiKey:
+              type: string
+              description: 雲端印表機API金鑰
+            printerType:
+              type: string
+              enum: [thermal, label, normal]
+              description: 印表機類型
+            templates:
+              type: object
+              description: 不同單據的模板設定
+              properties:
+                receipt:
+                  type: string
+                  description: 收據模板
+                kitchen:
+                  type: string
+                  description: 廚房出單模板
+                takeout:
+                  type: string
+                  description: 外帶單模板
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 員工模型
+    Employee:
+      type: object
+      required:
+        - id
+        - userId
+        - tenantId
+        - storeId
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 員工ID
+        userId:
+          type: string
+          description: 關聯的用戶ID
+        tenantId:
+          type: string
+          description: 所屬租戶ID
+        storeId:
+          type: string
+          description: 主要所屬店鋪ID
+        assignedStores:
+          type: array
+          items:
+            type: string
+          description: 可工作的店鋪ID列表，支援跨店分派
+        employeeCode:
+          type: string
+          description: 員工編號
+        firstName:
+          type: string
+          description: 名字
+        lastName:
+          type: string
+          description: 姓氏
+        position:
+          type: string
+          description: 職位
+        role:
+          type: string
+          description: 系統登入角色
+          enum: [admin, staff]
+        roleLevel:
+          type: integer
+          description: 權限等級（數字越大權限越高）
+          minimum: 1
+          maximum: 10
+        employmentType:
+          type: string
+          enum: [full_time, part_time, contract, intern, temporary]
+          description: 雇傭類型
+        status:
+          type: string
+          enum: [active, inactive, on_leave, terminated]
+          description: 員工狀態
+        hireDate:
+          type: string
+          format: date
+          description: 雇傭日期
+        terminationDate:
+          type: string
+          format: date
+          description: 離職日期
+        contactInfo:
+          type: object
+          properties:
+            phone:
+              type: string
+            emergencyContact:
+              type: string
+            emergencyPhone:
+              type: string
+        schedule:
+          type: object
+          description: 排班偏好
+          properties:
+            preferredShifts:
+              type: array
+              items:
+                type: string
+                enum: [morning, afternoon, evening, night]
+            maxHoursPerWeek:
+              type: integer
+            daysUnavailable:
+              type: array
+              items:
+                type: integer
+                enum: [0, 1, 2, 3, 4, 5, 6]
+        payInfo:
+          type: object
+          properties:
+            hourlyRate:
+              type: number
+              format: float
+            salaryType:
+              type: string
+              enum: [hourly, monthly, annual]
+            bankAccount:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 角色模型
+    Role:
+      type: object
+      required:
+        - id
+        - name
+        - roleLevel
+        - scope
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 角色ID
+        name:
+          type: string
+          description: 角色名稱
+        description:
+          type: string
+          description: 角色描述
+        roleLevel:
+          type: integer
+          description: 權限等級（數字越大權限越高）
+          minimum: 1
+          maximum: 10
+        scope:
+          type: string
+          enum: [global, tenant, store]
+          description: 角色範圍（全局、租戶層級、店鋪層級）
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+          description: 角色關聯的權限列表
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 權限模型
+    Permission:
+      type: object
+      required:
+        - id
+        - resourceType
+        - action
+      properties:
+        id:
+          type: string
+          description: 權限ID
+        resourceType:
+          type: string
+          description: 資源類型（例如：employees, stores, orders等）
+        action:
+          type: string
+          enum: [create, read, update, delete, manage, approve]
+          description: 操作動作
+        description:
+          type: string
+          description: 權限描述
+        conditions:
+          type: object
+          description: 權限條件（例如：只能操作自己的數據或下屬數據）
+
+# 安全性要求
+security:
+  - BearerAuth: []
+  
+# API路徑在獨立文件中定義
+paths: {} 

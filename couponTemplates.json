@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "templateId": "tpl001",
+      "name": "新會員優惠",
+      "discount": 100,
+      "type": "fixed",
+      "status": "active",
+      "createdAt": "2025-05-15T08:00:00Z",
+      "updatedAt": "2025-05-15T08:00:00Z"
+    },
+    {
+      "templateId": "tpl002",
+      "name": "週年慶特惠",
+      "discount": 20,
+      "type": "percentage",
+      "status": "active",
+      "createdAt": "2025-05-15T08:00:00Z",
+      "updatedAt": "2025-05-15T08:00:00Z"
+    }
+  ],
+  "meta": {
+    "totalItems": 2,
+    "currentPage": 1,
+    "itemsPerPage": 10,
+    "totalPages": 1
+  }
+} 

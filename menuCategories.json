@@ -1,0 +1,34 @@
+{
+  "data": [
+    { 
+      "categoryId": "cat001", 
+      "name": "熱門飲品", 
+      "status": "active", 
+      "displayOrder": 1,
+      "createdAt": "2025-05-15T08:00:00Z",
+      "updatedAt": "2025-05-15T08:00:00Z"
+    },
+    { 
+      "categoryId": "cat002", 
+      "name": "季節限定", 
+      "status": "active", 
+      "displayOrder": 2,
+      "createdAt": "2025-05-15T08:00:00Z",
+      "updatedAt": "2025-05-15T08:00:00Z"
+    },
+    { 
+      "categoryId": "cat003", 
+      "name": "經典咖啡", 
+      "status": "active", 
+      "displayOrder": 3,
+      "createdAt": "2025-05-15T08:00:00Z",
+      "updatedAt": "2025-05-15T08:00:00Z"
+    }
+  ],
+  "meta": {
+    "totalItems": 3,
+    "currentPage": 1,
+    "itemsPerPage": 10,
+    "totalPages": 1
+  }
+} 

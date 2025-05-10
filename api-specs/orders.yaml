@@ -1,0 +1,776 @@
+openapi: 3.0.3
+info:
+  title: 訂單管理 API
+  description: 吃雞排找不早系統訂單管理相關API，包含訂單創建、查詢、更新等功能
+  version: 1.0.0
+
+paths:
+  /orders:
+    get:
+      summary: 獲取訂單列表
+      description: 根據查詢參數獲取符合條件的訂單列表
+      tags:
+        - Orders
+      parameters:
+        - name: storeId
+          in: query
+          description: 店鋪ID，用於篩選特定店鋪的訂單
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 訂單狀態，用於篩選特定狀態的訂單
+          schema:
+            type: string
+            enum: [pending, preparing, ready, completed, cancelled]
+        - name: from
+          in: query
+          description: 起始日期（ISO 8601格式）
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 結束日期（ISO 8601格式）
+          schema:
+            type: string
+            format: date-time
+        - name: customerId
+          in: query
+          description: 顧客ID，用於篩選特定顧客的訂單
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: 分頁頁碼
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: 每頁記錄數
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: 成功獲取訂單列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+                  pagination:
+                    $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+      security:
+        - BearerAuth: []
+
+    post:
+      summary: 創建新訂單
+      description: 創建一個新的訂單，包含訂單項目、顧客資訊等
+      tags:
+        - Orders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderInput'
+      responses:
+        '201':
+          description: 訂單創建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足
+        '409':
+          description: 資源衝突，如庫存不足或無法處理
+      security:
+        - BearerAuth: []
+
+  /orders/{orderId}:
+    get:
+      summary: 獲取特定訂單詳情
+      description: 根據訂單ID獲取完整的訂單詳情
+      tags:
+        - Orders
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: 訂單ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功獲取訂單詳情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足
+        '404':
+          description: 訂單不存在
+      security:
+        - BearerAuth: []
+
+  /orders/{orderId}/status:
+    put:
+      summary: 更新訂單狀態
+      description: 更新指定訂單的狀態，如從待處理改為準備中等
+      tags:
+        - Orders
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: 訂單ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending, preparing, ready, completed, cancelled]
+                  description: 新的訂單狀態
+                reason:
+                  type: string
+                  description: 狀態變更原因，尤其是取消訂單時需提供
+      responses:
+        '200':
+          description: 訂單狀態更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足
+        '404':
+          description: 訂單不存在
+        '422':
+          description: 無法處理的狀態變更，如嘗試將已完成訂單改為準備中
+      security:
+        - BearerAuth: []
+
+  /orders/{orderId}/payment:
+    post:
+      summary: 記錄訂單支付
+      description: 為指定訂單記錄支付資訊
+      tags:
+        - Orders
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: 訂單ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - paymentMethod
+                - amount
+              properties:
+                paymentMethod:
+                  type: string
+                  enum: [cash, linepay, creditcard]
+                  description: 付款方式
+                amount:
+                  type: number
+                  format: float
+                  description: 付款金額
+                transactionId:
+                  type: string
+                  description: 支付交易ID（電子支付時使用）
+                notes:
+                  type: string
+                  description: 支付備註
+      responses:
+        '200':
+          description: 支付記錄成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足
+        '404':
+          description: 訂單不存在
+        '409':
+          description: 訂單已支付或處於無法支付的狀態
+      security:
+        - BearerAuth: []
+
+  /orders/{orderId}/receipt:
+    get:
+      summary: 獲取訂單收據
+      description: 為指定訂單生成收據（電子發票）
+      tags:
+        - Orders
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: 訂單ID
+          schema:
+            type: string
+        - name: format
+          in: query
+          description: 收據格式
+          schema:
+            type: string
+            enum: [json, pdf, html]
+            default: json
+      responses:
+        '200':
+          description: 成功獲取收據
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Receipt'
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足
+        '404':
+          description: 訂單不存在
+        '422':
+          description: 無法生成收據，如訂單未支付
+      security:
+        - BearerAuth: []
+
+  /orders/stats:
+    get:
+      summary: 獲取訂單統計數據
+      description: 根據時間範圍等參數獲取訂單相關統計數據
+      tags:
+        - Orders
+      parameters:
+        - name: storeId
+          in: query
+          description: 店鋪ID
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: 起始日期（ISO 8601格式）
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 結束日期（ISO 8601格式）
+          schema:
+            type: string
+            format: date-time
+        - name: groupBy
+          in: query
+          description: 統計分組方式
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+      responses:
+        '200':
+          description: 成功獲取統計資料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStats'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足
+      security:
+        - BearerAuth: []
+          
+components:
+  schemas:
+    OrderInput:
+      type: object
+      required:
+        - storeId
+        - items
+      properties:
+        storeId:
+          type: string
+          description: 下單店鋪ID
+        customerId:
+          type: string
+          description: 顧客ID，非會員可為空
+        customerName:
+          type: string
+          description: 顧客姓名
+        customerPhone:
+          type: string
+          description: 顧客電話
+        customerEmail:
+          type: string
+          format: email
+          description: 顧客電子郵件
+        orderType:
+          type: string
+          enum: [dine-in, takeout, delivery]
+          default: takeout
+          description: 訂單類型：堂食、外帶或外送
+        tableNumber:
+          type: string
+          description: 堂食時的桌號
+        estimatedPickupTime:
+          type: string
+          format: date-time
+          description: 預計取餐時間
+        specialInstructions:
+          type: string
+          description: 特殊要求或備註
+        items:
+          type: array
+          description: 訂單項目列表
+          items:
+            $ref: '#/components/schemas/OrderItemInput'
+        discountCode:
+          type: string
+          description: 折扣碼
+        taxIncluded:
+          type: boolean
+          default: true
+          description: 價格是否已包含稅金
+
+    OrderItemInput:
+      type: object
+      required:
+        - menuItemId
+        - quantity
+        - unitPrice
+      properties:
+        menuItemId:
+          type: string
+          description: 菜單項目ID
+        quantity:
+          type: integer
+          minimum: 1
+          description: 數量
+        unitPrice:
+          type: number
+          format: float
+          description: 單價
+        specialInstructions:
+          type: string
+          description: 特殊要求
+        options:
+          type: array
+          description: 所選選項（如辣度、額外配料等）
+          items:
+            $ref: '#/components/schemas/OrderItemOptionInput'
+
+    OrderItemOptionInput:
+      type: object
+      required:
+        - optionId
+        - value
+      properties:
+        optionId:
+          type: string
+          description: 選項ID
+        value:
+          type: string
+          description: 選項值
+        additionalPrice:
+          type: number
+          format: float
+          default: 0
+          description: 額外費用
+
+    Order:
+      type: object
+      required:
+        - id
+        - storeId
+        - status
+        - items
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 訂單ID
+        orderNumber:
+          type: string
+          description: 訂單編號（用於顯示）
+        storeId:
+          type: string
+          description: 店鋪ID
+        storeName:
+          type: string
+          description: 店鋪名稱
+        tenantId:
+          type: string
+          description: 租戶ID
+        customerId:
+          type: string
+          description: 顧客ID
+        customerName:
+          type: string
+          description: 顧客姓名
+        customerPhone:
+          type: string
+          description: 顧客電話
+        customerEmail:
+          type: string
+          description: 顧客電子郵件
+        status:
+          type: string
+          enum: [pending, preparing, ready, completed, cancelled]
+          description: 訂單狀態
+        orderType:
+          type: string
+          enum: [dine-in, takeout, delivery]
+          description: 訂單類型
+        tableNumber:
+          type: string
+          description: 桌號（堂食時適用）
+        estimatedPickupTime:
+          type: string
+          format: date-time
+          description: 預計取餐時間
+        actualPickupTime:
+          type: string
+          format: date-time
+          description: 實際取餐時間
+        specialInstructions:
+          type: string
+          description: 特殊要求
+        items:
+          type: array
+          description: 訂單項目
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        subtotal:
+          type: number
+          format: float
+          description: 小計金額
+        taxAmount:
+          type: number
+          format: float
+          description: 稅金
+        taxIncluded:
+          type: boolean
+          description: 價格是否已包含稅金
+        discountAmount:
+          type: number
+          format: float
+          description: 折扣金額
+        discountCode:
+          type: string
+          description: 使用的折扣碼
+        tipAmount:
+          type: number
+          format: float
+          description: 小費金額
+        totalAmount:
+          type: number
+          format: float
+          description: 總金額
+        paymentStatus:
+          type: string
+          enum: [unpaid, partially_paid, paid, refunded]
+          description: 支付狀態
+        paymentMethod:
+          type: string
+          enum: [cash, linepay, creditcard]
+          description: 支付方式
+        paymentTransactionId:
+          type: string
+          description: 支付交易ID
+        assignedStaffId:
+          type: string
+          description: 處理訂單的員工ID
+        assignedStaffName:
+          type: string
+          description: 處理訂單的員工姓名
+        cancelReason:
+          type: string
+          description: 取消原因（如適用）
+        isDeleted:
+          type: boolean
+          description: 是否已刪除（軟刪除）
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+
+    OrderItem:
+      type: object
+      required:
+        - id
+        - menuItemId
+        - menuItemName
+        - quantity
+        - unitPrice
+      properties:
+        id:
+          type: string
+          description: 訂單項目ID
+        menuItemId:
+          type: string
+          description: 菜單項ID
+        menuItemName:
+          type: string
+          description: 菜單項名稱
+        menuItemImage:
+          type: string
+          description: 菜單項圖片URL
+        quantity:
+          type: integer
+          description: 數量
+        unitPrice:
+          type: number
+          format: float
+          description: 單價
+        totalPrice:
+          type: number
+          format: float
+          description: 總價
+        specialInstructions:
+          type: string
+          description: 特殊要求
+        options:
+          type: array
+          description: 所選選項
+          items:
+            $ref: '#/components/schemas/OrderItemOption'
+
+    OrderItemOption:
+      type: object
+      required:
+        - optionId
+        - optionName
+        - value
+      properties:
+        optionId:
+          type: string
+          description: 選項ID
+        optionName:
+          type: string
+          description: 選項名稱
+        value:
+          type: string
+          description: 選項值
+        additionalPrice:
+          type: number
+          format: float
+          description: 額外費用
+
+    Receipt:
+      type: object
+      required:
+        - orderId
+        - receiptNumber
+        - items
+        - totalAmount
+        - issuedAt
+      properties:
+        orderId:
+          type: string
+          description: 訂單ID
+        receiptNumber:
+          type: string
+          description: 收據編號
+        storeId:
+          type: string
+          description: 店鋪ID
+        storeName:
+          type: string
+          description: 店鋪名稱
+        storeAddress:
+          type: string
+          description: 店鋪地址
+        storeTaxId:
+          type: string
+          description: 店鋪稅務編號
+        customerName:
+          type: string
+          description: 顧客姓名
+        customerTaxId:
+          type: string
+          description: 顧客稅務編號（電子發票用）
+        items:
+          type: array
+          description: 收據項目
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: 商品名稱
+              quantity:
+                type: integer
+                description: 數量
+              unitPrice:
+                type: number
+                format: float
+                description: 單價
+              totalPrice:
+                type: number
+                format: float
+                description: 總價
+        subtotal:
+          type: number
+          format: float
+          description: 小計金額
+        taxAmount:
+          type: number
+          format: float
+          description: 稅金
+        discountAmount:
+          type: number
+          format: float
+          description: 折扣金額
+        totalAmount:
+          type: number
+          format: float
+          description: 總金額
+        paymentMethod:
+          type: string
+          description: 支付方式
+        isElectronic:
+          type: boolean
+          description: 是否為電子發票
+        electronicReceiptUrl:
+          type: string
+          description: 電子發票連結
+        issuedAt:
+          type: string
+          format: date-time
+          description: 開立時間
+
+    OrderStats:
+      type: object
+      properties:
+        totalOrders:
+          type: integer
+          description: 總訂單數
+        totalSales:
+          type: number
+          format: float
+          description: 總銷售額
+        averageOrderValue:
+          type: number
+          format: float
+          description: 平均訂單金額
+        topSellingItems:
+          type: array
+          items:
+            type: object
+            properties:
+              menuItemId:
+                type: string
+              menuItemName:
+                type: string
+              quantity:
+                type: integer
+              revenue:
+                type: number
+                format: float
+        ordersByStatus:
+          type: object
+          additionalProperties:
+            type: integer
+        ordersByType:
+          type: object
+          additionalProperties:
+            type: integer
+        salesByDay:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              orders:
+                type: integer
+              sales:
+                type: number
+                format: float
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: 當前頁碼
+        limit:
+          type: integer
+          description: 每頁記錄數
+        total:
+          type: integer
+          description: 總記錄數
+        pages:
+          type: integer
+          description: 總頁數 

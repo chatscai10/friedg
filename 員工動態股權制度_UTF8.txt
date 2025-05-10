@@ -1,0 +1,125 @@
+﻿**10. 員工動態股權制度（Dynamic Equity Framework）**
+
+> 本章為《吃雞排找不早 POS 與後台管理系統 – 專案技術開發報告書》之延伸章節，定位於 *"9. 總結與後續步驟"* 之後，方便未來版本直接串接。
+
+---
+
+### 10.1 章節目的與適用範圍
+
+* 建立跨分店、一致且可程式化的員工持股（虛擬股∕內部股）制度。
+* 提供技術與流程規格，使開發團隊可於 **v1.1** 後續衝刺中落地。
+* 適用於「不早脆皮雞排」旗下所有直營／加盟分店，並預留 SaaS 化空間。
+
+### 10.2 名詞定義
+
+| 名稱                         | 說明                                       |
+| :--------------------------- | :----------------------------------------- |
+| **持股池 (Equity Pool)** | 每店預留 10 – 20 % 股份，專供員工認購／配發。    |
+| **虛擬股 (Phantom Share)** | 僅享有分紅，無決策投票權；預設模式以降低法遵負擔。 |
+| **實股 (Class B 無表決權股)** | 公司若登記實體增資時可切換；需另行董事／股東會決議。 |
+| **Good Leaver / Bad Leaver** | 良性離職／非良性離職，用以決定回購價格。         |
+
+### 10.3 制度總覽
+
+| 類別         | 核心規格                       | 技術落點                                          |
+| :----------- | :----------------------------- | :------------------------------------------------ |
+| **股權類型** | 預設 Phantom，選配實股         | `legal_config/{storeId}.equity_type`            |
+| **員工上限** | 個人 ≤10 % / 店，員工總和 ≤49 % | `equity_pool.remaining_cap` 自動檢查              |
+| **資格** | 正職滿 6 月 + 平均評分 ≥7      | Cloud Function `checkEquityEligibility()`         |
+| **購股窗口** | 每季開放 5 天                  | `purchase_window_open` flag + Scheduler           |
+| **估值更新** | 每年 1/7 月；月均淨利 ×4 ÷100 股 | `revalueShares()` 排程                            |
+| **分紅** | (持股%) × (季淨利 –前置虧損)   | `autoDistributeDividends()`                       |
+| **離職回購** | Good 85–100 % 估值；Bad 低價   | `exit_type` 決定 `repurchase_price`               |
+| **內部轉讓** | 系統撮合；估值 ±10 % 價格帶    | `internal_match_orders` collection                |
+
+### 10.4 股價與估值公式
+
+每股價格 ＝ ⌈ 近 12 月平均「稅後淨利」 × 4 ÷ 100 ⌉
+季度間浮動上／下限 ±20 ％
+
+> **備註**：若店面尚未營運滿一年，採 *近 3 月平均 × 8 ÷100* 之保守估值。
+
+### 10.5 股份池管理與稅務處理
+
+1.  **股權池初始化**：建店時由 `initStore()` Function 寫入 `equity_pool`：
+    ```json
+    { "total_shares": 100, "pool_shares": 15, "remaining_cap": 15,
+      "equity_type": "phantom", "valuation": 600000 }
+    ```
+2.  **法遵**：
+    * Phantom 股：列為員工獎金，屬薪資所得。
+    * 若將來切換實股，須於章程增列第 235‑1 條員工分紅規定並完成增資登記。
+3.  **所得稅**：系統於發放分紅時標記 `tax_category`=`salary`∕`dividend` 供會計批次產生扣繳憑單。
+
+### 10.6 股份取得流程
+
+```mermaid
+flowchart TD
+  A[資格檢查] -->|符合| B(開放購股/獎勵)
+  B --> C{取得方式}
+  C -->|績效達標| D[獎勵配股] --> E[鎖定一年]
+  C -->|現金/薪資買股| F[認購申請] --> G[審核 & 付款] --> E
+  E --> H[寫入 employee_equity]
+```
+
+* **鎖定期**：配股鎖定 1 年；認購鎖定 6 月。
+* **分期付款**：`installments` 欄位 (1–6)；Function `processInstallmentDebit()` 每月扣薪。
+
+### 10.7 分紅計算 & 發放
+
+員工分紅 = 持股% × max(0, 季淨利 - 未彌補虧損)
+
+* `dividend_snapshot_{yyyyQn}` 於季結算產生快照，避免事後持股變動影響。
+* Cloud Function `autoDistributeDividends()` 發送 LINE Pay 分潤並寫入 `equity_payouts`。
+
+### 10.8 離職與回購
+
+| 離職類別      | 股份處置     | 回購價                  | 時效      |
+| :------------ | :----------- | :---------------------- | :-------- |
+| Good Leaver   | 公司優先回購 | 85–100 % 估值           | 60 天內完成 |
+| Bad Leaver    | 股份即凍結   | 認購價或 50 % 估值 (取低) | 即時      |
+| 死亡          | 不繼承       | 認購價回收              | 90 天     |
+
+### 10.9 內部轉讓機制
+
+* 系統於季結束後第 1–5 日開放 `internal_trade_window=true`。
+* 員工可下 `sell_order` / `buy_order`，匹配價差≤±10 % 估值。
+* 成交收 1 % 平台服務費，寫入 `equity_transactions`。
+
+### 10.10 風險點與對策追蹤
+
+| #  | 風險         | 對策                         | Owner   |
+| :--- | :----------- | :--------------------------- | :------ |
+| 1  | 估值波動過大 | 封頂 ±20 %+半年度重估        | Finance |
+| 2  | 回購資金不足 | 每季提撥 2 % 淨利至 `buyback_reserve` | CFO     |
+| 3  | 法規異動     | 年度法遵審查                 | Legal   |
+
+### 10.11 Firestore 結構（重點）
+
+```text
+stores/{storeId}/equity_pool
+employee_equity/{userId}_{storeId}
+internal_match_orders/{orderId}
+equity_transactions/{txId}
+equity_payouts/{snapshotId}/details/{userId}
+legal_config/{storeId}
+```
+
+### 10.12 核心 Cloud Functions
+
+| Function                             | 說明                 | 觸發方式         |
+| :----------------------------------- | :------------------- | :--------------- |
+| `checkEquityEligibility`             | 員工達成條件寫 flag    | HTTPS (管理員)   |
+| `openPurchaseWindow` / `closePurchaseWindow` | 設定購股旗標         | Cloud Scheduler  |
+| `revalueShares`                      | 重估股價＆更新 `valuation` | 半年排程         |
+| `autoDistributeDividends`            | 生成分紅並推播         | 季排程           |
+| `processInstallmentDebit`            | 扣薪付款             | 月排程           |
+
+### 10.13 未來擴充
+
+* **v2**：可視化股權儀表板、PDF 股權證書、AI 估值模型。
+* **v3**：跨租戶（SaaS）股權市場、集團 ESOP 合併持股上限。
+
+---
+
+> **完成此章後，整份報告將升級為 V1.1，建議在「9. 總結與後續步驟」列為須開發項目 #10：*實作員工動態股權制度核心功能與 UI*。** 

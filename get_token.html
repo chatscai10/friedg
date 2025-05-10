@@ -1,0 +1,94 @@
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Get Firebase ID Token</title>
+        <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    </head>
+    <body>
+        <h1>Get Firebase ID Token (Emulator)</h1>
+        <p>用於獲取本地 Firebase Auth Emulator 的用戶 ID Token。</p>
+        <label for="email">郵箱 (Email):</label>
+        <input type="email" id="email" value="test-admin@example.com" size="30"><br><br>
+        <label for="password">密碼 (Password):</label>
+        <input type="password" id="password" value="password123" size="30"><br><br> <!-- 提醒用戶輸入密碼 -->
+        <button onclick="signInAndGetToken()">登錄並獲取 Token</button>
+        <hr>
+        <textarea id="tokenOutput" rows="15" cols="80" placeholder="ID Token 將會顯示在這裡..." readonly></textarea>
+
+        <script>
+            // ========= 請修改這裡 ===========
+            const firebaseConfig = {
+              apiKey: "dummy-api-key-for-emulator-only", // 模擬器用虛擬金鑰
+              authDomain: "friedg.firebaseapp.com", // 改成你的項目 ID
+              projectId: "friedg", // 改成你的項目 ID
+              // 其他配置通常不需要為模擬器填寫
+            };
+            // ========= 修改結束 ===========
+
+            // 初始化 Firebase
+            try {
+                firebase.initializeApp(firebaseConfig);
+            } catch(e) {
+                if (!/already exists/.test(e.message)) {
+                    console.error('Firebase initialization error', e.stack)
+                }
+            }
+
+            const auth = firebase.auth();
+
+            // --- 連接到 Auth 模擬器 ---
+            // 確保模擬器正在運行!
+            try {
+                // 檢查是否在本地環境 (localhost 或 127.0.0.1)
+                 if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+                     console.log("嘗試連接到 Firebase Auth 模擬器 (http://127.0.0.1:9099)...");
+                     auth.useEmulator("http://127.0.0.1:9099");
+                     console.log("已連接到 Auth 模擬器。");
+                 } else {
+                     console.log("不在本地環境，不使用模擬器。");
+                 }
+            } catch (e) {
+                 console.error("連接模擬器時出錯:", e);
+                 alert("連接 Auth 模擬器失敗，請確認 Firebase Emulators 是否已啟動，且 Auth 模擬器運行在 9099 端口。");
+            }
+            // --- 模擬器連接結束 ---
+
+            async function signInAndGetToken() {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const tokenOutput = document.getElementById('tokenOutput');
+
+                if (!password || password === "輸入您的密碼") {
+                    alert("請輸入 test-admin@example.com 的密碼！");
+                    return;
+                }
+
+                tokenOutput.value = '正在登錄...';
+
+                try {
+                    const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                    const user = userCredential.user;
+                    console.log("登錄成功:", user.uid);
+
+                    tokenOutput.value = '正在獲取 ID Token...';
+                    // forceRefresh: true 確保每次都獲取最新的 Token
+                    const idToken = await user.getIdToken(/* forceRefresh */ true);
+                    console.log("獲取的 ID Token:", idToken);
+                    tokenOutput.value = idToken;
+
+                } catch (error) {
+                    console.error("登錄或獲取 Token 時出錯:", error);
+                    tokenOutput.value = `出錯了: ${error.message}`;
+                    if (error.code === 'auth/wrong-password') {
+                        alert("密碼錯誤！請確認您輸入了正確的密碼。");
+                    } else if (error.code === 'auth/user-not-found') {
+                         alert("找不到用戶 " + email + "。請確認郵箱地址正確。");
+                    } else {
+                         alert("登錄失敗，請查看瀏覽器控制台獲取詳細錯誤信息。");
+                    }
+                }
+            }
+        </script>
+    </body>
+    </html>

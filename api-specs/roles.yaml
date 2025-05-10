@@ -1,0 +1,632 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API - 角色管理模組
+  description: 吃雞排找不早系統的角色與權限管理相關API
+  version: 1.0.0
+
+paths:
+  /roles:
+    get:
+      tags:
+        - roles
+      summary: 獲取角色列表
+      description: 獲取系統中的角色列表，支持分頁、排序和篩選
+      operationId: getRoles
+      parameters:
+        - name: page
+          in: query
+          description: 頁碼 (從1開始)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: 每頁記錄數量
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: 排序欄位
+          schema:
+            type: string
+            enum: [createdAt, name, roleLevel, scope]
+            default: roleLevel
+        - name: order
+          in: query
+          description: 排序方向
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: scope
+          in: query
+          description: 按角色範圍篩選
+          schema:
+            type: string
+            enum: [global, tenant, store]
+        - name: tenantId
+          in: query
+          description: 按租戶ID篩選
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: 搜尋關鍵字 (搜尋角色名稱、描述)
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: read
+      responses:
+        '200':
+          description: 成功獲取角色列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: './openapi.yaml#/components/schemas/Role'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    post:
+      tags:
+        - roles
+      summary: 創建新角色
+      description: 建立新角色記錄
+      operationId: createRole
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - roleLevel
+                - scope
+              properties:
+                name:
+                  type: string
+                  description: 角色名稱
+                description:
+                  type: string
+                  description: 角色描述
+                roleLevel:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  description: 權限等級（數字越大權限越高）
+                scope:
+                  type: string
+                  enum: [global, tenant, store]
+                  description: 角色範圍（全局、租戶層級、店鋪層級）
+                permissions:
+                  type: array
+                  description: 角色關聯的權限列表
+                  items:
+                    type: object
+                    required:
+                      - resourceType
+                      - action
+                    properties:
+                      resourceType:
+                        type: string
+                        description: 資源類型
+                      action:
+                        type: string
+                        enum: [create, read, update, delete, manage, approve]
+                        description: 操作動作
+                      conditions:
+                        type: object
+                        description: 權限條件
+      responses:
+        '201':
+          description: 角色創建成功
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Role'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 角色名稱已存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /roles/{roleId}:
+    get:
+      tags:
+        - roles
+      summary: 獲取角色詳情
+      description: 獲取特定角色的詳細資訊
+      operationId: getRoleById
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          description: 角色ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: read
+        resourceId: '{roleId}'
+      responses:
+        '200':
+          description: 成功獲取角色詳情
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Role'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - roles
+      summary: 更新角色
+      description: 更新特定角色的資訊
+      operationId: updateRole
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          description: 角色ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 角色名稱
+                description:
+                  type: string
+                  description: 角色描述
+                roleLevel:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  description: 權限等級（數字越大權限越高）
+                permissions:
+                  type: array
+                  description: 角色關聯的權限列表
+                  items:
+                    type: object
+                    required:
+                      - resourceType
+                      - action
+                    properties:
+                      resourceType:
+                        type: string
+                        description: 資源類型
+                      action:
+                        type: string
+                        enum: [create, read, update, delete, manage, approve]
+                        description: 操作動作
+                      conditions:
+                        type: object
+                        description: 權限條件
+      responses:
+        '200':
+          description: 角色更新成功
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Role'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 角色名稱已存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    delete:
+      tags:
+        - roles
+      summary: 刪除角色
+      description: 刪除特定角色
+      operationId: deleteRole
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          description: 角色ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: delete
+      responses:
+        '204':
+          description: 角色刪除成功
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 角色正在使用中，無法刪除
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /roles/{roleId}/permissions:
+    get:
+      tags:
+        - roles
+      summary: 獲取角色權限列表
+      description: 獲取特定角色關聯的權限列表
+      operationId: getRolePermissions
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          description: 角色ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: read
+      responses:
+        '200':
+          description: 成功獲取角色權限列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: './openapi.yaml#/components/schemas/Permission'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - roles
+      summary: 更新角色權限
+      description: 更新特定角色關聯的權限列表
+      operationId: updateRolePermissions
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          description: 角色ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required:
+                  - resourceType
+                  - action
+                properties:
+                  resourceType:
+                    type: string
+                    description: 資源類型
+                  action:
+                    type: string
+                    enum: [create, read, update, delete, manage, approve]
+                    description: 操作動作
+                  conditions:
+                    type: object
+                    description: 權限條件
+      responses:
+        '200':
+          description: 角色權限更新成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: './openapi.yaml#/components/schemas/Permission'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /roles/assign:
+    post:
+      tags:
+        - roles
+      summary: 指派角色給用戶
+      description: 為特定用戶分配角色
+      operationId: assignRoleToUser
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - roleId
+              properties:
+                userId:
+                  type: string
+                  description: 用戶ID
+                roleId:
+                  type: string
+                  description: 角色ID
+                scope:
+                  type: string
+                  enum: [global, tenant, store]
+                  description: 應用範圍
+                scopeId:
+                  type: string
+                  description: 範圍ID (租戶ID或店鋪ID，依scope而定)
+      responses:
+        '200':
+          description: 角色指派成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId:
+                    type: string
+                  roleId:
+                    type: string
+                  roleName:
+                    type: string
+                  scope:
+                    type: string
+                  scopeId:
+                    type: string
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 用戶或角色不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 用戶已擁有該角色
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /roles/revoke:
+    post:
+      tags:
+        - roles
+      summary: 撤銷用戶角色
+      description: 撤銷特定用戶的角色
+      operationId: revokeRoleFromUser
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: roles
+        action: manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - roleId
+              properties:
+                userId:
+                  type: string
+                  description: 用戶ID
+                roleId:
+                  type: string
+                  description: 角色ID
+                scope:
+                  type: string
+                  enum: [global, tenant, store]
+                  description: 應用範圍
+                scopeId:
+                  type: string
+                  description: 範圍ID (租戶ID或店鋪ID，依scope而定)
+      responses:
+        '204':
+          description: 角色撤銷成功
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 用戶、角色或用戶角色關聯不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error' 

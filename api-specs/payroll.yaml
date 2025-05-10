@@ -1,0 +1,650 @@
+openapi: 3.0.3
+info:
+  title: 薪資與獎金系統 API
+  description: |
+    薪資與獎金系統 API 提供了計算員工薪資、生成薪資單、查詢薪資單歷史等功能。
+    此 API 屬於「吃雞排找不早」POS 與後台管理系統的一部分。
+  version: 1.0.0
+  contact:
+    name: 開發團隊
+    email: support@friedg.app
+
+servers:
+  - url: https://api.friedg.app/v1
+    description: 正式環境
+  - url: https://api.staging.friedg.app/v1
+    description: 測試環境
+
+tags:
+  - name: payroll
+    description: 薪資與獎金系統相關功能
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "發生錯誤：缺少必要參數"
+
+    PayrollCalculationRequest:
+      type: object
+      required:
+        - tenantId
+        - storeId
+        - periodStart
+        - periodEnd
+      properties:
+        tenantId:
+          type: string
+          description: 租戶ID
+        storeId:
+          type: string
+          description: 店鋪ID
+        employeeId:
+          type: string
+          description: 員工ID (可選，不填則計算所有員工)
+        periodStart:
+          type: string
+          format: date
+          description: 計薪週期開始日期 (YYYY-MM-DD)
+          example: "2024-05-01"
+        periodEnd:
+          type: string
+          format: date
+          description: 計薪週期結束日期 (YYYY-MM-DD)
+          example: "2024-05-31"
+        generatePayslip:
+          type: boolean
+          description: 是否生成薪資單
+          default: true
+        saveDraft:
+          type: boolean
+          description: 是否保存為草稿
+          default: false
+
+    GrossSalary:
+      type: object
+      properties:
+        employeeId:
+          type: string
+          description: 員工ID
+        periodStart:
+          type: string
+          format: date
+          description: 計薪週期開始日期
+        periodEnd:
+          type: string
+          format: date
+          description: 計薪週期結束日期
+        salaryType:
+          type: string
+          enum: [hourly, monthly, commission]
+          description: 薪資類型
+        regularHours:
+          type: number
+          description: 一般工時 (時薪制適用)
+        regularPay:
+          type: number
+          description: 一般工資 (時薪制適用)
+        overtimeHours:
+          type: object
+          properties:
+            rate1:
+              type: number
+              description: 加班時數 (倍率1)
+            rate2:
+              type: number
+              description: 加班時數 (倍率2)
+        overtimePay:
+          type: object
+          properties:
+            rate1:
+              type: number
+              description: 加班費 (倍率1)
+            rate2:
+              type: number
+              description: 加班費 (倍率2)
+        holidayHours:
+          type: number
+          description: 假日工時 (時薪制適用)
+        holidayPay:
+          type: number
+          description: 假日工資 (時薪制適用)
+        baseSalary:
+          type: number
+          description: 基本月薪 (月薪制適用)
+        workingDays:
+          type: number
+          description: 實際工作天數 (月薪制適用)
+        totalWorkDays:
+          type: number
+          description: 應工作總天數 (月薪制適用)
+        proRatedSalary:
+          type: number
+          description: 按比例計算的基本薪資 (月薪制適用，不足月)
+        commissionBaseSalary:
+          type: number
+          description: 提成制底薪 (提成制適用)
+        salesAmount:
+          type: number
+          description: 銷售額 (提成制適用)
+        commissionAmount:
+          type: number
+          description: 提成金額 (提成制適用)
+        totalGrossSalary:
+          type: number
+          description: 總應發工資
+
+    BonusItem:
+      type: object
+      properties:
+        bonusId:
+          type: string
+          description: 獎金規則ID
+        bonusType:
+          type: string
+          description: 獎金類型
+        name:
+          type: string
+          description: 獎金名稱
+        amount:
+          type: number
+          description: 獎金金額
+        description:
+          type: string
+          description: 說明
+        calculationType:
+          type: string
+          description: 計算類型
+        condition:
+          type: string
+          description: 觸發條件描述
+
+    BonusResult:
+      type: object
+      properties:
+        employeeId:
+          type: string
+          description: 員工ID
+        periodStart:
+          type: string
+          format: date
+          description: 計算週期開始日期
+        periodEnd:
+          type: string
+          format: date
+          description: 計算週期結束日期
+        bonusItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/BonusItem'
+        totalBonusAmount:
+          type: number
+          description: 獎金總額
+
+    DeductionItem:
+      type: object
+      properties:
+        deductionType:
+          type: string
+          enum: [laborInsurance, healthInsurance, taxWithholding, laborPension, welfareFee, other]
+          description: 扣款類型
+        name:
+          type: string
+          description: 扣款名稱
+        amount:
+          type: number
+          description: 扣款金額
+        description:
+          type: string
+          description: 說明
+        calculationBase:
+          type: number
+          description: 計算基礎
+        rate:
+          type: number
+          description: 費率 (如適用)
+
+    DeductionResult:
+      type: object
+      properties:
+        employeeId:
+          type: string
+          description: 員工ID
+        periodStart:
+          type: string
+          format: date
+          description: 計算週期開始日期
+        periodEnd:
+          type: string
+          format: date
+          description: 計算週期結束日期
+        deductionItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeductionItem'
+        totalDeductionAmount:
+          type: number
+          description: 總扣款金額
+
+    PayslipStatusHistory:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, processing, paid, rejected, cancelled]
+          description: 狀態
+        timestamp:
+          type: string
+          format: date-time
+          description: 時間戳
+        updatedBy:
+          type: string
+          description: 更新人ID
+        reason:
+          type: string
+          description: 原因 (可選)
+
+    Payslip:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 文檔ID
+        payslipNumber:
+          type: string
+          description: 薪資單編號 (格式可能為 YYYYMM-EMPID)
+        tenantId:
+          type: string
+          description: 租戶ID
+        storeId:
+          type: string
+          description: 店鋪ID
+        employeeId:
+          type: string
+          description: 員工ID
+        periodStart:
+          type: string
+          format: date-time
+          description: 計薪週期開始日期
+        periodEnd:
+          type: string
+          format: date-time
+          description: 計薪週期結束日期
+        payDate:
+          type: string
+          format: date-time
+          description: 發薪日期
+        salaryType:
+          type: string
+          enum: [hourly, monthly, commission]
+          description: 薪資類型
+        employeeName:
+          type: string
+          description: 員工姓名 (冗餘儲存)
+        position:
+          type: string
+          description: 職位 (冗餘儲存)
+        currency:
+          type: string
+          default: TWD
+          description: 貨幣
+        earnings:
+          type: object
+          properties:
+            baseSalary:
+              type: number
+              description: 基本薪資/底薪
+            regularHours:
+              type: number
+              description: 一般工時 (時薪制適用)
+            regularPay:
+              type: number
+              description: 一般工時薪資 (時薪制適用)
+            overtimeHours:
+              type: object
+              properties:
+                rate1:
+                  type: number
+                  description: 加班時數 (倍率1)
+                rate2:
+                  type: number
+                  description: 加班時數 (倍率2)
+            overtimePay:
+              type: object
+              properties:
+                rate1:
+                  type: number
+                  description: 加班費 (倍率1)
+                rate2:
+                  type: number
+                  description: 加班費 (倍率2)
+            holidayHours:
+              type: number
+              description: 假日工時 (時薪制適用)
+            holidayPay:
+              type: number
+              description: 假日薪資 (時薪制適用)
+            salesAmount:
+              type: number
+              description: 銷售金額 (提成制適用)
+            commission:
+              type: number
+              description: 提成金額 (提成制適用)
+            bonuses:
+              type: array
+              items:
+                type: object
+                properties:
+                  bonusId:
+                    type: string
+                    description: 獎金規則ID
+                  name:
+                    type: string
+                    description: 獎金名稱
+                  amount:
+                    type: number
+                    description: 獎金金額
+                  description:
+                    type: string
+                    description: 說明
+            otherEarnings:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: 名稱
+                  amount:
+                    type: number
+                    description: 金額
+                  description:
+                    type: string
+                    description: 說明
+            totalEarnings:
+              type: number
+              description: 總收入
+        deductions:
+          type: object
+          properties:
+            laborInsurance:
+              type: number
+              description: 勞保費
+            healthInsurance:
+              type: number
+              description: 健保費
+            taxWithholding:
+              type: number
+              description: 預扣稅額
+            laborPension:
+              type: number
+              description: 勞工退休金自提
+            welfareFee:
+              type: number
+              description: 職工福利金
+            otherDeductions:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: 名稱
+                  amount:
+                    type: number
+                    description: 金額
+                  description:
+                    type: string
+                    description: 說明
+            totalDeductions:
+              type: number
+              description: 總扣除金額
+        netPay:
+          type: number
+          description: 實發金額
+        notes:
+          type: string
+          description: 備註說明
+        status:
+          type: string
+          enum: [pending, processing, paid, rejected, cancelled]
+          description: 支付狀態
+        statusHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayslipStatusHistory'
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+        createdBy:
+          type: string
+          description: 創建人ID
+        updatedBy:
+          type: string
+          description: 更新人ID
+        isConfirmed:
+          type: boolean
+          description: 員工是否已確認
+        confirmedAt:
+          type: string
+          format: date-time
+          description: 確認時間
+        confirmationComments:
+          type: string
+          description: 確認意見
+
+    PayrollCalculationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        employeeId:
+          type: string
+          description: 員工ID
+        periodStart:
+          type: string
+          format: date
+          description: 計薪週期開始日期
+        periodEnd:
+          type: string
+          format: date
+          description: 計薪週期結束日期
+        salaryType:
+          type: string
+          enum: [hourly, monthly, commission]
+          description: 薪資類型
+        grossSalary:
+          $ref: '#/components/schemas/GrossSalary'
+        bonuses:
+          $ref: '#/components/schemas/BonusResult'
+        deductions:
+          $ref: '#/components/schemas/DeductionResult'
+        netPay:
+          type: number
+          description: 實發薪資
+        currency:
+          type: string
+          default: TWD
+          description: 貨幣
+        payslip:
+          $ref: '#/components/schemas/Payslip'
+          description: 生成的薪資單 (如果 generatePayslip=true)
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: 總記錄數
+          example: 25
+        page:
+          type: integer
+          description: 當前頁碼
+          example: 1
+        pageSize:
+          type: integer
+          description: 每頁記錄數
+          example: 10
+        totalPages:
+          type: integer
+          description: 總頁數
+          example: 3
+
+    PayslipListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payslip'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+paths:
+  /payroll/calculate:
+    post:
+      tags:
+        - payroll
+      summary: 觸發薪資計算
+      description: |
+        手動觸發指定員工和週期的薪資計算。
+        此端點可以選擇僅計算薪資但不生成薪資單，也可以直接生成薪資單。
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollCalculationRequest'
+      responses:
+        '200':
+          description: 薪資計算成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollCalculationResponse'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未經授權的請求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /employees/{employeeId}/payslips:
+    get:
+      tags:
+        - payroll
+      summary: 獲取員工薪資單列表
+      description: |
+        獲取指定員工的歷史薪資單列表。
+        支援按週期和狀態篩選，並支援分頁。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 員工ID
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 薪資週期開始日期過濾 (YYYY-MM-DD)
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 薪資週期結束日期過濾 (YYYY-MM-DD)
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, processing, paid, rejected, cancelled]
+          description: 薪資單狀態過濾
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: 每頁記錄數量
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 頁碼 (從1開始)
+      responses:
+        '200':
+          description: 成功獲取薪資單列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayslipListResponse'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未經授權的請求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error' 

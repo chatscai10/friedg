@@ -1,0 +1,251 @@
+openapi: 3.0.3
+info:
+  title: POS 系統 API
+  description: 吃雞排找不早系統的 POS 相關 API，包含訂單管理、狀態更新及列印觸發功能
+  version: 1.0.0
+
+paths:
+  /pos/stores/{storeId}/orders:
+    get:
+      summary: 獲取指定分店的活躍訂單
+      description: 獲取指定分店目前的活躍訂單（confirmed, preparing, ready 狀態）
+      tags:
+        - POS
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 訂單狀態，預設為 'active'（活躍狀態的訂單）
+          schema:
+            type: string
+            enum: [active, pending, confirmed, preparing, ready, completed, cancelled, all]
+            default: active
+        - name: limit
+          in: query
+          description: 每頁記錄數
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: page
+          in: query
+          description: 分頁頁碼
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+      responses:
+        '200':
+          description: 成功獲取訂單列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: './orders.yaml#/components/schemas/Order'
+                  pagination:
+                    $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未認證
+        '403':
+          description: 權限不足（非店鋪員工或管理員）
+        '404':
+          description: 店鋪不存在
+      security:
+        - BearerAuth: []
+
+  /pos/orders/{orderId}/status:
+    patch:
+      summary: 更新訂單狀態
+      description: 從 POS 終端更新訂單狀態
+      tags:
+        - POS
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: 訂單ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - newStatus
+              properties:
+                newStatus:
+                  type: string
+                  enum: [confirmed, preparing, ready, completed, cancelled]
+                  description: 新的訂單狀態
+                reason:
+                  type: string
+                  description: 狀態變更原因，尤其是取消訂單時需提供
+                staffId:
+                  type: string
+                  description: 操作員工ID
+      responses:
+        '200':
+          description: 訂單狀態更新成功
+          content:
+            application/json:
+              schema:
+                $ref: './orders.yaml#/components/schemas/Order'
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足（非店鋪員工或管理員）
+        '404':
+          description: 訂單不存在
+        '422':
+          description: 無法處理的狀態變更，如嘗試將已完成訂單改為準備中
+      security:
+        - BearerAuth: []
+
+  /pos/orders/{orderId}/print:
+    post:
+      summary: 觸發訂單收據列印
+      description: 觸發從 POS 終端列印指定訂單的收據
+      tags:
+        - POS
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: 訂單ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                printerId:
+                  type: string
+                  description: 印表機ID，如果未提供則使用店鋪默認印表機
+                copies:
+                  type: integer
+                  description: 列印份數
+                  default: 1
+                  minimum: 1
+                  maximum: 5
+                type:
+                  type: string
+                  enum: [receipt, kitchen, both]
+                  default: receipt
+                  description: 列印類型，收據、廚房出單或兩者都列印
+                receiptType:
+                  type: string
+                  enum: [customer, store, both]
+                  default: both
+                  description: 收據類型，顧客聯、店家聯或兩者都列印
+                includeHeader:
+                  type: boolean
+                  default: true
+                  description: 是否包含店家標頭
+                includeFooter:
+                  type: boolean
+                  default: true
+                  description: 是否包含店家頁尾
+                requestSource:
+                  type: string
+                  description: 請求來源，用於日誌記錄
+      responses:
+        '200':
+          description: 列印請求已成功觸發
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  printJobId:
+                    type: string
+                    description: 列印工作ID，可用於查詢列印狀態
+                  message:
+                    type: string
+                    description: 處理結果訊息
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足（非店鋪員工或管理員）
+        '404':
+          description: 訂單不存在
+        '422':
+          description: 無法處理的列印請求，如訂單未完成支付
+        '503':
+          description: 列印服務暫時不可用
+      security:
+        - BearerAuth: []
+
+components:
+  schemas:
+    PrintJob:
+      type: object
+      required:
+        - id
+        - orderId
+        - storeId
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 列印工作ID
+        orderId:
+          type: string
+          description: 訂單ID
+        storeId:
+          type: string
+          description: 店鋪ID
+        printerId:
+          type: string
+          description: 印表機ID
+        type:
+          type: string
+          enum: [receipt, kitchen, both]
+          description: 列印類型
+        copies:
+          type: integer
+          description: 列印份數
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          description: 列印工作狀態
+        errorReason:
+          type: string
+          description: 失敗原因（如適用）
+        requestedBy:
+          type: string
+          description: 請求者ID
+        requestSource:
+          type: string
+          description: 請求來源
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        completedAt:
+          type: string
+          format: date-time
+          description: 完成時間 

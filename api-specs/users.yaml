@@ -1,0 +1,514 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API - 用戶管理模組
+  description: 吃雞排找不早系統的用戶管理相關API
+  version: 1.0.0
+
+paths:
+  /users:
+    get:
+      tags:
+        - users
+      summary: 獲取用戶列表
+      description: 獲取系統中的用戶列表，支持分頁、排序和篩選
+      operationId: getUsers
+      parameters:
+        - name: page
+          in: query
+          description: 頁碼 (從1開始)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: 每頁記錄數量
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: 排序欄位
+          schema:
+            type: string
+            enum: [createdAt, displayName, email, role]
+            default: createdAt
+        - name: order
+          in: query
+          description: 排序方向
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: role
+          in: query
+          description: 按角色篩選
+          schema:
+            type: string
+            enum: [super_admin, tenant_admin, store_manager, shift_leader, senior_staff, staff, trainee, customer]
+        - name: tenantId
+          in: query
+          description: 按租戶ID篩選
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          description: 按店鋪ID篩選
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: 搜尋關鍵字 (搜尋email、displayName)
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: users
+        action: read
+      responses:
+        '200':
+          description: 成功獲取用戶列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: './openapi.yaml#/components/schemas/User'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    post:
+      tags:
+        - users
+      summary: 創建新用戶
+      description: 管理員創建新用戶
+      operationId: createUser
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: users
+        action: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - displayName
+                - role
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: 用戶電子郵件
+                displayName:
+                  type: string
+                  description: 用戶顯示名稱
+                role:
+                  type: string
+                  enum: [tenant_admin, store_manager, shift_leader, senior_staff, staff, trainee, customer]
+                  description: 用戶角色
+                password:
+                  type: string
+                  format: password
+                  description: 初始密碼 (如果不提供，將發送重設密碼郵件)
+                phoneNumber:
+                  type: string
+                  description: 電話號碼
+                photoURL:
+                  type: string
+                  format: uri
+                  description: 頭像URL
+                tenantId:
+                  type: string
+                  description: 所屬租戶ID
+                storeId:
+                  type: string
+                  description: 主要所屬店鋪ID
+                additionalStoreIds:
+                  type: array
+                  items:
+                    type: string
+                  description: 額外可管理的店鋪ID列表
+                customClaims:
+                  type: object
+                  description: 自定義權限聲明
+                disabled:
+                  type: boolean
+                  description: 是否停用
+      responses:
+        '201':
+          description: 用戶創建成功
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/User'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 用戶已存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /users/{userId}:
+    get:
+      tags:
+        - users
+      summary: 獲取用戶詳情
+      description: 獲取特定用戶的詳細資訊
+      operationId: getUserById
+      parameters:
+        - name: userId
+          in: path
+          description: 用戶ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: users
+        action: read
+        resourceId: '{userId}'
+      responses:
+        '200':
+          description: 成功獲取用戶詳情
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/User'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問此用戶資訊
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 用戶不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - users
+      summary: 更新用戶資訊
+      description: 更新特定用戶的資訊
+      operationId: updateUser
+      parameters:
+        - name: userId
+          in: path
+          description: 用戶ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: users
+        action: update
+        resourceId: '{userId}'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                  description: 用戶顯示名稱
+                role:
+                  type: string
+                  enum: [tenant_admin, store_manager, shift_leader, senior_staff, staff, trainee, customer]
+                  description: 用戶角色
+                phoneNumber:
+                  type: string
+                  description: 電話號碼
+                photoURL:
+                  type: string
+                  format: uri
+                  description: 頭像URL
+                tenantId:
+                  type: string
+                  description: 所屬租戶ID
+                storeId:
+                  type: string
+                  description: 主要所屬店鋪ID
+                additionalStoreIds:
+                  type: array
+                  items:
+                    type: string
+                  description: 額外可管理的店鋪ID列表
+                customClaims:
+                  type: object
+                  description: 自定義權限聲明
+                disabled:
+                  type: boolean
+                  description: 是否停用
+      responses:
+        '200':
+          description: 用戶更新成功
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/User'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權更新此用戶
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 用戶不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    delete:
+      tags:
+        - users
+      summary: 刪除用戶
+      description: 刪除特定用戶 (標記為刪除或實際刪除，根據系統需求)
+      operationId: deleteUser
+      parameters:
+        - name: userId
+          in: path
+          description: 用戶ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: users
+        action: delete
+        resourceId: '{userId}'
+      responses:
+        '200':
+          description: 用戶刪除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 用戶已成功刪除
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權刪除此用戶
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 用戶不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /users/{userId}/reset-password:
+    post:
+      tags:
+        - users
+      summary: 管理員重設用戶密碼
+      description: 管理員強制重設特定用戶的密碼
+      operationId: adminResetUserPassword
+      parameters:
+        - name: userId
+          in: path
+          description: 用戶ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: users
+        action: update
+        resourceId: '{userId}'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                newPassword:
+                  type: string
+                  format: password
+                  description: 新密碼 (如果不提供，將發送重設密碼郵件)
+                sendResetEmail:
+                  type: boolean
+                  default: true
+                  description: 是否發送重設密碼郵件
+      responses:
+        '200':
+          description: 密碼重設操作成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 密碼已重設/重設密碼郵件已發送
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權重設此用戶密碼
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 用戶不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /users/{userId}/disable:
+    post:
+      tags:
+        - users
+      summary: 停用/啟用用戶
+      description: 停用或啟用特定用戶的帳號
+      operationId: toggleUserDisabled
+      parameters:
+        - name: userId
+          in: path
+          description: 用戶ID
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: users
+        action: update
+        resourceId: '{userId}'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - disabled
+              properties:
+                disabled:
+                  type: boolean
+                  description: 是否停用
+                reason:
+                  type: string
+                  description: 停用/啟用原因
+      responses:
+        '200':
+          description: 用戶狀態更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 用戶已停用/啟用
+                  user:
+                    $ref: './openapi.yaml#/components/schemas/User'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權操作此用戶狀態
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 用戶不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error' 

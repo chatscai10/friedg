@@ -1,0 +1,108 @@
+# 訂單狀態管理與通知機制
+
+## 目標
+全面而精確地追蹤訂單從創建到完成的生命週期，確保店家與顧客之間的資訊透明度，提升顧客體驗與營運效率。
+
+## 訂單狀態生命週期
+系統實現完整的訂單狀態管理，包含以下狀態：
+
+```typescript
+export enum OrderStatus {
+  PENDING = 'pending',         // 待處理（初始狀態，顧客提交訂單後）
+  CONFIRMED = 'confirmed',     // 已確認（店家確認接單）
+  PREPARING = 'preparing',     // 準備中（開始製作食品）
+  READY = 'ready',             // 準備完成（食品已完成製作，待取餐）
+  DELIVERING = 'delivering',   // 配送中（適用於外送訂單）
+  COMPLETED = 'completed',     // 已完成（訂單已交付顧客）
+  CANCELLED = 'cancelled',     // 已取消（訂單被取消）
+  REJECTED = 'rejected'        // 已拒單（店家無法處理訂單）
+}
+```
+
+## 狀態轉換規則
+系統實現嚴格的狀態轉換控制，確保訂單狀態變更合理性：
+
+```typescript
+const validTransitions: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PENDING]: [
+    OrderStatus.CONFIRMED,
+    OrderStatus.REJECTED,
+    OrderStatus.CANCELLED
+  ],
+  [OrderStatus.CONFIRMED]: [
+    OrderStatus.PREPARING,
+    OrderStatus.CANCELLED
+  ],
+  [OrderStatus.PREPARING]: [
+    OrderStatus.READY,
+    OrderStatus.CANCELLED
+  ],
+  [OrderStatus.READY]: [
+    OrderStatus.DELIVERING,
+    OrderStatus.COMPLETED,
+    OrderStatus.CANCELLED
+  ],
+  [OrderStatus.DELIVERING]: [
+    OrderStatus.COMPLETED,
+    OrderStatus.CANCELLED
+  ],
+  [OrderStatus.COMPLETED]: [
+    // 完成狀態不能再變更
+  ],
+  [OrderStatus.CANCELLED]: [
+    // 取消狀態不能再變更
+  ],
+  [OrderStatus.REJECTED]: [
+    // 拒單狀態不能再變更
+  ]
+};
+```
+
+## 訂單狀態時間戳記錄
+系統為每個訂單記錄完整的狀態變更歷史，包含：
+- 狀態變更時間戳 (`confirmedAt`, `preparingAt`, `readyAt`, `deliveringAt`, `completedAt`, `cancelledAt`, `rejectedAt`)
+- 變更操作人資訊 (ID, 姓名, 角色)
+- 變更原因或備註 (如適用)
+- 狀態變更歷史記錄 (`statusHistory: Array<{status, timestamp, updatedBy, note}>`)
+
+## 顧客通知機制
+在關鍵訂單狀態變更節點，系統主動通知顧客：
+- **確認接單通知** (PENDING → CONFIRMED)：確認已接收訂單，預計完成時間
+- **準備完成通知** (PREPARING → READY)：食品已完成製作，可以取餐或即將配送
+- **配送開始通知** (READY → DELIVERING)：配送已開始，預計送達時間
+- **訂單完成通知** (任何狀態 → COMPLETED)：訂單已完成，同時發送評價問卷
+- **訂單拒絕/取消通知** (任何狀態 → CANCELLED/REJECTED)：訂單已取消或被拒絕，原因說明
+- 支援多種通知管道：App內推送、SMS簡訊、Email、LINE通知
+
+## 店家管理介面
+提供直觀的訂單狀態管理界面：
+- 訂單狀態變更按鈕 (基於當前狀態顯示有效的下一步狀態)
+- 批次處理功能 (批次確認、批次準備完成等)
+- 帶有預設文本的狀態備註欄位 (可客制化)
+- 預計完成時間設定
+- 完整的狀態變更歷史查看
+
+## 廚房顯示系統 (KDS) 整合
+訂單狀態變更可反應在廚房顯示系統上：
+- 新訂單提醒
+- 可視化訂單準備狀態
+- 狀態更改直觀操作界面
+
+## API設計
+提供完整的訂單狀態管理API：
+- `GET /api/orders/{orderId}` - 獲取訂單完整資訊
+- `GET /api/orders/{orderId}/status` - 獲取訂單當前狀態
+- `GET /api/orders/{orderId}/history` - 獲取訂單狀態變更歷史
+- `PUT /api/orders/{orderId}/status` - 更新訂單狀態
+  * 參數: `status`, `note`, `estimatedCompletionTime`
+- `GET /api/customer/orders/{orderId}` - 顧客端獲取訂單狀態
+
+## 系統安全與權限設計
+- 訂單狀態變更操作受角色權限控制 (管理員/店員可變更，顧客只可查看)
+- 所有狀態變更記錄可供審計
+- 狀態變更操作具有原子性，避免競態條件
+
+## 配置選項
+- 租戶可設置每種狀態的通知訊息模版
+- 租戶可啟用/禁用特定狀態的通知
+- 租戶可自定義部分轉換規則（如是否使用配送狀態） 

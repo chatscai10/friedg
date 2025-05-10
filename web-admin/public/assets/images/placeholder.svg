@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="300" height="160" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#f0f0f0"/>
+  <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="24" 
+        font-weight="bold" fill="#999999" text-anchor="middle" dy=".3em">無圖片</text>
+  <rect width="100%" height="100%" fill="none" stroke="#cccccc" stroke-width="2"/>
+</svg> 

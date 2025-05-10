@@ -1,0 +1,13 @@
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: ['echo', 'Cloud Build pipeline starting...']
+  # Add ESLint step - assumes functions/ has package.json with eslint script
+  - name: 'gcr.io/cloud-builders/npm'
+    args: ['install']
+    dir: 'functions' # Assuming Cloud Functions source is in 'functions/' directory
+  - name: 'gcr.io/cloud-builders/npm'
+    args: ['run', 'lint']
+    dir: 'functions' # Assuming Cloud Functions source is in 'functions/' directory
+# Future steps for linting, testing, building, and deploying will be added here.
+options:
+  logging: CLOUD_LOGGING_ONLY 

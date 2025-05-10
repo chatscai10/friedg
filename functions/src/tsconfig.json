@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2020",
+    "outDir": "../lib",
+    "rootDir": "./",
+    "sourceMap": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "allowJs": true,
+    "noImplicitAny": false,
+    "ignoreDeprecations": "5.0",
+    "noEmitOnError": false,
+    "isolatedModules": true
+  },
+  "compileOnSave": true,
+  "include": [
+    "./**/*.ts",
+    "./**/*.js"
+  ],
+  "exclude": [
+    "../node_modules",
+    "**/*.test.ts",
+    "./communication/handlers.ts"
+  ]
+} 

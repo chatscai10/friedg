@@ -1,0 +1,440 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早 - 請假管理 API
+  description: 請假申請與審批的 API 端點
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/api
+    description: 生產環境 API 伺服器
+  - url: https://staging-api.example.com/api
+    description: 測試環境 API 伺服器
+tags:
+  - name: leave-types
+    description: 假期類別相關操作
+  - name: leave-requests
+    description: 請假申請相關操作
+
+paths:
+  /leave/types:
+    get:
+      summary: 獲取假期類別列表
+      description: 獲取所有可用的假期類別
+      tags:
+        - leave-types
+      operationId: listLeaveTypes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          description: 租戶 ID，如果不提供則獲取全局的假期類別
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功獲取假期類別列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leaveTypes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaveType'
+        '401':
+          description: 未授權
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /leave/requests:
+    post:
+      summary: 提交請假申請
+      description: 員工提交請假申請
+      tags:
+        - leave-requests
+      operationId: createLeaveRequest
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLeaveRequestRequest'
+      responses:
+        '201':
+          description: 請假申請提交成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestResponse'
+        '400':
+          description: 請求格式錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授權
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+    get:
+      summary: 查詢請假申請列表
+      description: 根據條件查詢請假申請列表，權限控制（員工只能看自己的，經理看下屬或店裡的）
+      tags:
+        - leave-requests
+      operationId: listLeaveRequests
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: employeeId
+          in: query
+          description: 員工 ID
+          required: false
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          description: 分店 ID
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 請假狀態
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - name: startDate
+          in: query
+          description: 開始日期 (YYYY-MM-DD)
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: 結束日期 (YYYY-MM-DD)
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          description: 頁碼 (從 1 開始)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每頁筆數
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 請假申請列表查詢成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestListResponse'
+        '400':
+          description: 請求格式錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授權
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+  /leave/requests/{requestId}/status:
+    patch:
+      summary: 更新請假申請狀態
+      description: 主管/管理員審批（同意/拒絕）請假申請
+      tags:
+        - leave-requests
+      operationId: updateLeaveRequestStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          description: 請假申請 ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLeaveRequestStatusRequest'
+      responses:
+        '200':
+          description: 請假申請狀態更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestResponse'
+        '400':
+          description: 請求格式錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授權
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 找不到請假申請
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 使用 Firebase JWT 令牌進行認證
+
+  schemas:
+    LeaveType:
+      type: object
+      required:
+        - leaveTypeId
+        - name
+        - description
+        - requiresApproval
+      properties:
+        leaveTypeId:
+          type: string
+          description: 假期類別 ID
+        name:
+          type: string
+          description: 假期類別名稱（例如：年假, 病假, 事假）
+        description:
+          type: string
+          description: 假期類別描述
+        requiresApproval:
+          type: boolean
+          description: 是否需要審批
+        tenantId:
+          type: string
+          description: 租戶 ID，如果為空則為全局設定
+        affectsSalary:
+          type: boolean
+          description: 是否影響薪資計算
+        maxDaysPerYear:
+          type: number
+          description: 每年最大可用天數 (0 表示無限制)
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+
+    CreateLeaveRequestRequest:
+      type: object
+      required:
+        - leaveTypeId
+        - startTime
+        - endTime
+        - reason
+      properties:
+        leaveTypeId:
+          type: string
+          description: 假期類別 ID
+        startTime:
+          type: string
+          format: date-time
+          description: 請假開始時間 (ISO 格式)
+        endTime:
+          type: string
+          format: date-time
+          description: 請假結束時間 (ISO 格式)
+        reason:
+          type: string
+          description: 請假原因
+        storeId:
+          type: string
+          description: 分店 ID
+
+    LeaveRequest:
+      type: object
+      required:
+        - requestId
+        - employeeId
+        - leaveTypeId
+        - startTime
+        - endTime
+        - reason
+        - status
+        - requestedAt
+      properties:
+        requestId:
+          type: string
+          description: 請假申請 ID
+        employeeId:
+          type: string
+          description: 員工 ID
+        storeId:
+          type: string
+          description: 分店 ID
+        tenantId:
+          type: string
+          description: 租戶 ID
+        leaveTypeId:
+          type: string
+          description: 假期類別 ID
+        startTime:
+          type: string
+          format: date-time
+          description: 請假開始時間
+        endTime:
+          type: string
+          format: date-time
+          description: 請假結束時間
+        reason:
+          type: string
+          description: 請假原因
+        status:
+          type: string
+          enum: [pending, approved, rejected, cancelled]
+          description: 請假狀態
+        requestedAt:
+          type: string
+          format: date-time
+          description: 申請時間
+        approvedBy:
+          type: string
+          description: 審批者 ID
+        approvedAt:
+          type: string
+          format: date-time
+          description: 審批時間
+        rejectionReason:
+          type: string
+          description: 拒絕原因
+
+    UpdateLeaveRequestStatusRequest:
+      type: object
+      required:
+        - newStatus
+      properties:
+        newStatus:
+          type: string
+          enum: [approved, rejected]
+          description: 新狀態
+        rejectionReason:
+          type: string
+          description: 拒絕原因 (當 newStatus 為 rejected 時必須提供)
+
+    LeaveRequestResponse:
+      type: object
+      required:
+        - leaveRequest
+      properties:
+        leaveRequest:
+          $ref: '#/components/schemas/LeaveRequest'
+
+    LeaveRequestListResponse:
+      type: object
+      required:
+        - leaveRequests
+      properties:
+        leaveRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaveRequest'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              format: int32
+              description: 總筆數
+            page:
+              type: integer
+              format: int32
+              description: 當前頁碼
+            pageSize:
+              type: integer
+              format: int32
+              description: 每頁筆數
+            hasMore:
+              type: boolean
+              description: 是否有更多資料
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: 錯誤代碼
+        message:
+          type: string
+          description: 錯誤訊息
+        details:
+          type: object
+          description: 詳細錯誤資訊 

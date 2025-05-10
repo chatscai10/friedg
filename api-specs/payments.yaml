@@ -1,0 +1,225 @@
+openapi: 3.0.0
+info:
+  title: 吃雞排找不早 - 支付 API
+  description: |
+    提供支付相關的API端點，包括LINE Pay、信用卡以及其他支付方式的處理。
+  version: 1.0.0
+  contact:
+    name: 開發團隊
+    email: dev@friedg.com
+
+servers:
+  - url: https://api.your-domain.com/api/v1
+    description: 生產環境
+  - url: https://staging-api.your-domain.com/api/v1
+    description: 測試環境
+  - url: http://localhost:5003/api/v1
+    description: 本地開發環境
+
+tags:
+  - name: linepay
+    description: LINE Pay 相關操作
+  - name: payment
+    description: 一般支付相關操作
+
+paths:
+  /payments/linepay/request:
+    post:
+      tags:
+        - linepay
+      summary: 請求 LINE Pay 支付
+      description: |
+        發送訂單資訊到 LINE Pay，獲取支付 URL，重定向用戶到 LINE Pay 付款頁面。
+      operationId: requestLinePayPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinePayRequestBody'
+      responses:
+        '200':
+          description: 成功獲取 LINE Pay 支付 URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinePayRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      security:
+        - BearerAuth: []
+  
+  /payments/linepay/confirm:
+    post:
+      tags:
+        - linepay
+      summary: 確認 LINE Pay 交易
+      description: |
+        處理 LINE Pay 支付完成後的回調，確認交易結果，更新訂單狀態。
+      operationId: confirmLinePayPayment
+      parameters:
+        - name: transactionId
+          in: query
+          description: LINE Pay 交易 ID
+          required: true
+          schema:
+            type: string
+        - name: orderId
+          in: query
+          description: 系統訂單 ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 交易確認成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinePayConfirmResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      security:
+        - BearerAuth: []
+
+components:
+  schemas:
+    LinePayRequestBody:
+      type: object
+      required:
+        - orderId
+      properties:
+        orderId:
+          type: string
+          description: 系統內的訂單 ID
+          example: "order-123456789"
+        language:
+          type: string
+          description: 支付頁面語言，預設中文
+          example: "zh-TW"
+          enum: [zh-TW, en, ja, ko, th, zh-CN]
+    
+    LinePayRequestResponse:
+      type: object
+      required:
+        - success
+        - paymentUrl
+        - transactionId
+      properties:
+        success:
+          type: boolean
+          description: 請求是否成功
+          example: true
+        paymentUrl:
+          type: string
+          description: LINE Pay 付款頁面 URL
+          example: "https://sandbox-web-pay.line.me/web/payment/wait?transactionId=2022052300684659310&confirmUrl=..."
+        transactionId:
+          type: string
+          description: LINE Pay 交易 ID
+          example: "2022052300684659310"
+        orderId:
+          type: string
+          description: 系統訂單 ID
+          example: "order-123456789"
+    
+    LinePayConfirmResponse:
+      type: object
+      required:
+        - success
+        - orderId
+        - transactionId
+        - paymentStatus
+      properties:
+        success:
+          type: boolean
+          description: 交易確認是否成功
+          example: true
+        orderId:
+          type: string
+          description: 系統訂單 ID
+          example: "order-123456789"
+        transactionId:
+          type: string
+          description: LINE Pay 交易 ID
+          example: "2022052300684659310"
+        paymentStatus:
+          type: string
+          description: 支付狀態
+          example: "completed"
+          enum: [pending, completed, failed, cancelled]
+        amount:
+          type: number
+          description: 交易金額
+          example: 299
+        currency:
+          type: string
+          description: 交易貨幣
+          example: "TWD"
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: 錯誤代碼
+          example: "INVALID_REQUEST"
+        message:
+          type: string
+          description: 錯誤訊息
+          example: "請求格式有誤"
+        details:
+          type: object
+          description: 詳細錯誤資訊
+          example: { field: "orderId", error: "必填欄位" }
+
+  responses:
+    BadRequest:
+      description: 請求有誤
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: 未授權
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: 找不到資源
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    ServerError:
+      description: 伺服器錯誤
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 使用 JWT Token 授權 

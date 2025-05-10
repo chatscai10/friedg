@@ -1,0 +1,277 @@
+# 訂單狀態變更通知機制設計規格
+
+## 1. 概述
+
+本文檔詳述訂單狀態變更通知機制的設計規格，包括通知觸發條件、技術實現架構、數據模型及開發路徑。此機制旨在確保用戶(包括顧客和店家)能及時獲取訂單狀態變更信息，提升用戶體驗和業務透明度。
+
+## 2. 通知觸發點與內容
+
+基於已定義的訂單狀態(OrderStatus)，以下狀態變更將觸發通知：
+
+### 2.1 主要觸發點
+
+1. **PENDING → CONFIRMED**
+   - 模板：「您的訂單 #{orderNumber} 已確認，我們將立即開始準備！預計完成時間：{estimatedTime}」
+
+2. **PREPARING → READY**
+   - 模板(自取)：「您的訂單 #{orderNumber} 已準備完成，請前往{storeName}取餐。」
+   - 模板(外送)：「您的訂單 #{orderNumber} 已準備完成，正在安排配送。」
+
+3. **READY → DELIVERING**
+   - 模板：「您的訂單 #{orderNumber} 正由外送員{courierName}配送中，預計送達時間：{estimatedDeliveryTime}」
+
+4. **DELIVERING → COMPLETED**
+   - 模板：「您的訂單 #{orderNumber} 已送達，感謝您的惠顧！」
+
+5. **任何狀態 → CANCELLED**
+   - 模板：「您的訂單 #{orderNumber} 已取消，原因：{reason}。如有疑問，請聯絡客服。」
+
+6. **PENDING → REJECTED**
+   - 模板：「很抱歉，您的訂單 #{orderNumber} 無法接單，原因：{reason}。」
+
+### 2.2 通知接收對象
+
+- **顧客通知**：訂單所屬顧客
+- **店家通知**：店長、管理員(如適用)
+- **外送員通知**：負責配送的外送員(如適用)
+
+## 3. 技術架構設計
+
+### 3.1 通知服務模組結構
+
+設計一個獨立的通知服務模組(`notification-service`)，負責管理所有通知相關功能：
+
+```
+functions/
+  └── src/
+      ├── orders/
+      │   └── ... (現有訂單服務)
+      └── notifications/
+          ├── index.ts (導出通知相關函數)
+          ├── notification.service.ts (核心通知服務)
+          ├── templates/ (通知模板)
+          ├── channels/ (各通知渠道實現)
+          │   ├── app-push.ts (App內推送)
+          │   ├── sms.ts (SMS簡訊)
+          │   └── email.ts (電子郵件)
+          └── notification.types.ts (通知相關類型定義)
+```
+
+### 3.2 通知觸發機制
+
+採用事件驅動模式，實現訂單狀態更新與通知服務的解耦：
+
+#### 3.2.1 Firebase Firestore觸發器
+
+```typescript
+export const orderStatusChangeHandler = functions.firestore
+  .document('orders/{orderId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    
+    // 檢查訂單狀態是否變更
+    if (before.status !== after.status) {
+      await notificationService.sendOrderStatusNotification(
+        after.id,
+        before.status, 
+        after.status
+      );
+    }
+  });
+```
+
+#### 3.2.2 直接調用方式(備選方案)
+
+```typescript
+const updatedOrder = await updateOrderStatus(orderId, newStatus, userId, userRole, reason);
+
+// 更新成功後觸發通知
+await notificationService.sendOrderStatusNotification(
+  orderId, 
+  previousStatus, 
+  newStatus
+);
+```
+
+### 3.3 通知渠道管理
+
+整合多種通知渠道，採用策略模式實現：
+
+```typescript
+// 通知渠道接口
+interface NotificationChannel {
+  send(recipient: string, content: string, metadata?: any): Promise<boolean>;
+}
+
+// FCM實現
+class AppPushChannel implements NotificationChannel {
+  async send(deviceToken: string, content: string, metadata?: any): Promise<boolean> {
+    try {
+      await admin.messaging().send({
+        token: deviceToken,
+        notification: {
+          title: '訂單狀態更新',
+          body: content
+        },
+        data: metadata
+      });
+      return true;
+    } catch (error) {
+      console.error('FCM發送失敗:', error);
+      return false;
+    }
+  }
+}
+```
+
+#### 3.3.1 支援的通知渠道
+
+1. **App內推送**：使用Firebase Cloud Messaging (FCM)
+2. **SMS簡訊**：整合Twilio API
+3. **Email通知**：整合SendGrid或Firebase Auth提供的郵件功能
+
+### 3.4 通知偏好管理
+
+實現用戶通知偏好設定管理：
+
+```typescript
+interface NotificationPreferences {
+  userId: string;
+  enableAppPush: boolean;
+  enableSMS: boolean;
+  enableEmail: boolean;
+  muteAfterTime?: string; // 例如"22:00"之後靜音
+  muteBeforeTime?: string; // 例如"08:00"之前靜音
+}
+
+// 獲取用戶通知偏好
+async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+  const prefDoc = await admin.firestore()
+    .collection('users')
+    .doc(userId)
+    .collection('settings')
+    .doc('notificationPreferences')
+    .get();
+    
+  return prefDoc.exists 
+    ? prefDoc.data() as NotificationPreferences 
+    : { userId, enableAppPush: true, enableSMS: true, enableEmail: true };
+}
+```
+
+## 4. 數據模型設計
+
+### 4.1 通知模板集合 (`notificationTemplates`)
+
+```typescript
+interface NotificationTemplate {
+  id: string;              // 模板ID
+  eventType: string;       // 事件類型，如"ORDER_CONFIRMED"
+  channel: string;         // 通知渠道，如"APP_PUSH", "SMS", "EMAIL"
+  language: string;        // 語言，如"zh-TW"
+  title: string;           // 標題
+  content: string;         // 模板內容，支援變數替換，如"{orderNumber}"
+  variables: string[];     // 所需變數列表
+  active: boolean;         // 是否啟用
+  createdAt: Timestamp;    // 創建時間
+  updatedAt: Timestamp;    // 更新時間
+}
+```
+
+### 4.2 通知日誌集合 (`notificationLogs`)
+
+```typescript
+interface NotificationLog {
+  id: string;              // 通知ID
+  userId: string;          // 用戶ID
+  orderId: string;         // 訂單ID
+  eventType: string;       // 事件類型
+  channel: string;         // 通知渠道
+  content: string;         // 實際發送內容
+  status: string;          // 發送狀態，如"SENT", "FAILED"
+  errorMessage?: string;   // 錯誤信息
+  sentAt: Timestamp;       // 發送時間
+  deliveredAt?: Timestamp; // 送達時間
+  readAt?: Timestamp;      // 已讀時間
+}
+```
+
+### 4.3 通知偏好集合 (`users/{userId}/settings/notificationPreferences`)
+
+```typescript
+interface NotificationPreferences {
+  userId: string;          // 用戶ID
+  channels: {              // 各通知渠道設置
+    appPush: boolean;      // 是否啟用App推送
+    sms: boolean;          // 是否啟用SMS
+    email: boolean;        // 是否啟用Email
+  };
+  orderUpdates: boolean;   // 是否接收訂單更新通知
+  promotions: boolean;     // 是否接收促銷通知
+  quietHours: {            // 勿擾時段
+    enabled: boolean;      // 是否啟用勿擾時段
+    startTime: string;     // 開始時間, "22:00"
+    endTime: string;       // 結束時間, "08:00"
+  };
+  updatedAt: Timestamp;    // 更新時間
+}
+```
+
+## 5. 開發任務拆解
+
+### 5.1 階段一：基礎架構搭建
+
+1. **建立通知服務核心架構**
+   - 創建`notifications`模塊
+   - 定義核心服務接口和類型
+
+2. **設計並實現通知模板系統**
+   - 創建模板管理功能
+   - 實現模板變數替換功能
+
+3. **實現第一個通知渠道(FCM)**
+   - 整合Firebase Cloud Messaging
+   - 實現App內推送基礎功能
+
+### 5.2 階段二：功能完善
+
+4. **實現SMS通知渠道**
+   - 整合Twilio API
+   - 處理SMS發送限制和失敗重試
+
+5. **實現Email通知渠道**
+   - 整合SendGrid或Firebase郵件服務
+   - 設計Email模板
+
+6. **開發通知偏好管理**
+   - 創建用戶通知設置界面
+   - 實現通知偏好CRUD API
+
+### 5.3 階段三：整合訂單系統
+
+7. **實現訂單狀態變更事件處理**
+   - 使用Firestore觸發器監聽訂單狀態變更
+   - 根據訂單狀態變更類型選擇合適的通知模板
+
+8. **開發通知日誌系統**
+   - 實現通知發送記錄
+   - 提供通知統計和管理功能
+
+9. **測試與部署**
+   - 單元測試和集成測試
+   - 模擬不同訂單狀態變更場景測試通知功能
+
+## 6. 效能與擴展性考量
+
+### 6.1 效能優化
+
+- 使用批處理(batching)減少資料庫操作
+- 非同步處理通知發送
+- 實現背景任務處理大量通知
+
+### 6.2 擴展性設計
+
+- 通知渠道可插拔架構，支持未來添加新渠道
+- 通知模板支持多語言
+- 支持通知內容的A/B測試 

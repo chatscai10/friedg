@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#355891" />
+    <meta name="description" content="吃雞排找不早 - 員工專用打卡系統" />
+    <link rel="apple-touch-icon" href="/logo192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>吃雞排找不早 - 員工系統</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>您需要啟用JavaScript才能運行此應用程序。</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // 註冊Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+              console.log('Service Worker 註冊成功:', registration.scope);
+            })
+            .catch((error) => {
+              console.log('Service Worker 註冊失敗:', error);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
