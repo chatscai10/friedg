@@ -141,22 +141,22 @@ service cloud.firestore {
       // 租戶管理員可以管理自己租戶下的所有分店
       // 店長及一般員工只能讀取自己工作的分店資訊
       
-      allow read: if isAuthenticated() && 
-                   (isSuperAdmin() || 
-                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+      allow read: if isAuthenticated() &&
+                   (isSuperAdmin() ||
+                    (isTenantAdmin() && isSameTenant(resource.data)) ||
                     canAccessStore(storeId));
       
-      allow create: if isAuthenticated() && 
-                     (isSuperAdmin() || 
-                      (isTenantAdmin() && isSameTenant(request.resource.data)));
+      allow create: if isAuthenticated() &&
+                     (isSuperAdmin() ||
+                      (isTenantAdmin() && request.resource.data.tenantId == request.auth.token.tenantId));
       
-      allow update: if isAuthenticated() && 
-                     (isSuperAdmin() || 
-                      (isTenantAdmin() && isSameTenant(resource.data)) || 
-                      (isStoreManager() && resource.data.storeId == storeId && isSameTenant(resource.data)));
+      allow update: if isAuthenticated() &&
+                     (isSuperAdmin() ||
+                      (isTenantAdmin() && isSameTenant(resource.data)) ||
+                      (isStoreManager() && isSameStore(resource.data)));
       
-      allow delete: if isAuthenticated() && 
-                     (isSuperAdmin() || 
+      allow delete: if isAuthenticated() &&
+                     (isSuperAdmin() ||
                       (isTenantAdmin() && isSameTenant(resource.data)));
     }
     
@@ -197,26 +197,41 @@ service cloud.firestore {
     // === 角色(roles)集合規則 === //
     match /roles/{roleId} {
       // 超級管理員可以完全控制角色
-      // 租戶管理員可以管理自己租戶的角色
+      // 租戶管理員可以管理自己租戶的角色 (權限不大於自己，非系統角色)
       // 店長及員工只能讀取角色資訊
-      
+
+      // 讀取權限：所有認證使用者 (後端控制可見範圍)
       allow read: if isAuthenticated();
-      
-      allow create: if isAuthenticated() && 
-                     (isSuperAdmin() || 
-                      (isTenantAdmin() && isSameTenant(request.resource.data) && 
-                       request.resource.data.level > request.auth.token.roleLevel)); // 租戶管理員不能創建比自己權限高的角色
-      
-      allow update: if isAuthenticated() && 
-                     (isSuperAdmin() || 
-                      (isTenantAdmin() && isSameTenant(resource.data) && 
-                       resource.data.level > request.auth.token.roleLevel)); // 租戶管理員不能修改比自己權限高的角色
-      
-      allow delete: if isAuthenticated() && 
-                     (isSuperAdmin() || 
-                      (isTenantAdmin() && isSameTenant(resource.data) && 
-                       resource.data.level > request.auth.token.roleLevel && 
-                       !resource.data.isSystemRole)); // 不能刪除系統預設角色
+
+      // 創建權限：SuperAdmin 或 TenantAdmin (限於本租戶，創建的角色等級數字大於等於自己的等級，且不是系統角色)
+      allow create: if isAuthenticated() &&
+                     (isSuperAdmin() ||
+                      (isTenantAdmin() &&
+                       request.resource.data.tenantId == request.auth.token.tenantId &&
+                       // 等級數字大於等於自己的等級數字 (權限不高於自己)
+                       request.resource.data.roleLevel >= request.auth.token.roleLevel &&
+                       // 不能創建系統角色
+                       !request.resource.data.isSystemRole));
+
+      // 更新權限：SuperAdmin 或 TenantAdmin (限於本租戶，只能更新權限不高於自己的角色，且不能修改系統角色)
+      allow update: if isAuthenticated() &&
+                     (isSuperAdmin() ||
+                      (isTenantAdmin() &&
+                       resource.data.tenantId == request.auth.token.tenantId &&
+                       // 只能修改權限不高於自己的角色
+                       resource.data.roleLevel >= request.auth.token.roleLevel &&
+                       // 不能修改系統角色
+                       !resource.data.isSystemRole));
+
+      // 刪除權限：SuperAdmin 或 TenantAdmin (限於本租戶，只能刪除權限不高於自己的角色，且不能刪除系統角色)
+      allow delete: if isAuthenticated() &&
+                     (isSuperAdmin() ||
+                      (isTenantAdmin() &&
+                       resource.data.tenantId == request.auth.token.tenantId &&
+                       // 只能刪除權限不高於自己的角色
+                       resource.data.roleLevel >= request.auth.token.roleLevel &&
+                       // 不能刪除系統角色
+                       !resource.data.isSystemRole));
     }
     
     // === 員工(employees)集合規則 === //
@@ -238,81 +253,111 @@ service cloud.firestore {
         return request.auth.token.roleLevel <= targetLevel;
       }
       
-      function canManageEmployee() {
-        // 只有更高權限的人可以管理員工
-        return hasHigherRole(resource.data.roleLevel || 99);
+      function canManageEmployee(employeeData) {
+        // 只有更高權限或同等權限(針對部分操作)的人可以管理員工
+        // 此處假設 tenant_admin/store_manager 可管理 level 數字大於等於自己 level 的員工
+        // 數字越小，權限越高 (super_admin level 0)
+        return request.auth.token.roleLevel <= (employeeData.employmentInfo.roleLevel || 99);
       }
       
       // 限制哪些欄位可以被普通員工自己修改
       function isRestrictedToSelfEditFields() {
-        let allowedFields = ['displayName', 'phoneNumber', 'address', 'emergencyContact', 'bankInfo'];
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+        // 允許員工自己修改的欄位 (根據規劃和現有輔助函數調整)
+        let allowedFields = ['displayName', 'contactInfo', 'photoURL', 'schedule', 'quietHours']; // 考慮 contactInfo 是子結構
+        // 比較請求數據和現有數據的差異，檢查所有受影響的鍵是否都在允許的欄位列表中
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields) &&
+               // 檢查 contactInfo 和 schedule 子結構內的修改
+               (!('contactInfo' in request.resource.data.diff(resource.data)) ||
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactInfo.email', 'contactInfo.phone', 'contactInfo.address', 'contactInfo.emergencyContact', 'contactInfo.emergencyPhone'])) &&
+               (!('schedule' in request.resource.data.diff(resource.data)) ||
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['schedule.preferredShifts', 'schedule.maxHoursPerWeek', 'schedule.daysUnavailable'])) &&
+               (!('quietHours' in request.resource.data.diff(resource.data)) ||
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quietHours.enabled', 'quietHours.startTime', 'quietHours.endTime'])); // 假設 quietHours 有 startTime 和 endTime
       }
       
       // 獲取員工記錄 - 誰可以讀取單個員工資料？
-      allow get: if request.auth != null && (
-        isSuperAdmin() || 
-        (isTenantAdmin() && isEmployeeInSameTenant()) || 
-        (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
-        (isShiftLeaderOrAbove() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
-        isEmployeeSelf()
+      allow get: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isTenantAdmin() && isEmployeeInSameTenant()) ||
+        (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore()) ||
+        (isShiftLeaderOrAbove() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || // 班長及以上可以讀取同店員工
+        isEmployeeSelf() // 員工自己可以讀取自己的資料
       );
       
       // 列出員工 - 誰可以讀取員工列表？
-      allow list: if request.auth != null && (
-        isSuperAdmin() || 
-        (isTenantAdmin() && request.query.limit() <= 100 && 
-         request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1) ||
-        (isStoreManager() && request.query.limit() <= 50 && 
-         request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1 && 
-         request.query.where('storeId', '==', request.auth.token.storeId).size() == 1) ||
-        (isShiftLeaderOrAbove() && request.query.limit() <= 30 && 
-         request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1 && 
-         request.query.where('storeId', '==', request.auth.token.storeId).size() == 1)
+      allow list: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isTenantAdmin() && request.query.limit() <= 100 &&
+         // 要求必須按 tenantId 過濾，且 tenantId 與使用者 token 中的一致
+         request.query.get('tenantId') == request.auth.token.tenantId) ||
+        (isStoreManager() && request.query.limit() <= 50 &&
+         // 要求必須按 tenantId 和 storeId 過濾，且與使用者 token 中的一致
+         request.query.get('tenantId') == request.auth.token.tenantId &&
+         request.query.get('storeId') == request.auth.token.storeId) ||
+        (isShiftLeaderOrAbove() && request.query.limit() <= 30 &&
+         // 要求必須按 tenantId 和 storeId 過濾，且與使用者 token 中的一致 (班長列表範圍較小)
+         request.query.get('tenantId') == request.auth.token.tenantId &&
+         request.query.get('storeId') == request.auth.token.storeId)
+        // 注意：普通員工不能 list 其他員工，只能 get 自己的
       );
       
       // 創建新員工 - 誰可以創建新的員工資料？
-      allow create: if request.auth != null && (
-        isSuperAdmin() || 
-        (isTenantAdmin() && request.resource.data.tenantId == request.auth.token.tenantId && 
-         request.resource.data.roleLevel > 1) || // 租戶管理員不能創建比自己權限高的角色
-        (isStoreManager() && request.resource.data.tenantId == request.auth.token.tenantId && 
-         request.resource.data.storeId == request.auth.token.storeId && 
-         request.resource.data.roleLevel > 2) // 店長不能創建比自己權限高的角色
-      ) && hasRequiredFields(request.resource.data, 
-         ['displayName', 'email', 'tenantId', 'storeId', 'roleLevel', 'status']);
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isTenantAdmin() &&
+         // 租戶管理員必須在自己的租戶下創建
+         request.resource.data.tenantId == request.auth.token.tenantId &&
+         // 創建員工的角色等級數字必須大於自己的等級數字 (權限低於或等於自己)
+         request.resource.data.employmentInfo.roleLevel >= request.auth.token.roleLevel) ||
+        (isStoreManager() &&
+         // 店長必須在自己的租戶和店鋪下創建
+         request.resource.data.tenantId == request.auth.token.tenantId &&
+         request.resource.data.storeId == request.auth.token.storeId &&
+         // 創建員工的角色等級數字必須大於自己的等級數字 (權限低於或等於自己)
+         request.resource.data.employmentInfo.roleLevel >= request.auth.token.roleLevel)
+        // TODO: 考慮 ShiftLeader 是否有創建低等級員工的權限？目前規劃是 TenantAdmin/StoreManager
+      );
       
       // 更新員工資料 - 誰可以修改員工資料？
-      allow update: if request.auth != null && (
-        isSuperAdmin() || 
-        (isTenantAdmin() && isEmployeeInSameTenant() && canManageEmployee()) || 
-        (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore() && canManageEmployee()) || 
-        (isEmployeeSelf() && isRestrictedToSelfEditFields())
-      ) && 
-      // 防止修改不可變欄位
-      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'tenantId']) &&
-      // 確保狀態變更合法
-      (resource.data.status == request.resource.data.status || 
-       (isSuperAdmin() || isTenantAdmin() || isStoreManager()));
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isTenantAdmin() &&
+         isEmployeeInSameTenant() &&
+         // 租戶管理員可以修改本租戶下權限不高於自己的員工資料
+         canManageEmployee(resource.data)) ||
+        (isStoreManager() &&
+         isEmployeeInSameTenant() &&
+         isEmployeeInSameStore() &&
+         // 店長可以修改本店鋪下權限不高於自己的員工資料
+         canManageEmployee(resource.data)) ||
+        (isEmployeeSelf() &&
+         // 員工自己只能修改特定欄位且不能修改租戶/UID
+         isRestrictedToSelfEditFields() &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'tenantId', 'employeeId']))
+      );
       
-      // 刪除員工資料 - 誰可以刪除員工資料？
-      allow delete: if request.auth != null && (
-        isSuperAdmin() || 
-        (isTenantAdmin() && isEmployeeInSameTenant())
+      // 刪除員工資料 - 誰可以刪除員工資料？ (通常是邏輯刪除)
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isTenantAdmin() &&
+         isEmployeeInSameTenant() &&
+         // 租戶管理員可以刪除本租戶下權限不高於自己的員工
+         canManageEmployee(resource.data))
+        // TODO: 店長是否可以刪除本分店權限不高於自己的員工？目前規劃是 TenantAdmin
       );
       
       // 薪資歷史子集合
       match /payrollHistory/{payrollId} {
         allow read: if request.auth != null && (
-          isSuperAdmin() || 
-          (isTenantAdmin() && isEmployeeInSameTenant()) || 
-          (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
+          isSuperAdmin() ||
+          (isTenantAdmin() && isEmployeeInSameTenant()) ||
+          (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore()) ||
           isEmployeeSelf()
         );
         
         allow write: if request.auth != null && (
-          isSuperAdmin() || 
-          (isTenantAdmin() && isEmployeeInSameTenant()) || 
+          isSuperAdmin() ||
+          (isTenantAdmin() && isEmployeeInSameTenant()) ||
           (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore())
         );
       }
@@ -630,12 +675,20 @@ service cloud.firestore {
 
     // === auditLogs 集合規則 === //
     match /auditLogs/{logId} {
-      // 僅 super_admin 可讀所有日誌，tenant_admin 只能讀自己租戶日誌
-      allow read: if isSuperAdmin() ||
-        (isTenantAdmin() && resource.data.tenantId == request.auth.token.tenantId);
+      // 讀取權限：SuperAdmin (所有日誌)，TenantAdmin (本租戶日誌)，StoreManager (本租戶本分店日誌)
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isTenantAdmin() && resource.data.tenantId == request.auth.token.tenantId) ||
+        // StoreManager 只能讀取其管理店鋪的日誌
+        (isStoreManager() && resource.data.tenantId == request.auth.token.tenantId && resource.data.storeId == request.auth.token.storeId)
+      );
 
-      // 嚴禁任何用戶直接寫入、更新、刪除（僅允許 Cloud Functions 服務帳號，若有特殊 claims 可加下列判斷）
-      allow create, update, delete: if false;
+      // 寫入權限：**僅允許後端服務帳戶**。前端客戶端嚴禁直接寫入。
+      // 目前先設定為 false 嚴禁所有寫入，待後續加入後端服務帳戶的驗證邏輯 (例如檢查特定的 UID 或 Custom Claim)。
+      allow create: if false; // TODO: Add backend service account authentication here
+
+      // 更新、刪除權限：嚴禁任何用戶和客戶端直接更新或刪除日誌，確保日誌的不可變性。
+      allow update, delete: if false;
     }
 
     // === 默認規則 === //

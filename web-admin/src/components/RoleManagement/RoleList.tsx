@@ -26,7 +26,8 @@ import {
   SelectChangeEvent,
   Menu,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  styled
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -36,16 +37,38 @@ import {
   MoreVert as MoreVertIcon,
   Visibility as VisibilityIcon,
   PersonAdd as PersonAddIcon,
-  Security as SecurityIcon
+  Security as SecurityIcon,
+  Sort as SortIcon
 } from '@mui/icons-material';
 import { Role, RoleScope } from '../../types/role';
 import { getRoles, GetRolesParams, deleteRole } from '../../services/roleService';
+import { visuallyHidden } from '@mui/utils';
 
 interface RoleListProps {
   onEdit: (roleId: string) => void;
   onAdd: () => void;
   onView: (roleId: string) => void;
 }
+
+// 自定義表格頭部單元格樣式
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  backgroundColor: theme.palette.grey[200],
+  fontWeight: 'bold',
+}));
+
+// 自定義表格行樣式 (斑馬紋)
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  '&:nth-of-type(odd)': {
+    backgroundColor: theme.palette.action.hover,
+  },
+  '&:last-child td, &:last-child th': {
+    border: 0,
+  },
+}));
+
+// 定義排序鍵的類型
+type Order = 'asc' | 'desc';
+type OrderBy = keyof Role | ''; // 根據實際可排序字段定義，'' 用於操作列等不可排序的列
 
 // 角色列表組件
 const RoleList: React.FC<RoleListProps> = ({ onEdit, onAdd, onView }) => {
@@ -65,10 +88,24 @@ const RoleList: React.FC<RoleListProps> = ({ onEdit, onAdd, onView }) => {
   const rowsPerPage = 10;
 
   // 角色範圍顯示映射
-  const scopeDisplayMap: Record<RoleScope, { label: string; color: 'primary' | 'secondary' | 'default' }> = {
+  const scopeDisplayMap: Record<RoleScope, { label: string; color: 'primary' | 'secondary' | 'default' | 'info' }> = {
     'global': { label: '全局', color: 'primary' },
     'tenant': { label: '租戶', color: 'secondary' },
-    'store': { label: '店鋪', color: 'default' }
+    'store': { label: '店鋪', color: 'info' }
+  };
+
+  // 角色狀態顏色映射
+  const roleStatusColors: Record<'active' | 'inactive' | 'deleted', 'success' | 'default' | 'error'> = {
+    'active': 'success',
+    'inactive': 'default',
+    'deleted': 'error',
+  };
+
+  // 角色狀態文本映射
+  const roleStatusText: Record<'active' | 'inactive' | 'deleted', string> = {
+    'active': '激活',
+    'inactive': '停用',
+    'deleted': '已刪除',
   };
 
   // 獲取角色數據
@@ -193,21 +230,51 @@ const RoleList: React.FC<RoleListProps> = ({ onEdit, onAdd, onView }) => {
     return '基礎';
   };
 
+  // 創建可排序的表格頭部單元格處理函數
+  const createSortHandler = (property: OrderBy) => (event: React.MouseEvent<unknown>) => {
+    // onRequestSort(property);
+  };
+
+  // 定義表格頭部
+  const headCells: { id: OrderBy; label: string; disableSorting: boolean; align?: 'left' | 'right' | 'center'; }[] = [
+    { id: 'roleId', label: '角色 ID', disableSorting: true },
+    { id: 'roleName', label: '角色名稱', disableSorting: false },
+    { id: 'description', label: '描述', disableSorting: true },
+    { id: 'scope', label: '範圍', disableSorting: false },
+    { id: 'roleLevel', label: '權限等級', disableSorting: false },
+    { id: 'permissions', label: '權限數量', disableSorting: true, align: 'center' },
+    { id: 'specialPermissions', label: '特殊權限', disableSorting: true, align: 'center' },
+    { id: 'status', label: '狀態', disableSorting: false },
+    { id: 'isSystemRole', label: '系統角色', disableSorting: false, align: 'center' },
+    { id: 'createdAt', label: '創建時間', disableSorting: false },
+    { id: 'updatedAt', label: '更新時間', disableSorting: false },
+    { id: ' as OrderBy, label: '操作', disableSorting: true, align: 'center' },
+  ];
+
+  if (isLoading && roles.length === 0) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>;
+  }
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
   return (
     <Box>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h5" component="h1">
           角色管理
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onAdd}
-          sx={{ borderRadius: '4px' }}
-        >
-          新增角色
-        </Button>
+        {/* 前端 RBAC 考量：根據 canCreateRole 控制此按鈕的顯示 */}
+        {/* {canCreateRole && (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={onAdd}
+            sx={{ borderRadius: '4px' }}
+          >
+            新增角色
+          </Button>
+        )} */}
       </Box>
       <Divider sx={{ mb: 3 }} />
 
@@ -249,14 +316,8 @@ const RoleList: React.FC<RoleListProps> = ({ onEdit, onAdd, onView }) => {
         </IconButton>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-
       <TableContainer component={Paper} sx={{ position: 'relative' }}>
-        {isLoading && (
+        {isLoading && roles.length > 0 && (
           <Box
             sx={{
               position: 'absolute',
@@ -274,68 +335,104 @@ const RoleList: React.FC<RoleListProps> = ({ onEdit, onAdd, onView }) => {
             <CircularProgress />
           </Box>
         )}
-        <Table>
-          <TableHead sx={{ backgroundColor: '#355891' }}>
+        <Table sx={{ minWidth: 650 }} aria-label="role table">
+          <TableHead>
             <TableRow>
-              <TableCell sx={{ color: 'white' }}>ID</TableCell>
-              <TableCell sx={{ color: 'white' }}>角色名稱</TableCell>
-              <TableCell sx={{ color: 'white' }}>權限等級</TableCell>
-              <TableCell sx={{ color: 'white' }}>角色範圍</TableCell>
-              <TableCell sx={{ color: 'white' }}>描述</TableCell>
-              <TableCell sx={{ color: 'white' }} align="center">操作</TableCell>
+              {headCells.map((headCell) => (
+                <StyledTableCell
+                  key={headCell.id}
+                  align={headCell.align || 'left'}
+                  padding='normal'
+                  sortDirection={searchQuery === headCell.id ? 'asc' : false}
+                >
+                  {!headCell.disableSorting ? (
+                    <TableSortLabel
+                      active={searchQuery === headCell.id}
+                      direction={searchQuery === headCell.id ? 'asc' : 'asc'}
+                      onClick={createSortHandler(headCell.id as OrderBy)}
+                    >
+                      {headCell.label}
+                      {searchQuery === headCell.id && (
+                        <Box component="span" sx={visuallyHidden}>
+                          {'sorted ascending'}
+                        </Box>
+                      )}
+                    </TableSortLabel>
+                  ) : (
+                    headCell.label
+                  )}
+                </StyledTableCell>
+              ))}
             </TableRow>
           </TableHead>
           <TableBody>
-            {roles.map((role, index) => (
-              <TableRow
-                key={role.id}
-                hover
-                sx={{ backgroundColor: index % 2 === 0 ? 'rgba(0, 0, 0, 0.02)' : 'white' }}
-              >
-                <TableCell>{role.id.substring(0, 8)}...</TableCell>
-                <TableCell>
-                  <Box sx={{ fontWeight: 'bold', cursor: 'pointer' }} onClick={() => onView(role.id)}>
-                    {role.name}
-                  </Box>
+            {roles.length === 0 && !isLoading ? (
+              <StyledTableRow>
+                <TableCell colSpan={headCells.length} align="center">
+                  <Typography variant="body2">沒有找到角色數據。</Typography>
                 </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              </StyledTableRow>
+            ) : (
+              roles.map((role) => (
+                <StyledTableRow
+                  key={role.id}
+                >
+                  <TableCell>{role.id.substring(0, 8)}...</TableCell>
+                  <TableCell>
+                    <Box sx={{ fontWeight: 'bold', cursor: 'pointer' }} onClick={() => onView(role.id)}>
+                      {role.name}
+                    </Box>
+                  </TableCell>
+                  <TableCell>{role.description || '-'}</TableCell>
+                  <TableCell>
                     <Chip
-                      label={getLevelDisplay(role.level)}
-                      color={role.level >= 8 ? 'error' : role.level >= 5 ? 'warning' : 'success'}
+                      label={scopeDisplayMap[role.scope]?.label || role.scope}
+                      color={scopeDisplayMap[role.scope]?.color || 'default'}
                       size="small"
                     />
-                    <Typography variant="caption" sx={{ ml: 1 }}>
-                      ({role.level})
-                    </Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={scopeDisplayMap[role.scope]?.label || role.scope}
-                    color={scopeDisplayMap[role.scope]?.color || 'default'}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>{role.description || '-'}</TableCell>
-                <TableCell align="center">
-                  <IconButton
-                    size="small"
-                    aria-label="more"
-                    aria-haspopup="true"
-                    onClick={(event) => handleMenuOpen(event, role.id)}
-                  >
-                    <MoreVertIcon />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-            {roles.length === 0 && !isLoading && (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  無符合條件的角色記錄
-                </TableCell>
-              </TableRow>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Chip
+                        label={getLevelDisplay(role.level)}
+                        color={role.level >= 8 ? 'error' : role.level >= 5 ? 'warning' : 'success'}
+                        size="small"
+                      />
+                      <Typography variant="caption" sx={{ ml: 1 }}>
+                        ({role.level})
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell align="center">{role.permissions.length}</TableCell>
+                  <TableCell align="center">{role.specialPermissions ? <Chip label="是" color="primary" size="small" /> : <Chip label="否" size="small" />}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={roleStatusText[role.status] || role.status}
+                      color={roleStatusColors[role.status] || 'default'}
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell align="center">{role.isSystemRole ? <Chip label="是" color="info" size="small" /> : <Chip label="否" size="small" />}</TableCell>
+                  <TableCell>{role.createdAt ? new Date(role.createdAt).toLocaleString() : '-'}</TableCell>
+                  <TableCell>{role.updatedAt ? new Date(role.updatedAt).toLocaleString() : '-'}</TableCell>
+                  <TableCell align="center">
+                    <Stack direction="row" spacing={1} justifyContent="center">
+                      {/* 前端 RBAC 考量：根據 canEditRole 控制編輯按鈕的顯示/啟用狀態，系統角色可能不允許編輯 */}
+                      {/* {canEditRole && !role.isSystemRole && (
+                        <IconButton size="small" onClick={() => onEdit(role.id)} color="primary">
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      )} */}
+                      {/* 前端 RBAC 考量：根據 canDeleteRole 控制刪除按鈕的顯示/啟用狀態，系統角色不允許刪除 */}
+                      {/* {canDeleteRole && !role.isSystemRole && (
+                        <IconButton size="small" onClick={() => onDelete(role.id)} color="error">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )} */}
+                    </Stack>
+                  </TableCell>
+                </StyledTableRow>
+              ))
             )}
           </TableBody>
         </Table>

@@ -16,22 +16,32 @@ import axios from "axios";
 // Helper type for internal flag check (use carefully)
 type AuthWithEmulatorFlag = typeof auth & { _isEmulated?: boolean };
 
-// Connect to the Auth emulator if in development
-// NOTE: This needs to be called BEFORE any auth operations
-if (import.meta.env.DEV) {
+// 清除所有現有的 Auth 連接設定
+// 避免重複連接
+
+// 確保只在開發環境中連接到模擬器
+if (import.meta.env.DEV || import.meta.env.VITE_USE_EMULATOR === 'true') {
   try {
-    // Check if already connected (Firebase throws error if connected multiple times)
-    // A simple check like this might not be foolproof in HMR scenarios,
-    // but it prevents the most common connection errors during development.
-    if (!auth._hasConnectedEmulator) { // Use Compat version's flag
-        console.log("Connecting to Auth Emulator at http://localhost:9099...");
-        auth.useEmulator("http://localhost:9099");
-        console.log("Auth Emulator connected.");
-    } else {
-        console.log("Auth Emulator connection already established.")
-    }
+    console.log("正在連接 Auth 模擬器...");
+    
+    // 方法一：使用 Firebase Admin SDK 的方式
+    // 禁用舊方法，嘗試新方法
+    // if (!auth._hasConnectedEmulator) {
+    //    console.log("Connecting to Auth Emulator at http://127.0.0.1:7099...");
+    //    auth.useEmulator("http://127.0.0.1:7099");
+    //    console.log("Auth Emulator connected.");
+    // }
+    
+    // 方法二：直接使用全域設定
+    // 連接到 Firebase Auth 模擬器
+    const EMULATOR_HOST = '127.0.0.1';
+    const AUTH_PORT = 7099;
+    
+    auth.useEmulator(`http://${EMULATOR_HOST}:${AUTH_PORT}`);
+    
+    console.log(`已連接到 Auth 模擬器 (${EMULATOR_HOST}:${AUTH_PORT})`);
   } catch (error) {
-    console.error("Error connecting to Auth Emulator: ", error);
+    console.error("連接到 Auth 模擬器時出錯：", error);
   }
 }
 
@@ -43,6 +53,7 @@ if (import.meta.env.DEV) {
  */
 const login = async (email: string, password: string): Promise<firebase.User | null> => {
   try {
+    console.log(`嘗試使用帳號 ${email} 登入...`);
     const userCredential = await auth.signInWithEmailAndPassword(email, password);
     // 登錄成功後強制刷新令牌以獲取最新的聲明
     if (userCredential.user) {
@@ -204,8 +215,9 @@ const getLineLoginUrl = (redirectUri: string, tenantHint?: string): string => {
   }));
   
   // 構建API URL，請求LINE登入
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
-  let url = `${baseUrl}/auth/line/login?redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/friedg/us-central1/api'; // 使用完整的Functions URL作為預設值
+  // 在基本URL後加上/v1/auth
+  let url = `${baseUrl}/v1/auth/line/login?redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
   
   if (tenantHint) {
     url += `&tenant_hint=${encodeURIComponent(tenantHint)}`;
@@ -222,14 +234,15 @@ const getLineLoginUrl = (redirectUri: string, tenantHint?: string): string => {
  * @returns 登入的Firebase用戶
  */
 const handleLineCallback = async (
-  accessToken: string, 
-  idToken: string, 
+  accessToken: string,
+  idToken: string,
   tenantHint?: string
 ): Promise<firebase.User | null> => {
   try {
     // 發送請求交換Firebase自定義token
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
-    const response = await axios.post(`${baseUrl}/auth/line/token-exchange`, {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/friedg/us-central1/api'; // 使用完整的Functions URL作為預設值
+    // 在基本URL後加上/v1/auth
+    const response = await axios.post(`${baseUrl}/v1/auth/line/token-exchange`, {
       lineAccessToken: accessToken,
       lineIdToken: idToken,
       tenantHint

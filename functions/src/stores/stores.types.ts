@@ -36,16 +36,10 @@ export interface AttendanceSettings {
 
 /**
  * 營業時間配置
+ * 使用一個對象，key 為星期幾或 'holidays'，value 為時間範圍陣列
  */
 export interface BusinessHours {
-  monday: TimeRange[];
-  tuesday: TimeRange[];
-  wednesday: TimeRange[];
-  thursday: TimeRange[];
-  friday: TimeRange[];
-  saturday: TimeRange[];
-  sunday: TimeRange[];
-  holidays?: TimeRange[];
+  [key: string]: TimeRange[]; // 星期幾 (monday, tuesday, etc.) 或 holidays
 }
 
 /**
@@ -57,108 +51,123 @@ export interface TimeRange {
 }
 
 /**
- * 印表機配置
+ * 印表機配置 - 根據 API 規格調整
  */
-export interface PrinterConfig {
-  receiptPrinter?: {
-    name: string;
-    model: string;
-    ipAddress?: string;
-    port?: number;
-    connectionType: 'usb' | 'network' | 'bluetooth';
-    enabled: boolean;
-    paperWidth?: number; // 單位: 毫米
-    paperHeight?: number; // 單位: 毫米
-  };
-  kitchenPrinters?: {
-    [category: string]: {
-      name: string;
-      model: string;
-      ipAddress?: string;
-      port?: number;
-      connectionType: 'usb' | 'network' | 'bluetooth';
-      enabled: boolean;
-    };
-  };
-  settings?: {
-    autoPrint: boolean;
-    printCustomerCopy: boolean;
-    printMerchantCopy: boolean;
-    printLogo: boolean;
-    printQRCode: boolean;
-    fontSize?: number;
-    customHeader?: string;
-    customFooter?: string;
+export interface PrinterSettings {
+  enabled: boolean;
+  apiUrl?: string;
+  apiKey?: string;
+  printerType?: 'thermal' | 'label' | 'normal';
+  templates?: { // 不同單據的模板設定
+    receipt?: string;
+    kitchen?: string;
+    takeout?: string;
   };
 }
 
 /**
- * 分店定義
+ * 店鋪定義 - 根據最終確認的 Markdown 表格和 API 規格調整
  */
 export interface Store {
   storeId: string;            // 分店唯一識別碼
-  storeName: string;          // 分店名稱
-  storeCode: string;          // 分店代碼 (用於報表和識別)
-  address: string;            // 分店地址
-  phoneNumber: string;        // 聯絡電話
-  contactPerson: string;      // 聯絡人
-  email: string;              // 電子郵件
   tenantId: string;           // 租戶 ID
-  isActive: boolean;          // 是否啟用
-  isDeleted?: boolean;        // 是否被標記為刪除 (邏輯刪除)
-  geolocation: GeoLocation | null;  // 地理位置
-  gpsFence: GPSFence | null;  // GPS 圍欄設定
-  businessHours: BusinessHours | null; // 營業時間
-  attendanceSettings: AttendanceSettings | null; // 考勤設定
-  printerConfig: PrinterConfig | null; // 印表機設定
-  settings: {                 // 店鋪設定
+  name: string;               // 店鋪名稱
+  storeCode: string;          // 店鋪代碼 (用於報表和識別)
+  description?: string;       // 店鋪描述
+  status: 'active' | 'inactive' | 'temporary_closed' | 'permanently_closed'; // 店鋪狀態
+  address?: {                 // 地址子結構
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  location?: {                // 地理位置子結構
+    latitude: number;
+    longitude: number;
+  };
+  contactInfo?: {             // 聯絡資訊子結構
+    email?: string;
+    phone?: string;
+    managerId?: string;       // 店長用戶ID
+  };
+  operatingHours?: BusinessHours; // 營業時間
+  gpsFence?: GPSFence;        // GPS 圍欄設定
+  printerSettings?: PrinterSettings; // 印表機設定
+  attendanceSettings?: AttendanceSettings; // 考勤設定
+  settings?: {                 // 店鋪設定
     [key: string]: any;       // 其他設定
   };
   createdAt: firestore.Timestamp | string;  // 創建時間
   updatedAt: firestore.Timestamp | string;  // 更新時間
   createdBy: string;          // 創建者 UID
   updatedBy: string;          // 更新者 UID
+  isDeleted?: boolean;        // 是否被標記為刪除 (邏輯刪除), 僅內部使用或特定場景返回
 }
 
 /**
- * 創建分店請求
+ * 創建分店請求 - 根據 API 規格調整
  */
 export interface CreateStoreRequest {
-  storeName: string;
-  storeCode: string;
-  address: string;
-  phoneNumber: string;
-  contactPerson: string;
-  email: string;
   tenantId: string;
-  isActive?: boolean;
-  geolocation?: GeoLocation;
+  name: string;
+  storeCode?: string;
+  description?: string;
+  status: 'active' | 'inactive' | 'temporary_closed' | 'permanently_closed';
+  address?: { 
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  location?: { 
+    latitude: number;
+    longitude: number;
+  };
+  contactInfo?: { 
+    email?: string;
+    phone?: string;
+    managerId?: string;
+  };
+  operatingHours?: BusinessHours;
   gpsFence?: GPSFence;
-  businessHours?: BusinessHours;
+  printerSettings?: PrinterSettings;
   attendanceSettings?: AttendanceSettings;
-  printerConfig?: PrinterConfig;
-  settings?: {
+  settings?: { 
     [key: string]: any;
   };
 }
 
 /**
- * 更新分店請求 (所有欄位均為可選)
+ * 更新分店請求 - 根據 API 規格調整
  */
 export interface UpdateStoreRequest {
-  storeName?: string;
+  name?: string;
   storeCode?: string;
-  address?: string;
-  phoneNumber?: string;
-  contactPerson?: string;
-  email?: string;
-  isActive?: boolean;
-  geolocation?: GeoLocation;
+  description?: string;
+  status?: 'active' | 'inactive' | 'temporary_closed' | 'permanently_closed';
+  address?: { 
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  location?: { 
+    latitude: number;
+    longitude: number;
+  };
+  contactInfo?: { 
+    email?: string;
+    phone?: string;
+    managerId?: string;
+  };
+  operatingHours?: BusinessHours;
   gpsFence?: GPSFence;
-  businessHours?: BusinessHours;
+  printerSettings?: PrinterSettings;
   attendanceSettings?: AttendanceSettings;
-  printerConfig?: PrinterConfig;
-  settings?: {
+  settings?: { 
     [key: string]: any;
   };
 }
@@ -262,7 +271,7 @@ export interface UserContext {
   tenantId?: string;
   storeId?: string;
   additionalStoreIds?: string[];
-  permissions?: {
+  permissions?: { // 使用簡化結構，實際應依賴 RBAC 庫
     [resource: string]: {
       create: boolean;
       read: boolean;

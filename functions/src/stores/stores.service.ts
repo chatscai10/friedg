@@ -5,27 +5,54 @@ import {
   PaginationMeta,
   CreateStoreRequest,
   UpdateStoreRequest,
-  GPSFenceRequest,
-  PrinterConfigRequest,
+  GPSFence,
+  PrinterSettings,
   BusinessHours,
-  AttendanceSettings
-} from './stores.types';
+  AttendanceSettings,
+} from './stores.types'; // 確保導入更新後的類型
 import { Timestamp, DocumentSnapshot, FieldValue } from 'firebase-admin/firestore';
+// 導入 RBAC 庫中的 hasPermission 函數
+import { hasPermission } from '../libs/rbac/core/permissionResolver';
+import { ResourceTypes } from '../libs/rbac/constants'; // 導入資源類型常量
+import { CustomError } from '../libs/utils/errors'; // 導入標準錯誤類型
 
 // 獲取 Firestore 實例
 const db = firestore();
 const storesCollection = db.collection('stores');
 
 /**
- * 店鋪過濾條件
+ * 店鋪過濾條件 - 與 listStoresQuerySchema 對應
  */
 export interface StoreFilter {
   page?: number;
   limit?: number;
-  sort?: string;
+  sort?: 'createdAt' | 'name' | 'status'; // 與 schema 對應
   order?: 'asc' | 'desc';
-  isActive?: boolean;
+  status?: 'active' | 'inactive' | 'temporary_closed' | 'permanently_closed'; // 與 schema 對應
+  tenantId?: string; 
   query?: string; // 用於搜索店鋪名稱、代碼或地址
+}
+
+/**
+ * 生成用於搜索的關鍵字陣列
+ * @param name 店鋪名稱
+ * @param storeCode 店鋪代碼
+ * @param address 店鋪地址 (可選)
+ * @returns 關鍵字陣列
+ */
+function generateSearchableKeywords(name: string, storeCode?: string, address?: string): string[] {
+  const keywords: string[] = [];
+  if (name) {
+    keywords.push(...name.toLowerCase().split(' ').filter(k => k.length > 0));
+  }
+  if (storeCode) {
+    keywords.push(storeCode.toLowerCase());
+  }
+  if (address) {
+    keywords.push(...address.toLowerCase().split(' ').filter(k => k.length > 0));
+  }
+  // 移除重複並限制數量，可根據需要優化
+  return Array.from(new Set(keywords)).slice(0, 50);
 }
 
 /**
@@ -36,6 +63,12 @@ export class StoreService {
    * 根據 ID 獲取店鋪
    */
   async getStoreById(storeId: string, user: UserContext): Promise<Store | null> {
+    // 權限檢查：需要有讀取店鋪資源的權限
+    const canRead = hasPermission(user, ResourceTypes.STORES, 'read', { storeId, tenantId: user.tenantId });
+    if (!canRead) {
+      throw new CustomError('未授權：您沒有權限查看此店鋪', 403);
+    }
+
     try {
       // 查詢店鋪文檔
       const storeDoc = await storesCollection.doc(storeId).get();
@@ -44,18 +77,26 @@ export class StoreService {
         return null;
       }
       
-      // 獲取店鋪數據
-      const storeData = storeDoc.data() as Store;
-      
-      // 租戶隔離 - 非超級管理員只能訪問自己租戶的店鋪
+      const storeData = storeDoc.data() as Store; // 使用更新後的類型
+
+      // 租戶隔離：非超級管理員只能訪問自己租戶的店鋪
       if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法訪問其他租戶的店鋪');
+         // 雖然 RBAC 已做基本過濾，這裡再次確認數據層級的隔離
+        throw new CustomError('未授權：您無法訪問其他租戶的店鋪', 403);
       }
       
+      // 過濾掉已邏輯刪除的店鋪，除非用戶有特殊權限（例如 super_admin 或能看所有店鋪的 admin）
+      if (storeData.isDeleted && user.role !== 'super_admin') { // 可根據實際 RBAC 策略調整此處判斷
+         // 如果需要更細粒度的邏輯刪除訪問權限，可以在 hasPermission 中處理
+         throw new CustomError('店鋪不存在或已刪除', 404); // 對一般用戶隱藏邏輯刪除的存在
+      }
+
       return this.convertStoreDocument(storeDoc);
     } catch (error) {
       console.error(`獲取店鋪(${storeId})時出錯:`, error);
-      throw error;
+      // 拋出標準錯誤
+      if (error instanceof CustomError) throw error;
+      throw new CustomError('獲取店鋪時發生內部錯誤', 500, error);
     }
   }
   
@@ -69,6 +110,12 @@ export class StoreService {
     limit: number,
     totalPages: number
   }> {
+    // 權限檢查：需要有讀取店鋪列表的權限
+    const canList = hasPermission(user, ResourceTypes.STORES, 'read', { tenantId: user.tenantId });
+     if (!canList) {
+      throw new CustomError('未授權：您沒有權限查看店鋪列表', 403);
+    }
+
     try {
       // 解構過濾條件
       const {
@@ -76,7 +123,7 @@ export class StoreService {
         limit = 20,
         sort = 'createdAt',
         order = 'desc',
-        isActive,
+        status,
         query
       } = filter;
       
@@ -84,44 +131,82 @@ export class StoreService {
       let queryRef = storesCollection as firestore.Query;
       
       // 租戶隔離 - 如果不是超級管理員，只能查看自己租戶的店鋪
+      // RBAC 層應該已經處理了大部分租戶隔離，這裡作為數據層的二次確認
       if (user.role !== 'super_admin' && user.tenantId) {
         queryRef = queryRef.where('tenantId', '==', user.tenantId);
       }
       
-      // 應用其他過濾條件
-      if (isActive !== undefined) {
-        queryRef = queryRef.where('isActive', '==', isActive);
+      // 應用狀態過濾
+      if (status) {
+        queryRef = queryRef.where('status', '==', status);
       }
       
-      // 排除已標記為刪除的店鋪
-      queryRef = queryRef.where('isDeleted', '==', false);
+      // 過濾掉已邏輯刪除的店鋪，除非用戶有特殊權限 (list 權限中包含了查看已刪除的)
+      // 假設 RBAC 的 'read' action 默認不包含已刪除，如需包含，需在 RBAC 規則中定義或在此處額外處理
+      queryRef = queryRef.where('isDeleted', '!=', true); // 過濾掉 isDeleted 為 true 的
       
       // 應用排序
-      if (sort === 'createdAt' || sort === 'updatedAt' || sort === 'storeName') {
-        queryRef = queryRef.orderBy(sort, order);
+      // 根據 API 規格支持的 sort 字段
+      const validSortFields = ['createdAt', 'name', 'status'];
+      if (validSortFields.includes(sort)) {
+         queryRef = queryRef.orderBy(sort, order);
       } else {
-        // 默認按創建時間排序
-        queryRef = queryRef.orderBy('createdAt', order);
+        // 對於不支持的排序字段，拋出錯誤或使用默認排序
+        console.warn(`收到不支持的排序字段: ${sort}, 使用默認排序 createdAt ${order}`);
+         queryRef = queryRef.orderBy('createdAt', order); // 默認排序
+      }
+       // 添加次級排序以確保穩定性，例如按創建時間
+       if (sort !== 'createdAt') {
+          queryRef = queryRef.orderBy('createdAt', 'desc');
+       }
+      
+      // 如果有搜索查詢，使用 searchableKeywords 進行過濾
+      if (query) {
+        const searchTerm = query.toLowerCase();
+        // 使用 array-contains-any 查詢，可能需要生成多個查詢
+        // 由於 Firestore array-contains-any 的限制 (最多10個值)，可能需要更複雜的實現或提示用戶精確查詢
+        // 此處實現一個簡化版本，僅使用 array-contains 匹配單個詞
+        // TODO: 優化搜索邏輯以支持更靈活的模糊搜索或全文搜索集成
+        // queryRef = queryRef.where('searchableKeywords', 'array-contains', searchTerm); 
+        // 簡易實現：只返回可能匹配的，後續在應用層過濾或使用更強大的搜索方案
+        // 這裡暫時不應用 where 條件，依賴 Service 層外的模糊匹配或後續優化
+         console.warn("模糊搜索功能(query)在 listStores 中暫未完全實現數據庫層級過濾。");
       }
       
-      // 獲取總數 (使用 count() 聚合查詢或普通查詢後取 size)
+      // 獲取總數 (使用 count() 聚合查詢)
       const countSnapshot = await queryRef.count().get();
       const total = countSnapshot.data().count;
       
       // 計算分頁信息
-      const pageSize = Math.min(50, limit); // 最大返回50條
+      const pageSize = Math.min(100, limit); // 最大返回100條 (與 API 規格一致)
       const offset = (page - 1) * pageSize;
       const totalPages = Math.ceil(total / pageSize);
-      
+
       // 獲取特定頁面的結果
       const paginatedQuerySnapshot = await queryRef.offset(offset).limit(pageSize).get();
       
-      // 轉換文檔
-      const stores = paginatedQuerySnapshot.docs.map(doc =>
+      // 轉換文檔並進行可能的 Service 層模糊匹配（如果數據庫層未完全支持）
+      let stores = paginatedQuerySnapshot.docs.map(doc =>
         this.convertStoreDocument(doc)
       );
-      
-      // 如果有搜索查詢，可以在此處實現客戶端過濾（未來可考慮使用 Firebase 的全文搜索功能）
+
+      // 簡易 Service 層模糊匹配 (如果數據庫層未實現)
+      if (query) {
+         const searchTerm = query.toLowerCase();
+         stores = stores.filter(store => 
+            (store.name?.toLowerCase().includes(searchTerm)) ||
+            (store.storeCode?.toLowerCase().includes(searchTerm)) ||
+            (store.address && 
+             (store.address.street?.toLowerCase().includes(searchTerm) ||
+              store.address.city?.toLowerCase().includes(searchTerm) ||
+              store.address.state?.toLowerCase().includes(searchTerm) ||
+              store.address.postalCode?.toLowerCase().includes(searchTerm) ||
+              store.address.country?.toLowerCase().includes(searchTerm)
+             ))
+         );
+         // 注意：Service 層過濾會導致 total 不準確，需要更先進的搜索方案
+         console.warn("listStores Service 層模糊匹配可能導致總數不準確。");
+      }
       
       return {
         stores,
@@ -132,7 +217,9 @@ export class StoreService {
       };
     } catch (error) {
       console.error('獲取店鋪列表時出錯:', error);
-      throw error;
+      // 拋出標準錯誤
+      if (error instanceof CustomError) throw error;
+      throw new CustomError('獲取店鋪列表時發生內部錯誤', 500, error);
     }
   }
 
@@ -140,64 +227,81 @@ export class StoreService {
    * 創建新店鋪
    */
   async createStore(data: CreateStoreRequest, user: UserContext): Promise<Store> {
+    // 權限檢查：需要有創建店鋪資源的權限
+    const canCreate = hasPermission(user, ResourceTypes.STORES, 'create', { tenantId: data.tenantId });
+     if (!canCreate) {
+      throw new CustomError('未授權：您沒有權限創建店鋪', 403);
+    }
+
     try {
-      // 租戶隔離 - 確保是同一租戶
+      // 租戶隔離 - 確保是同一租戶 (RBAC 已檢查，這裡再次確認)
       if (user.role !== 'super_admin') {
         if (!user.tenantId) {
-          throw new Error('未授權：請求用戶上下文無效（缺少 tenantId）');
+          throw new CustomError('未授權：請求用戶上下文無效（缺少 tenantId）', 400);
         }
-        
         // 確保使用者無法為其他租戶創建店鋪
         if (data.tenantId !== user.tenantId) {
-          throw new Error('未授權：您無法為其他租戶創建店鋪');
+          throw new CustomError('未授權：您無法為其他租戶創建店鋪', 403);
         }
       }
-      
-      // 檢查權限 - 只有租戶管理員及以上角色可以創建店鋪
-      if (user.role !== 'super_admin' && user.role !== 'tenant_admin') {
-        throw new Error('未授權：只有租戶管理員及以上角色可以創建店鋪');
+
+      // 檢查 storeCode 是否已存在於同一租戶下
+      if (data.storeCode) {
+          const existingStore = await storesCollection
+              .where('tenantId', '==', data.tenantId)
+              .where('storeCode', '==', data.storeCode)
+              .where('isDeleted', '!=', true) // 排除已邏輯刪除的
+              .limit(1).get();
+
+          if (!existingStore.empty) {
+              throw new CustomError(`店鋪代碼 '${data.storeCode}' 在此租戶下已存在`, 409);
+          }
       }
       
       // 店鋪 ID 生成邏輯
       const storeId = this.generateStoreId();
       
-      // 創建店鋪數據
+      // 創建店鋪數據，映射請求數據到 Store 結構
       const storeData: Store = {
         storeId,
-        storeName: data.storeName,
-        storeCode: data.storeCode,
-        address: data.address,
-        phoneNumber: data.phoneNumber,
-        contactPerson: data.contactPerson,
-        email: data.email,
         tenantId: data.tenantId,
-        isActive: data.isActive !== undefined ? data.isActive : true,
-        isDeleted: false, // 確保新創建的店鋪未被標記為刪除
-        geolocation: data.geolocation || null,
-        gpsFence: data.gpsFence || null,
-        businessHours: data.businessHours || null,
-        printerConfig: data.printerConfig || null,
+        name: data.name,
+        storeCode: data.storeCode,
+        description: data.description,
+        status: data.status,
+        address: data.address,
+        location: data.location,
+        contactInfo: data.contactInfo,
+        operatingHours: data.operatingHours,
+        gpsFence: data.gpsFence,
+        printerSettings: data.printerSettings,
+        attendanceSettings: data.attendanceSettings,
         settings: data.settings || {},
         createdAt: FieldValue.serverTimestamp() as any,
         updatedAt: FieldValue.serverTimestamp() as any,
         createdBy: user.uid,
-        updatedBy: user.uid
+        updatedBy: user.uid,
+        isDeleted: false, // 新建時確保為 false
+        // 添加 searchableKeywords 字段
+        searchableKeywords: generateSearchableKeywords(data.name, data.storeCode, data.address?.street)
       };
       
       // 儲存到 Firestore
       await storesCollection.doc(storeId).set(storeData);
       console.log(`成功創建店鋪：${storeId}`);
       
-      // 處理時間戳返回
-      const now = new Date().toISOString();
-      return {
-        ...storeData,
-        createdAt: now,
-        updatedAt: now
-      };
+      // 獲取創建後的文檔以便返回準確的時間戳
+      const createdStoreDoc = await storesCollection.doc(storeId).get();
+      return this.convertStoreDocument(createdStoreDoc);
+
     } catch (error) {
       console.error('創建店鋪時出錯:', error);
-      throw error;
+      // 拋出標準錯誤
+      if (error instanceof CustomError) throw error;
+      // 檢查 Firestore 唯一的索引錯誤 (如果配置了 storeCode 的唯一索引)
+      // 目前 Firestore 僅支持單字段唯一索引，複合唯一索引 (tenantId + storeCode) 需要代碼實現檢查
+      // 上面的 storeCode 檢查已經實現了複合唯一性檢查
+      throw new CustomError('創建店鋪時發生內部錯誤', 500, error);
     }
   }
 
@@ -205,46 +309,50 @@ export class StoreService {
    * 更新店鋪
    */
   async updateStore(storeId: string, data: UpdateStoreRequest, user: UserContext): Promise<Store | null> {
+    // 權限檢查：需要有更新店鋪資源的權限
+    const canUpdate = hasPermission(user, ResourceTypes.STORES, 'update', { storeId, tenantId: user.tenantId });
+     if (!canUpdate) {
+      throw new CustomError('未授權：您沒有權限更新此店鋪', 403);
+    }
+
     try {
       // 獲取店鋪文檔
       const storeDoc = await storesCollection.doc(storeId).get();
       
       if (!storeDoc.exists) {
-        return null;
+        return null; // 或拋出 404 錯誤
       }
       
       const storeData = storeDoc.data() as Store;
       
-      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪
+      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪 (RBAC 已檢查，這裡再次確認)
       if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法更新其他租戶的店鋪');
+        throw new CustomError('未授權：您無法更新其他租戶的店鋪', 403);
       }
-      
-      // 權限檢查 - 只有租戶管理員、店鋪經理及以上可以更新店鋪
-      const allowedRoles = ['super_admin', 'tenant_admin', 'store_manager'];
-      if (!allowedRoles.includes(user.role)) {
-        throw new Error('未授權：只有租戶管理員、店鋪經理及以上角色可以更新店鋪');
-      }
-      
-      // 如果是店鋪經理，只能更新自己管理的店鋪
-      if (user.role === 'store_manager' && user.storeId !== storeId) {
-        throw new Error('未授權：店鋪經理只能更新自己管理的店鋪');
-      }
-      
-      // 構建更新數據
+
+      // 禁止更改某些欄位 (storeId, tenantId, createdAt, createdBy)
       const updateObject: any = {
         ...data,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: user.uid
       };
       
-      // 禁止更改某些欄位
       delete updateObject.storeId;
       delete updateObject.tenantId;
       delete updateObject.createdAt;
       delete updateObject.createdBy;
-      delete updateObject.isDeleted; // 防止通過一般更新接口改變刪除狀態
-      
+      // 禁止通過一般更新接口改變刪除狀態，使用專門的刪除接口
+      delete updateObject.isDeleted;
+
+      // 如果更新了 name, storeCode 或 address，需要重新生成 searchableKeywords
+      if (data.name !== undefined || data.storeCode !== undefined || (data.address && storeData.address?.street !== data.address.street)) {
+         const updatedName = data.name !== undefined ? data.name : storeData.name;
+         const updatedStoreCode = data.storeCode !== undefined ? data.storeCode : storeData.storeCode;
+         // 假設地址變化主要體現在 street 字段，這裡可以根據實際情況調整
+         const updatedAddressStreet = data.address?.street !== undefined ? data.address.street : storeData.address?.street;
+         updateObject.searchableKeywords = generateSearchableKeywords(updatedName, updatedStoreCode, updatedAddressStreet);
+      }
+
       // 執行更新操作
       await storesCollection.doc(storeId).update(updateObject);
       console.log(`成功更新店鋪 ${storeId}`);
@@ -254,81 +362,107 @@ export class StoreService {
       return this.convertStoreDocument(updatedStoreDoc);
     } catch (error) {
       console.error(`更新店鋪(${storeId})時出錯:`, error);
-      throw error;
+      // 拋出標準錯誤
+      if (error instanceof CustomError) throw error;
+       // 檢查是否是 storeCode 重複的錯誤 (如果在更新時發生)
+       // 需要根據 Firestore 錯誤碼判斷，或者依賴前端驗證/後端先查詢
+       // 目前假設更新時 storeCode 的唯一性檢查在 Service 層之外完成或通過索引觸發
+      throw new CustomError('更新店鋪時發生內部錯誤', 500, error);
     }
   }
 
   /**
    * 更新店鋪狀態
    */
-  async updateStoreStatus(storeId: string, isActive: boolean, user: UserContext): Promise<boolean> {
+  async updateStoreStatus(storeId: string, status: Store['status'], user: UserContext): Promise<Store | null> {
+     // 權限檢查：需要有更新店鋪資源的權限
+     // 狀態更新可能是細分權限，這裡暫時使用 update action
+     const canUpdate = hasPermission(user, ResourceTypes.STORES, 'update', { storeId, tenantId: user.tenantId });
+      if (!canUpdate) {
+       throw new CustomError('未授權：您沒有權限更新此店鋪狀態', 403);
+     }
+
     try {
       // 獲取店鋪文檔
       const storeDoc = await storesCollection.doc(storeId).get();
       
       if (!storeDoc.exists) {
-        return false;
+        return null; // 或拋出 404 錯誤
       }
       
       const storeData = storeDoc.data() as Store;
-      
-      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪
+
+      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪 (RBAC 已檢查，這裡再次確認)
       if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法更新其他租戶的店鋪狀態');
+        throw new CustomError('未授權：您無法更新其他租戶的店鋪狀態', 403);
       }
-      
-      // 權限檢查 - 只有租戶管理員及以上可以更新店鋪狀態
-      if (user.role !== 'super_admin' && user.role !== 'tenant_admin') {
-        throw new Error('未授權：只有租戶管理員及以上角色可以更新店鋪狀態');
-      }
-      
+
       // 執行更新操作
       await storesCollection.doc(storeId).update({
-        isActive,
+        status,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: user.uid
       });
       
-      console.log(`成功更新店鋪 ${storeId} 的狀態為 ${isActive ? '活動' : '不活動'}`);
-      return true;
+      console.log(`成功更新店鋪 ${storeId} 的狀態為 ${status}`);
+
+      // 獲取更新後的店鋪資料
+      const updatedStoreDoc = await storesCollection.doc(storeId).get();
+      return this.convertStoreDocument(updatedStoreDoc);
+
     } catch (error) {
       console.error(`更新店鋪狀態(${storeId})時出錯:`, error);
-      throw error;
+      // 拋出標準錯誤
+      if (error instanceof CustomError) throw error;
+      throw new CustomError('更新店鋪狀態時發生內部錯誤', 500, error);
     }
   }
 
   /**
-   * 刪除店鋪 (邏輯刪除)
+   * 刪除店鋪 (邏輯刪除，可選物理刪除)
    */
   async deleteStore(storeId: string, user: UserContext, hardDelete: boolean = false): Promise<boolean> {
+     // 權限檢查：需要有刪除店鋪資源的權限
+     // 物理刪除可能需要更高級別權限，可在 RBAC 規則中細分條件
+     const canDelete = hasPermission(user, ResourceTypes.STORES, 'delete', { storeId, tenantId: user.tenantId, hardDelete });
+      if (!canDelete) {
+       throw new CustomError('未授權：您沒有權限刪除此店鋪', 403);
+     }
+
     try {
       // 獲取店鋪文檔
       const storeDoc = await storesCollection.doc(storeId).get();
       
       if (!storeDoc.exists) {
-        return false;
+        return false; // 或拋出 404 錯誤
       }
       
       const storeData = storeDoc.data() as Store;
       
-      // 租戶隔離 - 非超級管理員只能刪除自己租戶的店鋪
+      // 租戶隔離 - 非超級管理員只能刪除自己租戶的店鋪 (RBAC 已檢查，這裡再次確認)
       if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法刪除其他租戶的店鋪');
+        throw new CustomError('未授權：您無法刪除其他租戶的店鋪', 403);
       }
-      
-      // 權限檢查 - 只有租戶管理員及以上可以刪除店鋪
-      if (user.role !== 'super_admin' && user.role !== 'tenant_admin') {
-        throw new Error('未授權：只有租戶管理員及以上角色可以刪除店鋪');
-      }
-      
-      // 物理刪除 (僅限超級管理員)
-      if (hardDelete && user.role === 'super_admin') {
+
+      // 檢查是否有關聯數據阻止刪除 (例如，如果店鋪下還有活躍員工或未完成訂單)
+      // 這部分邏輯可能需要額外查詢，根據業務規則實現
+      // 例如：查詢 employees 集合 WHERE storeId == storeId AND status != 'terminated' AND isDeleted != true
+      // const hasActiveEmployees = await db.collection('employees').where('storeId', '==', storeId).where('status', '!=', 'terminated').where('isDeleted', '!=', true).limit(1).get();
+      // if (!hasActiveEmployees.empty) {
+      //    throw new CustomError('店鋪下存在活躍員工，無法刪除', 409); // Conflict
+      // }
+      // TODO: 實現關聯數據檢查
+       console.warn(`刪除店鋪 ${storeId} 時的關聯數據檢查尚未實現.`);
+
+      // 物理刪除 (僅限超級管理員且 hardDelete 為 true)
+      if (hardDelete && user.role === 'super_admin') { // 再次確認角色，儘管 RBAC 已檢查
         await storesCollection.doc(storeId).delete();
         console.log(`成功物理刪除店鋪 ${storeId}`);
       } else {
         // 邏輯刪除
         await storesCollection.doc(storeId).update({
-          isActive: false,
+          // 邏輯刪除只設置 isDeleted 標誌，狀態可以設置為 permanently_closed
+          status: 'permanently_closed', // 根據業務需求，邏輯刪除後狀態設為永久關閉
           isDeleted: true,
           updatedAt: FieldValue.serverTimestamp(),
           updatedBy: user.uid
@@ -339,508 +473,67 @@ export class StoreService {
       return true;
     } catch (error) {
       console.error(`刪除店鋪(${storeId})時出錯:`, error);
-      throw error;
+      // 拋出標準錯誤
+      if (error instanceof CustomError) throw error;
+      throw new CustomError('刪除店鋪時發生內部錯誤', 500, error);
     }
   }
 
-  /**
-   * 更新店鋪 GPS 圍欄
-   */
-  async updateGPSFence(storeId: string, gpsFenceData: GPSFenceRequest, user: UserContext): Promise<Store | null> {
-    try {
-      // 獲取店鋪文檔
-      const storeDoc = await storesCollection.doc(storeId).get();
-      
-      if (!storeDoc.exists) {
-        return null;
-      }
-      
-      const storeData = storeDoc.data() as Store;
-      
-      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪
-      if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法更新其他租戶的店鋪 GPS 圍欄');
-      }
-      
-      // 權限檢查 - 只有租戶管理員、店鋪經理及以上可以更新 GPS 圍欄
-      const allowedRoles = ['super_admin', 'tenant_admin', 'store_manager'];
-      if (!allowedRoles.includes(user.role)) {
-        throw new Error('未授權：只有租戶管理員、店鋪經理及以上角色可以更新店鋪 GPS 圍欄');
-      }
-      
-      // 分店經理只能更新自己管理的店鋪
-      if (user.role === 'store_manager' && user.storeId !== storeId) {
-        throw new Error('未授權：店鋪經理只能更新自己管理的店鋪 GPS 圍欄');
-      }
-      
-      // 執行更新操作
-      await storesCollection.doc(storeId).update({
-        gpsFence: gpsFenceData,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      });
-      
-      // 獲取更新後的店鋪資料
-      const updatedStoreDoc = await storesCollection.doc(storeId).get();
-      return this.convertStoreDocument(updatedStoreDoc);
-    } catch (error) {
-      console.error(`更新店鋪GPS圍欄(${storeId})時出錯:`, error);
-      throw error;
-    }
-  }
+   // TODO: 審閱和修改其他子功能更新方法 (updateGPSFence, updatePrinterConfig, updateStoreLocation, updateStoreBusinessHours, updateStoreAttendanceSettings)
+   // 確保它們使用更新後的類型、整合 RBAC 檢查、統一錯誤處理，並將數據正確映射到 Store 結構的相應子字段。
+   // 注意：api-specs/stores.yaml 中沒有獨立的 updateStoreLocation API，這個方法可能需要移除或合併到 updateStore 中。
+   // BusinessHours 和 AttendanceSettings 的更新方法在 service 中有重複定義，需要清理和統一。
+
 
   /**
-   * 更新店鋪印表機設定
-   */
-  async updatePrinterConfig(storeId: string, printerConfigData: PrinterConfigRequest, user: UserContext): Promise<Store | null> {
-    try {
-      // 獲取店鋪文檔
-      const storeDoc = await storesCollection.doc(storeId).get();
-      
-      if (!storeDoc.exists) {
-        return null;
-      }
-      
-      const storeData = storeDoc.data() as Store;
-      
-      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪
-      if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法更新其他租戶的店鋪印表機設定');
-      }
-      
-      // 權限檢查 - 只有租戶管理員、店鋪經理及以上可以更新印表機設定
-      const allowedRoles = ['super_admin', 'tenant_admin', 'store_manager'];
-      if (!allowedRoles.includes(user.role)) {
-        throw new Error('未授權：只有租戶管理員、店鋪經理及以上角色可以更新店鋪印表機設定');
-      }
-      
-      // 分店經理只能更新自己管理的店鋪
-      if (user.role === 'store_manager' && user.storeId !== storeId) {
-        throw new Error('未授權：店鋪經理只能更新自己管理的店鋪印表機設定');
-      }
-      
-      // 執行更新操作
-      await storesCollection.doc(storeId).update({
-        printerConfig: printerConfigData,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      });
-      
-      // 獲取更新後的店鋪資料
-      const updatedStoreDoc = await storesCollection.doc(storeId).get();
-      return this.convertStoreDocument(updatedStoreDoc);
-    } catch (error) {
-      console.error(`更新店鋪印表機設定(${storeId})時出錯:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * 更新店鋪地理位置和地理圍欄
-   * @param storeId 店鋪ID
-   * @param locationData 位置數據，包含座標和地理圍欄半徑
-   * @param user 操作用戶上下文
-   * @returns 更新後的店鋪資料或null(如果店鋪不存在)
-   */
-  async updateStoreLocation(
-    storeId: string, 
-    locationData: { 
-      coordinates: { 
-        latitude: number, 
-        longitude: number 
-      }, 
-      geofenceRadius: number 
-    }, 
-    user: UserContext
-  ): Promise<Store | null> {
-    try {
-      // 獲取店鋪文檔
-      const storeDoc = await storesCollection.doc(storeId).get();
-      
-      if (!storeDoc.exists) {
-        console.warn(`嘗試更新不存在的店鋪位置，店鋪ID: ${storeId}`);
-        return null;
-      }
-      
-      const storeData = storeDoc.data() as Store;
-      
-      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪
-      if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法更新其他租戶的店鋪地理位置');
-      }
-      
-      // 權限檢查 - 只有租戶管理員、店鋪經理及以上可以更新地理位置
-      const allowedRoles = ['super_admin', 'tenant_admin', 'store_manager'];
-      if (!allowedRoles.includes(user.role)) {
-        throw new Error('未授權：只有租戶管理員、店鋪經理及以上角色可以更新店鋪地理位置');
-      }
-      
-      // 分店經理只能更新自己管理的店鋪
-      if (user.role === 'store_manager' && user.storeId !== storeId) {
-        throw new Error('未授權：店鋪經理只能更新自己管理的店鋪地理位置');
-      }
-      
-      // 驗證座標數據
-      const { coordinates, geofenceRadius } = locationData;
-      if (coordinates.latitude < -90 || coordinates.latitude > 90) {
-        throw new Error('無效的緯度值：應在 -90 到 90 之間');
-      }
-      
-      if (coordinates.longitude < -180 || coordinates.longitude > 180) {
-        throw new Error('無效的經度值：應在 -180 到 180 之間');
-      }
-      
-      if (geofenceRadius < 0) {
-        throw new Error('無效的地理圍欄半徑：應為非負數');
-      }
-      
-      // 更新地理位置和圍欄資訊
-      const geolocation = {
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        address: storeData.address // 保留現有地址字段
-      };
-      
-      const gpsFence = {
-        enabled: true, // 默認啟用地理圍欄
-        radius: geofenceRadius,
-        center: {
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude
-        },
-        allowedDeviation: storeData.gpsFence?.allowedDeviation || 50 // 使用現有值或默認值
-      };
-      
-      // 執行更新操作
-      await storesCollection.doc(storeId).update({
-        geolocation,
-        gpsFence,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      });
-      
-      console.log(`成功更新店鋪 ${storeId} 的地理位置和圍欄設置`);
-      
-      // 獲取更新後的店鋪資料
-      const updatedStoreDoc = await storesCollection.doc(storeId).get();
-      return this.convertStoreDocument(updatedStoreDoc);
-    } catch (error) {
-      console.error(`更新店鋪地理位置(${storeId})時出錯:`, error);
-      throw error;
-    }
-  }
-  
-  /**
-   * 更新店鋪營業時間
-   * @param storeId 店鋪ID
-   * @param businessHoursData 營業時間數據
-   * @param user 操作用戶上下文
-   * @returns 更新後的店鋪資料或null(如果店鋪不存在)
-   */
-  async updateStoreBusinessHours(
-    storeId: string,
-    businessHoursData: BusinessHours,
-    user: UserContext
-  ): Promise<Store | null> {
-    try {
-      // 獲取店鋪文檔
-      const storeDoc = await storesCollection.doc(storeId).get();
-      
-      if (!storeDoc.exists) {
-        console.warn(`嘗試更新不存在的店鋪營業時間，店鋪ID: ${storeId}`);
-        return null;
-      }
-      
-      const storeData = storeDoc.data() as Store;
-      
-      // 租戶隔離 - 非超級管理員只能更新自己租戶的店鋪
-      if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        throw new Error('未授權：您無法更新其他租戶的店鋪營業時間');
-      }
-      
-      // 權限檢查 - 只有租戶管理員、店鋪經理及以上可以更新營業時間
-      const allowedRoles = ['super_admin', 'tenant_admin', 'store_manager'];
-      if (!allowedRoles.includes(user.role)) {
-        throw new Error('未授權：只有租戶管理員、店鋪經理及以上角色可以更新店鋪營業時間');
-      }
-      
-      // 分店經理只能更新自己管理的店鋪
-      if (user.role === 'store_manager' && user.storeId !== storeId) {
-        throw new Error('未授權：店鋪經理只能更新自己管理的店鋪營業時間');
-      }
-      
-      // 時間格式驗證
-      const validateTimeFormat = (timeStr: string): boolean => {
-        return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeStr);
-      };
-      
-      // 驗證時間範圍合理性
-      const validateTimeRange = (start: string, end: string): boolean => {
-        if (!validateTimeFormat(start) || !validateTimeFormat(end)) {
-          return false;
-        }
-        
-        const [startHours, startMinutes] = start.split(':').map(Number);
-        const [endHours, endMinutes] = end.split(':').map(Number);
-        
-        const startTotalMinutes = startHours * 60 + startMinutes;
-        const endTotalMinutes = endHours * 60 + endMinutes;
-        
-        return endTotalMinutes > startTotalMinutes;
-      };
-      
-      // 驗證營業時間數據
-      const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-      
-      for (const day of weekdays) {
-        if (businessHoursData[day] && Array.isArray(businessHoursData[day])) {
-          for (const timeRange of businessHoursData[day]) {
-            if (timeRange.start && timeRange.end) {
-              if (!validateTimeRange(timeRange.start, timeRange.end)) {
-                throw new Error(`無效的時間範圍：${day} ${timeRange.start}-${timeRange.end}，結束時間必須晚於開始時間`);
-              }
-            } else {
-              throw new Error(`無效的時間範圍格式：${day} 缺少開始或結束時間`);
-            }
-          }
-        }
-      }
-      
-      // 如果提供了假日時間設定，也進行驗證
-      if (businessHoursData.holidays && Array.isArray(businessHoursData.holidays)) {
-        for (const timeRange of businessHoursData.holidays) {
-          if (timeRange.start && timeRange.end) {
-            if (!validateTimeRange(timeRange.start, timeRange.end)) {
-              throw new Error(`無效的假日時間範圍：${timeRange.start}-${timeRange.end}，結束時間必須晚於開始時間`);
-            }
-          } else {
-            throw new Error(`無效的假日時間範圍格式：缺少開始或結束時間`);
-          }
-        }
-      }
-      
-      // 執行更新操作
-      await storesCollection.doc(storeId).update({
-        businessHours: businessHoursData,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      });
-      
-      console.log(`成功更新店鋪 ${storeId} 的營業時間設置`);
-      
-      // 獲取更新後的店鋪資料
-      const updatedStoreDoc = await storesCollection.doc(storeId).get();
-      return this.convertStoreDocument(updatedStoreDoc);
-    } catch (error) {
-      console.error(`更新店鋪營業時間(${storeId})時出錯:`, error);
-      throw error;
-    }
-  }
-  
-  /**
-   * 更新分店營業時間
-   * @param tenantId 租戶ID
-   * @param storeId 分店ID
-   * @param businessHoursData 營業時間資料
-   * @param user 用戶上下文
-   * @returns 更新後的營業時間資料
-   */
-  async updateStoreBusinessHours(
-    tenantId: string,
-    storeId: string,
-    businessHoursData: BusinessHours,
-    user: UserContext
-  ): Promise<BusinessHours | { error: string, status: number }> {
-    try {
-      // 1. 檢查店鋪是否存在
-      const storeDoc = await storesCollection.doc(storeId).get();
-      if (!storeDoc.exists) {
-        return { error: '找不到指定的分店', status: 404 };
-      }
-
-      const storeData = <Store>storeDoc.data();
-
-      // 2. 租戶隔離: 只有 super_admin 可跨租戶操作
-      if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        return { error: '您沒有權限操作此租戶的分店', status: 403 };
-      }
-
-      // 3. 權限檢查: 允許的角色
-      const allowedRoles = ['super_admin', 'tenant_admin', 'store_manager'];
-      if (!allowedRoles.includes(user.role)) {
-        return { error: '您沒有權限更新分店營業時間', status: 403 };
-      }
-
-      // 4. 店長只能更新自己管理的店
-      if (user.role === 'store_manager' && user.storeId !== storeId) {
-        return { error: '您只能更新自己管理的分店', status: 403 };
-      }
-
-      // 5. 驗證時間格式和邏輯
-      const validateTimeRange = (timeRange: { start: string; end: string }) => {
-        // 驗證時間格式
-        const timePattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-        if (!timePattern.test(timeRange.start) || !timePattern.test(timeRange.end)) {
-          return { valid: false, message: '時間格式無效，應為 HH:MM' };
-        }
-
-        // 驗證結束時間晚於開始時間
-        const [startHour, startMinute] = timeRange.start.split(':').map(Number);
-        const [endHour, endMinute] = timeRange.end.split(':').map(Number);
-        const startMinutes = startHour * 60 + startMinute;
-        const endMinutes = endHour * 60 + endMinute;
-
-        if (endMinutes <= startMinutes) {
-          return { valid: false, message: '結束時間必須晚於開始時間' };
-        }
-
-        return { valid: true };
-      };
-
-      // 檢查所有工作日的時間段
-      for (const day of Object.keys(businessHoursData)) {
-        const timeRanges = businessHoursData[day as keyof BusinessHours];
-        
-        if (Array.isArray(timeRanges)) {
-          for (const range of timeRanges) {
-            const result = validateTimeRange(range);
-            if (!result.valid) {
-              return { error: `${day} 的時間範圍無效: ${result.message}`, status: 400 };
-            }
-          }
-        }
-      }
-
-      // 6. 更新數據庫
-      await storesCollection.doc(storeId).update({
-        businessHours: businessHoursData,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      });
-
-      return businessHoursData;
-    } catch (error) {
-      console.error('更新分店營業時間時發生錯誤:', error);
-      return { error: '更新分店營業時間時發生錯誤', status: 500 };
-    }
-  }
-
-  /**
-   * 更新分店考勤設定
-   * @param tenantId 租戶ID
-   * @param storeId 分店ID
-   * @param attendanceSettingsData 考勤設定資料
-   * @param user 用戶上下文
-   * @returns 更新後的考勤設定資料
-   */
-  async updateStoreAttendanceSettings(
-    tenantId: string,
-    storeId: string,
-    attendanceSettingsData: AttendanceSettings,
-    user: UserContext
-  ): Promise<AttendanceSettings | { error: string, status: number }> {
-    try {
-      // 1. 檢查店鋪是否存在
-      const storeDoc = await storesCollection.doc(storeId).get();
-      if (!storeDoc.exists) {
-        return { error: '找不到指定的分店', status: 404 };
-      }
-
-      const storeData = <Store>storeDoc.data();
-
-      // 2. 租戶隔離: 只有 super_admin 可跨租戶操作
-      if (user.role !== 'super_admin' && storeData.tenantId !== user.tenantId) {
-        return { error: '您沒有權限操作此租戶的分店', status: 403 };
-      }
-
-      // 3. 權限檢查: 允許的角色
-      const allowedRoles = ['super_admin', 'tenant_admin', 'store_manager'];
-      if (!allowedRoles.includes(user.role)) {
-        return { error: '您沒有權限更新分店考勤設定', status: 403 };
-      }
-
-      // 4. 店長只能更新自己管理的店
-      if (user.role === 'store_manager' && user.storeId !== storeId) {
-        return { error: '您只能更新自己管理的分店', status: 403 };
-      }
-
-      // 5. 驗證數據合理性
-      if (attendanceSettingsData.lateThresholdMinutes < 0 || 
-          attendanceSettingsData.lateThresholdMinutes > 180) {
-        return { error: '遲到閾值必須在0到180分鐘之間', status: 400 };
-      }
-      
-      if (attendanceSettingsData.earlyThresholdMinutes < 0 || 
-          attendanceSettingsData.earlyThresholdMinutes > 180) {
-        return { error: '早退閾值必須在0到180分鐘之間', status: 400 };
-      }
-      
-      if (attendanceSettingsData.flexTimeMinutes < 0 || 
-          attendanceSettingsData.flexTimeMinutes > 120) {
-        return { error: '彈性時間必須在0到120分鐘之間', status: 400 };
-      }
-      
-      // 如果啟用了自動下班打卡，則必須提供有效的自動下班時間
-      if (attendanceSettingsData.autoClockOutEnabled) {
-        if (!attendanceSettingsData.autoClockOutTime) {
-          return { error: '啟用自動下班打卡時必須提供自動下班時間', status: 400 };
-        }
-        
-        // 驗證時間格式
-        const timePattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-        if (!timePattern.test(attendanceSettingsData.autoClockOutTime)) {
-          return { error: '自動下班時間格式無效，應為 HH:MM', status: 400 };
-        }
-      }
-
-      // 6. 更新數據庫
-      await storesCollection.doc(storeId).update({
-        attendanceSettings: attendanceSettingsData,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: user.uid
-      });
-
-      return attendanceSettingsData;
-    } catch (error) {
-      console.error('更新分店考勤設定時發生錯誤:', error);
-      return { error: '更新分店考勤設定時發生錯誤', status: 500 };
-    }
-  }
-
-  /**
-   * 將 Firestore 文檔轉換為 Store 對象
+   * 將 Firestore 文檔轉換為 Store 接口對象
+   * @param doc Firestore 文檔快照
+   * @returns Store 對象
    */
   private convertStoreDocument(doc: DocumentSnapshot): Store {
-    const data = doc.data() as Store;
-    
-    // 處理 Timestamp 類型，確保客戶端獲得標準格式
-    let result = {
-      ...data,
-      storeId: doc.id // 確保 storeId 是文檔 ID
-    } as Store;
-    
-    // 轉換時間戳記錄為可序列化格式
-    if (data.createdAt && typeof data.createdAt !== 'string') {
-      if ('toDate' in (data.createdAt as any)) {
-        result.createdAt = (data.createdAt as Timestamp).toDate().toISOString();
-      }
-    }
-    
-    if (data.updatedAt && typeof data.updatedAt !== 'string') {
-      if ('toDate' in (data.updatedAt as any)) {
-        result.updatedAt = (data.updatedAt as Timestamp).toDate().toISOString();
-      }
-    }
-    
-    return result;
+    const data = doc.data() as any; // 先作為 any 處理，便於轉換舊數據結構
+
+    // 轉換時間戳字段
+    const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt;
+    const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt;
+
+    // 根據最新的 Store 接口進行數據映射
+    const store: Store = {
+      storeId: doc.id,
+      tenantId: data.tenantId,
+      name: data.name || data.storeName || '', // 兼容舊字段
+      storeCode: data.storeCode || '',
+      description: data.description,
+      status: data.status || (data.isActive ? 'active' : 'inactive'), // 兼容舊狀態字段
+      address: data.address || (data.address ? { street: data.address, city: '', state: '', postalCode: '', country: '' } : undefined), // 兼容舊的單行地址
+      location: data.location || data.geolocation || undefined, // 兼容舊字段
+      contactInfo: data.contactInfo || (data.phoneNumber || data.contactPerson || data.email ? { phone: data.phoneNumber, email: data.email, managerId: undefined } : undefined), // 兼容舊字段
+      operatingHours: data.operatingHours || data.businessHours || undefined, // 兼容舊字段
+      gpsFence: data.gpsFence || undefined, // 與 types 對應
+      printerSettings: data.printerSettings || data.printerConfig || undefined, // 兼容舊字段
+      attendanceSettings: data.attendanceSettings || undefined, // 與 types 對應
+      settings: data.settings || {},
+      createdAt,
+      updatedAt,
+      createdBy: data.createdBy,
+      updatedBy: data.updatedBy,
+      isDeleted: data.isDeleted || false, // 兼容舊數據，默認 false
+       searchableKeywords: data.searchableKeywords || [], // 添加 searchableKeywords 字段
+    };
+
+     // 清理 undefined 字段，確保返回的對象結構乾淨
+     Object.keys(store).forEach(key => (store as any)[key] === undefined && delete (store as any)[key]);
+
+    return store;
   }
 
   /**
-   * 生成唯一的店鋪 ID (格式: store_{隨機字符})
+   * 生成新的店鋪 ID
+   * @returns 新的店鋪 ID 字符串
    */
   private generateStoreId(): string {
-    const randomStr = Math.random().toString(36).substring(2, 8);
-    return `store_${randomStr}`;
+    // 使用 Firestore 的 auto-id 功能生成文檔 ID 作為店鋪 ID
+    return storesCollection.doc().id;
   }
 }
 

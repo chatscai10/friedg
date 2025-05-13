@@ -98,37 +98,65 @@
 {
   "storeId": "string", // 主鍵，分店ID
   "tenantId": "string", // 租戶ID（關鍵隔離欄位）
-  "name": "string", // 分店名稱
-  "address": "string", // 地址
-  "contactPhone": "string", // 聯絡電話
-  "managerUid": "string", // 管理者UID
-  "location": { // 地理位置
+  "storeCode": "string", // 分店的內部代碼，可能用於內部系統識別。
+  "storeName": "string", // 分店的名稱。
+  "description": "string", // 分店的描述或簡介。
+  "status": "string", // 分店的詳細商業營運狀態。例如：`'active'`, `'inactive'`, `'temporary_closed'`, `'permanently_closed'`。
+  "isActive": "boolean", // 系統層級的總開關，代表分店在所有平台 (如顧客 App) 是否處於可用狀態。若為 `false`，即使 `status` 是 `'active'`，系統層面也應視為不可用。
+  "contactInfo": { // 分店聯絡資訊。
+    "phone": "string", // 電話號碼
+    "email": "string", // 電子郵件地址
+    "contactPerson": "string" // 聯絡人姓名
+  },
+  "address": { // 分店的結構化地址資訊。
+    "street": "string", // 街道地址
+    "district": "string", // 區域
+    "city": "string", // 城市
+    "postalCode": "string", // 郵遞區號
+    "country": "string", // 國家
+    "fullAddress": "string", // 完整地址
+    "notes": "string" // 地址備註
+  },
+  "geolocation": { // 分店的地理位置資訊。
     "latitude": "number", // 緯度
     "longitude": "number", // 經度
     "geohash": "string" // Geohash值(方便地理位置查詢)
   },
-  "operationHours": [ // 營業時間
-    {
-      "day": "number", // 星期(0-6)
-      "openTime": "string", // 開始時間 (HH:MM)
-      "closeTime": "string", // 結束時間 (HH:MM)
-      "isClosed": "boolean" // 是否休息
-    }
-  ],
-  "settings": { // 分店特定設定
-    "punchRadius": "number", // 打卡允許半徑(公尺)
-    "autoApproveLeaves": "boolean", // 自動審核請假
-    "pickupSystem": "string", // 取餐系統類型: screen, notification, both
-    "queueDisplayUrl": "string", // 取餐顯示螢幕URL
-    "printerSettings": { // 印表機設定
-      "enabled": "boolean", // 是否啟用
-      "apiKey": "string", // API金鑰
-      "printerIds": ["string"] // 印表機ID列表
-    }
+  "businessHours": { // 分店的營業時間設定。
+    "mon": [ // 星期一
+      {
+        "open": "string", // 開始時間 (HH:MM)
+        "close": "string" // 結束時間 (HH:MM)
+      }
+    ],
+    "tue": [ // 星期二
+      {
+        "open": "string", // 開始時間 (HH:MM)
+        "close": "string" // 結束時間 (HH:MM)
+      }
+    ],
+    // ... 其他星期 ...
+  },
+  "printerConfig": { // 分店的印表機設定。
+    "type": "string", // 印表機類型
+    "ipAddress": "string", // IP地址
+    "port": "number" // 端口
+  },
+  "attendanceSettings": { // 分店的考勤設定。
+    "lateThresholdMinutes": "number", // 遲到閾值（分鐘）
+    "earlyThresholdMinutes": "number", // 早退閾值（分鐘）
+    "flexTimeMinutes": "number", // 彈性時間（分鐘）
+    "requireApprovalForCorrection": "boolean", // 是否需要審批補打卡
+    "autoClockOutEnabled": "boolean" // 是否啟用自動下班打卡
+  },
+  "settings": { // 分店的其他設定（例如：線上點餐是否啟用、支援的付款方式等）。
+    "enableOnlineOrdering": "boolean", // 是否啟用線上點餐
+    "supportedPaymentMethods": ["string"] // 支援的付款方式列表
   },
   "createdAt": "timestamp", // 創建時間
   "updatedAt": "timestamp", // 更新時間
-  "status": "string" // 狀態: active, inactive
+  "createdBy": "string", // 記錄創建者 (用戶 ID 或系統)
+  "updatedBy": "string" // 記錄最後更新者 (用戶 ID 或系統)
 }
 ```
 
@@ -167,48 +195,68 @@
 ```
 {
   "employeeId": "string", // 主鍵，員工ID (通常與uid相同)
-  "uid": "string", // 關聯的用戶ID
+  "userId": "string", // 關聯的用戶ID
   "tenantId": "string", // 租戶ID（關鍵隔離欄位）
   "storeId": "string", // 主要工作分店ID
   "additionalStoreIds": ["string"], // 額外工作分店ID列表
+  "employeeCode": "string", // 員工編號 (租戶內部定義)
   "firstName": "string", // 名
   "lastName": "string", // 姓
+  "displayName": "string", // 顯示名稱 (可為全名或暱稱)
+  "position": "string", // 員工職位名稱 (e.g., "收銀員", "廚師", "服務生")
+  "employmentType": "string", // 僱用類型 (`'full_time'`, `'part_time'`, `'contract'`, `'intern'`, `'temporary'`)
+  "status": "string", // 員工整體僱佣合約狀態 (`'active'`, `'inactive'`, `'on_leave'`, `'terminated'`)
+  "hireDate": "string or null", // 入職日期 (ISO 日期格式 YYYY-MM-DD)
+  "terminationDate": "string or null", // 離職日期 (ISO 日期格式 YYYY-MM-DD)
+  "contactInfo": { // 聯絡資訊子結構
+    "email": "string", // 電子郵件地址
+    "phone": "string", // 電話號碼
+    "address": "string", // 通訊地址
+    "emergencyContact": "string", // 緊急聯絡人姓名
+    "emergencyPhone": "string" // 緊急聯絡人電話
+  },
+  "photoURL": "string", // 員工頭像圖片 URL
   "idNumber": "string", // 身分證號碼
-  "birthDate": "string", // 生日
-  "gender": "string", // 性別
-  "address": "string", // 地址
-  "emergencyContact": { // 緊急聯絡人
-    "name": "string",
-    "relationship": "string",
-    "phone": "string"
+  "birthDate": "string", // 生日 (格式可定義，如 YYYY-MM-DD)
+  "gender": "string", // 性別 (`'male'`, `'female'`, `'other'`)
+  "schedule": { // 排班偏好子結構
+    "preferredShifts": ["string"], // 偏好的班次列表 (`'morning'`, `'afternoon'`, `'evening'`, `'night'`)
+    "maxHoursPerWeek": "number", // 每週最大工作時數
+    "daysUnavailable": ["number"] // 不可排班的星期列表 (0=週日, 6=週六)
   },
-  "employmentInfo": { // 僱用資訊
-    "hireDate": "timestamp", // 入職日期
-    "position": "string", // 職位
-    "employmentType": "string", // 僱用類型: fulltime, parttime
-    "role": "string", // 系統角色: tenant_admin, store_manager, cashier, etc.
-    "roleLevel": "number", // 職等等級(1-6)
-    "bankAccount": "string", // 銀行帳號(薪資匯款用)
-    "baseSalary": "number", // 基本薪資
-    "hourlySalary": "number" // 時薪(兼職適用)
+  "employmentInfo": { // 僱用相關資訊子結構
+    "roleId": "string", // 關聯的系統角色 ID
+    "roleName": "string", // 系統角色名稱 (e.g., "店長", "櫃檯人員")
+    "roleLevel": "number" // 職等等級 (1-10 或其他定義的範圍)
   },
-  "workingStatus": { // 工作狀態
-    "isActive": "boolean", // 是否在職
-    "leaveBalance": { // 假期餘額
-      "annual": "number", // 年假
-      "sick": "number", // 病假
-      "personal": "number" // 事假
+  "payInfo": { // 薪資相關資訊子結構
+    "hourlyRate": "number", // 時薪 (兼職適用)
+    "baseSalary": "number", // 基本月薪或年薪 (全職適用)
+    "salaryType": "string", // 薪資類型 (`'hourly'`, `'monthly'`, `'annual'`)
+    "bankAccount": "string", // 銀行帳號
+    "bankName": "string", // 銀行名稱
+    "accountName": "string" // 銀行帳戶名稱
+  },
+  "workingStatus": { // 目前工作狀態子結構
+    "isActive": "boolean", // 代表員工在**日常營運操作中**是否處於可活躍狀態
+    "leaveBalance": { // 假期餘額子結構
+      "annual": "number", // 年假剩餘天數
+      "sick": "number", // 病假剩餘天數
+      "personal": "number" // 事假剩餘天數
     }
   },
-  "performanceMetrics": { // 績效指標
-    "salesAmount": "number", // 銷售額
-    "orderCount": "number", // 訂單數
-    "averageRating": "number", // 平均評分
-    "attendanceRate": "number" // 出勤率
+  "quietHours": { // 通知勿擾時段設定子結構
+    "enabled": "boolean", // 是否啟用勿擾模式
+    "startTime": "string", // 勿擾開始時間 (HH:MM 格式)
+    "endTime": "string" // 勿擾結束時間 (HH:MM 格式)
   },
-  "createdAt": "timestamp", // 創建時間
-  "updatedAt": "timestamp", // 更新時間
-  "isApproved": "boolean" // 是否已審核
+  "createdAt": "timestamp or string", // 記錄創建時間
+  "updatedAt": "timestamp or string", // 記錄最後更新時間
+  "createdBy": "string", // 創建記錄的使用者 ID
+  "updatedBy": "string", // 最後更新記錄的使用者 ID
+  "isApproved": "boolean", // 員工資料是否已審核通過
+  "approvedBy": "string", // 審核人 (使用者 ID)
+  "approvedAt": "timestamp or string" // 審核通過時間
 }
 ```
 

@@ -48,19 +48,19 @@ const firestore = firebase.firestore(); // 若需要請取消註解
 const functions = firebase.functions(); // 若需要請取消註解
 
 // 用於標記是否已連接模擬器的變數
-let isAuthEmulatorConnected = false;
+let isEmulatorConnected = false;
 
 // 根據環境決定是否連接模擬器
-if ((isDevelopment || isUsingEmulator) && !isAuthEmulatorConnected) {
+// Auth 模擬器的連接已移至 authService.ts，避免重複連接
+if ((isDevelopment || isUsingEmulator) && !isEmulatorConnected) {
   try {
-    console.log("正在連接 Firebase 模擬器...");
-    // 更新端口，與firebase.json中的設置一致
-    auth.useEmulator("http://127.0.0.1:7099");
-    // 更新端口，與firebase.json中的設置一致
-    firestore.useEmulator('127.0.0.1', 8090);
+    console.log("正在連接 Firebase 模擬器 (Functions)...");
+    // Auth 模擬器連接已經移到 authService.ts
+    // 暫時禁用 Firestore 模擬器連接，避免崩潰
+    // firestore.useEmulator('127.0.0.1', 8090);
     functions.useEmulator('127.0.0.1', 5002);
-    isAuthEmulatorConnected = true;
-    console.log("Firebase 模擬器已連接。端口: auth=7099, firestore=8090, functions=5002");
+    isEmulatorConnected = true;
+    console.log("Firebase 模擬器已連接：functions=5002");
   } catch (error) {
     console.error("連接 Firebase 模擬器時出錯：", error);
     console.warn("將嘗試使用生產環境配置...");

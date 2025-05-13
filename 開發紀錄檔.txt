@@ -1103,3 +1103,51 @@ LINE登入功能的基礎架構已經完成並解決了關鍵問題。下一步�
 2. 盤點 firestore.indexes.json，根據查詢需求與管理後台功能，列出現有及建議新增的複合索引，並說明用途。
 3. 擬定 Emulator 本地測試計劃，涵蓋各角色對主要集合的 CRUD 權限與複合查詢場景，特別強調特殊權限與日誌安全性測試。
 4. 任務進度與分析結果將分步回報，確保資料庫安全與查詢效能最佳化。
+
+[2024-06-18 15:30:00] 問題簡述: 完成 employees collection 結構定義與文件化。 解決方式: 綜合盤點現有文件 (employee.types.ts, api-specs/employees.yaml, 核心資料模型與RBAC_v1.md, firestore.rules) 並參考整合專案報告，完成 employees schema 設計，並更新至核心資料模型與RBAC_v1.md。
+
+[2024-07-19 16:00:00] 問題簡述: 完成 stores collection 結構定義並產出文件化內容。 解決方式: 綜合盤點現有文件 (stores.types.ts, api-specs/stores.yaml, 核心資料模型與RBAC_v1.md, etc.) 並參考整合專案報告，完成 stores schema 設計，並將最終版 Markdown 表格交付。由於工具限制，文件更新將另行處理。
+
+[2024-07-19 17:00:00] 問題簡述: 完成 roles collection 結構定義並產出文件化內容。 解決方式: 綜合盤點現有文件 (RBAC函式庫設計_v1.md, roles.types.ts, api-specs/roles.yaml, rbac/constants.ts, rbac/types.ts, firestore.rules 等) 並參考整合專案報告，完成 roles schema 設計，並將最終版 Markdown 表格交付。由於工具限制，文件更新將另行處理。
+
+[2024-07-26 00:00:00] 問題簡述: 完成 roles collection 結構定義並產出文件化內容。 解決方式: 綜合盤點多份相關設計文件與程式碼 (RBAC函式庫設計, types.ts, constants.ts, api-specs, firestore.rules 等)，統一命名、roleLevel 及 permissions 結構，完成 roles schema 設計，並將最終版 Markdown 表格交付。由於工具限制，文件更新將另行處理。
+
+[2024-07-26 00:00:00] 問題簡述: 完成 logs (auditLogs) collection 結構定義並產出文件化內容。 解決方式: 主要基於 functions/src/libs/audit/types.ts 中的 AuditLog 介面，並參考設計文件中的 auditLogs 集合描述，完成 logs schema 設計，並將最終版 Markdown 表格交付。由於工具限制，文件更新將另行處理。
+
+[2024-07-30 15:30:00] 問題簡述: 完成 Firestore Rules & Indexes 初版撰寫。 解決方式: 針對 employees, stores, roles, logs 集合更新了 firestore.rules 中的安全規則，並修正與新增了 firestore.indexes.json 中的複合索引定義。文件更新將另行處理。
+
+[2024-07-30 15:40:00] 問題簡述: 完成 RBAC 函式庫核心邏輯修改方案。 解決方式: 針對 functions/src/libs/rbac/services/dataAccess.ts 提交了包含 getRolePermissionsFromFirestore 的完整程式碼；針對 functions/src/libs/rbac/core/permissionResolver.ts 提交了整合動態權限獲取與條件判斷的完整程式碼。文件更新將另行處理。
+
+[2024-07-29 10:30:00] 問題簡述: 完成 Employee CRUD API 核心後端邏輯修改方案。 解決方式: 針對 functions/src/employees/ 中 employee.routes.ts, employee.validators.ts, employee.service.ts 提交了完整的程式碼修改建議，包括 employmentInfo 處理、模糊搜索、列表查詢邏輯、嵌套對象、審計欄位、錯誤處理等。文件更新將另行處理。
+
+[2024-07-29 10:45:00] 問題簡述: 完成 Roles CRUD API 核心後端邏輯修改方案。 解決方式: 針對 functions/src/roles/ 中 roles.types.ts, roles.validators.ts, roles.service.ts, roles.handlers.ts, roles.routes.ts 提交了完整的程式碼修改建議，統一了 Role 結構定義 (permissions: PermissionItem[], specialPermissions)，並強化了與 RBAC 函式庫的集成。文件更新將另行處理。
+
+- [ ] 撰寫初版 Firestore Rules & Indexes (已完成，文件更新另行處理)
++ [x] 撰寫初版 Firestore Rules & Indexes (已完成，文件更新另行處理)
+
+- [ ] 建立 RBAC 函式庫（Cloud Functions + Common Rules）
+- [ ] 2.3.1. 盤點與分析現有 RBAC 程式碼及設計文件 (已完成)
+- [ ] 2.3.2. 調整 RBAC 函式庫核心邏輯方案 (已完成，文件更新另行處理)
++ [x] 建立 RBAC 函式庫（Cloud Functions + Common Rules）
++ [x] 2.3.1. 盤點與分析現有 RBAC 程式碼及設計文件 (已完成)
++ [x] 2.3.2. 調整 RBAC 函式庫核心邏輯方案 (已完成，文件更新另行處理)
+
+## 階段 1：核心員工管理 (Employee Management MVP)
+
+- [ ] 1.1. Employee CRUD API 開發 (Create / Read / Update / Delete)
+- [ ] 1.1.1. 盤點與分析現有 Employee API 程式碼及規格 (已完成)
+- [ ] 1.1.2. 撰寫 Employee CRUD API 核心後端邏輯修改方案 (已完成，文件更新另行處理)
++ [x] 1.1. Employee CRUD API 開發 (Create / Read / Update / Delete)
++ [x] 1.1.1. 盤點與分析現有 Employee API 程式碼及規格 (已完成)
++ [x] 1.1.2. 撰寫 Employee CRUD API 核心後端邏輯修改方案 (已完成，文件更新另行處理)
+
+- [ ] 1.2. Role & Store CRUD API 開發 (Create / Read / Update / Delete)
+- [ ] 1.2.1. Roles CRUD API 核心後端邏輯修改方案 (已完成，文件更新另行處理)
+- [ ] 1.2.2. Stores CRUD API 核心後端邏輯修改方案 (準備完成，文件更新另行處理)
++ [x] 1.2. Role & Store CRUD API 開發 (Create / Read / Update / Delete)
++ [x] 1.2.1. Roles CRUD API 核心後端邏輯修改方案 (已完成，文件更新另行處理)
++ [x] 1.2.2. Stores CRUD API 核心後端邏輯修改方案 (準備完成，文件更新另行處理)
+
+[2023-10-27 10:30:00] 問題簡述: 完成管理後台員工列表頁前端核心邏輯修改方案。 解決方式: 針對 web-admin/src/components/EmployeeManagement/EmployeeList.tsx 提交了完整的程式碼修改建議，包括狀態管理、API 調用、篩選與排序功能增強、表格數據渲染更新，並加入前端 RBAC 考量。文件更新將另行處理。
+
+[2025-05-13 21:31:34] 問題簡述: 完成管理後台員工列表頁前端核心邏輯修改方案。 解決方式: 針對 web-admin/src/components/EmployeeManagement/EmployeeList.tsx 提交了完整的程式碼修改建議，包括狀態管理、API 調用、篩選與排序功能增強、表格數據渲染更新，並加入前端 RBAC 考量。文件更新將另行處理。
