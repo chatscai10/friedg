@@ -189,4 +189,12 @@ export interface StoreState {
     search: string;
     status: string;
   };
+}
+
+// 新增：用於角色表單中依賴租戶ID的店鋪列表狀態
+export interface StoresForRoleFormState {
+  storesList: Store[]; // 使用現有的 Store 接口作為列表項類型
+  loading: boolean;
+  error: string | null;
+  selectedTenantId?: string | null; // 可選，用於記錄當前 storesList 是針對哪個 tenantId 加載的
 } 

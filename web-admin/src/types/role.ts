@@ -1,12 +1,17 @@
 // 角色範圍枚舉
-export type RoleScope = 'global' | 'tenant' | 'store';
+export type RoleScope = 'global' | 'tenant' | 'store' | 'platform';
 
 /**
  * 權限接口定義
+ * 更新以匹配 API 規格及前端需求
  */
 export interface PermissionItem {
-  resource: string;     // 資源名稱，例如：'users', 'orders', 'products' 等
-  action: string;       // 對資源的操作，例如：'read', 'write', 'delete' 等
+  id: string;                // API 提供的權限唯一 ID
+  resourceType: string;      // API 提供的資源類型
+  action: string;            // API 提供的操作
+  name?: string;             // 前端生成或API提供的可讀名稱 (例如 API 的 description 或組合 resourceType + action)
+  description?: string;       // API 提供的權限描述
+  conditions?: Record<string, any>; // API 提供的權限條件
 }
 
 /**
@@ -76,7 +81,7 @@ export interface CreateRolePayload {
   description: string;           // 角色描述
   scope: RoleScope;              // 角色範圍
   roleLevel?: number;            // 角色等級（可選）
-  permissions: PermissionItem[]; // 角色權限列表
+  permissions: Array<{ resourceType: string; action: string; conditions?: Record<string, any> }>; // 更新類型
   specialPermissions?: Record<string, any> | null; // 特殊權限（可選）
   status?: 'active' | 'inactive';// 角色狀態（創建時通常為active，可選）
   tenantId?: string;             // 租戶ID（scope為tenant或store時必須）
@@ -89,7 +94,7 @@ export interface CreateRolePayload {
 export interface UpdateRolePayload {
   roleName?: string;             // 角色名稱（可選）
   description?: string;          // 角色描述（可選）
-  permissions?: PermissionItem[];// 角色權限列表（可選）
+  permissions?: Array<{ resourceType: string; action: string; conditions?: Record<string, any> }>;// 更新類型
   specialPermissions?: Record<string, any> | null; // 特殊權限（可選）
   status?: 'active' | 'inactive' | 'deleted';// 角色狀態（可選）
   roleLevel?: number;            // 角色等級（可選）
@@ -142,7 +147,9 @@ export interface RoleFormValues {
  */
 export const ROLE_SCOPES = [
   { value: 'global', label: '全局角色' },
-  { value: 'tenant', label: '租戶角色' }
+  { value: 'tenant', label: '租戶角色' },
+  { value: 'store', label: '店鋪角色' },
+  { value: 'platform', label: '平台角色' }
 ];
 
 /**
@@ -193,6 +200,33 @@ export const ACTION_DISPLAY_NAMES: Record<string, string> = {
   create: '創建', // 新增
   update: '更新', // 新增
 };
+
+/**
+ * 生成模擬的所有可用權限列表
+ * @returns {PermissionItem[]} 權限項目數組
+ */
+export function generateMockAllPermissions(): PermissionItem[] {
+  const allPermissions: PermissionItem[] = [];
+  VALID_RESOURCES.forEach(resourceType => {
+    VALID_ACTIONS.forEach(action => {
+      const id = `${resourceType}:${action}`;
+      const resourceDisplayName = RESOURCE_DISPLAY_NAMES[resourceType] || resourceType;
+      const actionDisplayName = ACTION_DISPLAY_NAMES[action] || action;
+      const description = `${resourceDisplayName} - ${actionDisplayName}`;
+      const name = resourceDisplayName; // 使用資源顯示名稱作為 name
+
+      allPermissions.push({
+        id,
+        resourceType,
+        action,
+        name, // 使用資源顯示名稱
+        description,
+        conditions: undefined, // 暫時設為 undefined
+      });
+    });
+  });
+  return allPermissions;
+}
 
 // 刪除舊的、不再使用的接口
 /*

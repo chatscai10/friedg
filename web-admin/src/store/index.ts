@@ -3,6 +3,9 @@ import authReducer from './authSlice';
 import roleReducer from './roleSlice';
 import userReducer from './userSlice';
 import storeReducer from './storeSlice';
+import permissionReducer from './permissionSlice';
+import tenantReducer from './tenantSlice';
+import storesForRoleFormReducer from './storesForRoleFormSlice';
 
 // 配置 Redux store
 export const store = configureStore({
@@ -11,6 +14,9 @@ export const store = configureStore({
     roles: roleReducer,
     users: userReducer,
     stores: storeReducer,
+    permissions: permissionReducer,
+    tenants: tenantReducer,
+    storesForRoleForm: storesForRoleFormReducer,
     // 後續可添加其他 reducers
   },
   // 可選配置

@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Button, 
+  Button as MuiButton,
   Paper, 
   Table, 
   TableBody, 
@@ -14,7 +14,7 @@ import {
   Box,
   IconButton,
   Chip,
-  Alert,
+  Alert as MuiAlert,
   Tooltip,
   Dialog,
   DialogActions,
@@ -29,18 +29,56 @@ import {
   FormControl,
   InputLabel,
   Grid,
-  SelectChangeEvent
+  SelectChangeEvent,
+  CircularProgress as MuiCircularProgress
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
+
+import { Button as AntButton, Spin, Alert as AntAlert } from 'antd';
+
 import LoadingState from '../components/common/LoadingState';
 import Pagination from '../components/common/Pagination';
 import { RootState } from '../store';
-import { fetchRoles, deleteRole, setCurrentPage, setPageSize } from '../store/roleSlice';
-import { Role } from '../types/role';
+import { 
+  fetchRoles,
+  deleteRole,
+  createRole,
+  updateRole,
+  setCurrentPage,
+  setPageSize,
+  clearCreateError,
+  clearUpdateError,
+  clearDeleteError
+} from '../store/roleSlice';
+import { 
+  fetchAppPermissions,
+  selectAllPermissions,
+  selectPermissionsLoading,
+  selectPermissionsError,
+  clearPermissionsError
+} from '../store/permissionSlice';
+import { 
+  fetchTenants,
+  selectAllTenants,
+  selectTenantsLoading,
+  selectTenantsError,
+  clearTenantsError
+} from '../store/tenantSlice';
+import {
+  fetchStoresByTenantId,
+  resetStoresForRoleForm,
+  selectStoresForRoleFormList,
+  selectStoresForRoleFormLoading,
+  selectStoresForRoleFormError,
+  clearStoresForRoleFormError
+} from '../store/storesForRoleFormSlice';
+import { Role, PermissionItem, RoleFormValues, RoleScope } from '../types/role';
+import RoleFormModal from '../components/RoleManagement/RoleFormModal';
+import { transformPermissionIdsToApiObjects } from '../utils/roleUtils';
 
 /**
  * 角色管理頁面 - 主路由組件
@@ -49,64 +87,156 @@ import { Role } from '../types/role';
 const RolesPage: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { roles, loading, error, deleteLoading, deleteError, pagination } = useSelector((state: RootState) => state.roles);
+  const { 
+    roles, 
+    loading, 
+    error, 
+    deleteLoading, 
+    deleteError, 
+    createLoading,
+    createError,
+    updateLoading,
+    updateError,
+    pagination 
+  } = useSelector((state: RootState) => state.roles);
+  const allPermissions = useSelector(selectAllPermissions);
+  const allPermissionsLoading = useSelector(selectPermissionsLoading);
+  const allPermissionsError = useSelector(selectPermissionsError);
 
-  // 篩選狀態
+  const tenantsList = useSelector(selectAllTenants);
+  const tenantsLoading = useSelector(selectTenantsLoading);
+  const tenantsError = useSelector(selectTenantsError);
+
+  const storesForSelectedTenant = useSelector(selectStoresForRoleFormList);
+  const storesLoading = useSelector(selectStoresForRoleFormLoading);
+  const storesError = useSelector(selectStoresForRoleFormError);
+
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [scopeFilter, setScopeFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   
-  // 分頁控制
-  const handlePageChange = (newPage: number) => {
-    dispatch(setCurrentPage(newPage));
-  };
-
-  const handlePageSizeChange = (newPageSize: number) => {
-    dispatch(setPageSize(newPageSize));
-  };
-
-  // 刪除對話框狀態
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<{ id: string; name: string } | null>(null);
 
-  // 加載角色列表
   useEffect(() => {
+    dispatch(fetchAppPermissions() as any);
+    dispatch(fetchTenants() as any);
+  }, [dispatch]);
+
+  const fetchRolesData = useCallback((page = pagination.currentPage, limit = pagination.pageSize) => {
     dispatch(fetchRoles({
-      page: pagination.currentPage,
-      limit: pagination.pageSize,
+      page,
+      limit,
       scope: scopeFilter || undefined,
-      search: searchTerm || undefined
+      search: searchTerm || undefined,
     }) as any);
-  }, [dispatch, pagination.currentPage, pagination.pageSize, scopeFilter, searchTerm]);
+  }, [dispatch, pagination.currentPage, pagination.pageSize, scopeFilter, searchTerm, statusFilter]);
 
-  // 如果刪除成功後重新加載角色列表
   useEffect(() => {
-    if (deleteDialogOpen && !deleteLoading && !deleteError && !roleToDelete) {
-      setDeleteDialogOpen(false);
-      dispatch(fetchRoles({
-        page: pagination.currentPage,
-        limit: pagination.pageSize,
-        scope: scopeFilter || undefined,
-        search: searchTerm || undefined
-      }) as any);
+    fetchRolesData();
+  }, [fetchRolesData]);
+
+  useEffect(() => {
+    if (isModalVisible && !editingRole) {
+      if (createError) dispatch(clearCreateError());
+      if (updateError) dispatch(clearUpdateError());
+      if (tenantsError) dispatch(clearTenantsError());
+      if (storesError) dispatch(clearStoresForRoleFormError());
     }
-  }, [deleteLoading, deleteError, roleToDelete, deleteDialogOpen, dispatch, pagination.currentPage, pagination.pageSize, scopeFilter, searchTerm]);
+  }, [isModalVisible, editingRole, createError, updateError, tenantsError, storesError, dispatch]);
 
-  const handleAddRole = () => {
-    navigate('/roles/create');
+  const handleOpenCreateModal = () => {
+    setEditingRole(null);
+    if (createError) dispatch(clearCreateError());
+    if (updateError) dispatch(clearUpdateError());
+    if (tenantsError) dispatch(clearTenantsError());
+    if (storesError) dispatch(clearStoresForRoleFormError());
+    dispatch(resetStoresForRoleForm());
+    setIsModalVisible(true);
+  };
+  
+  const handleOpenEditModal = (role: Role) => {
+    setEditingRole(role);
+    if (createError) dispatch(clearCreateError()); 
+    if (updateError) dispatch(clearUpdateError());
+    if (tenantsError) dispatch(clearTenantsError());
+    if (storesError) dispatch(clearStoresForRoleFormError());
+    if (role.tenantId) {
+      dispatch(fetchStoresByTenantId(role.tenantId) as any);
+    } else {
+      dispatch(resetStoresForRoleForm());
+    }
+    setIsModalVisible(true);
   };
 
-  const handleEditRole = (roleId: string) => {
-    navigate(`/roles/edit/${roleId}`);
+  const handleModalCancel = () => {
+    setIsModalVisible(false);
+    setEditingRole(null);
+    if (createError) dispatch(clearCreateError());
+    if (updateError) dispatch(clearUpdateError());
+    dispatch(resetStoresForRoleForm());
   };
 
-  // 打開刪除確認對話框
+  const handleModalOk = (values: RoleFormValues) => {
+    if (allPermissionsLoading || allPermissionsError) {
+      console.warn("Form submission attempted while permissions are loading or in error state.");
+      return;
+    }
+
+    const permissionsInApiFormat = transformPermissionIdsToApiObjects(
+      values.permissions as string[],
+      allPermissions
+    );
+    
+    const dataToSubmit = {
+      roleName: values.roleName,
+      description: values.description,
+      scope: values.scope,
+      roleLevel: values.roleLevel,
+      permissions: permissionsInApiFormat,
+      specialPermissions: values.specialPermissions,
+      status: values.status,
+      tenantId: values.tenantId,
+      storeId: values.storeId,
+    };
+    
+    if (editingRole) {
+      dispatch(updateRole({ ...dataToSubmit, roleId: editingRole.roleId }) as any)
+        .unwrap()
+        .then(() => {
+          setIsModalVisible(false);
+          setEditingRole(null);
+          fetchRolesData();
+        })
+        .catch((err:any) => {
+          console.error("更新角色失敗:", err);
+        });
+    } else {
+      dispatch(createRole(dataToSubmit) as any)
+        .unwrap()
+        .then(() => {
+          setIsModalVisible(false);
+          fetchRolesData(1);
+        })
+        .catch((err:any) => {
+          console.error("創建角色失敗:", err);
+        });
+    }
+  };
+
+  const handleEditRole = (role: Role) => {
+    handleOpenEditModal(role);
+  };
+
   const handleDeleteClick = (role: Role) => {
     setRoleToDelete({ id: role.roleId, name: role.roleName });
+    if(deleteError) dispatch(clearDeleteError());
     setDeleteDialogOpen(true);
   };
 
-  // 關閉刪除確認對話框
   const handleCloseDeleteDialog = () => {
     if (!deleteLoading) {
       setDeleteDialogOpen(false);
@@ -114,84 +244,64 @@ const RolesPage: React.FC = () => {
     }
   };
 
-  // 確認刪除角色
   const handleConfirmDelete = () => {
     if (roleToDelete) {
       dispatch(deleteRole(roleToDelete.id) as any)
-        .then((result: any) => {
-          if (!result.error) {
-            setRoleToDelete(null);
-          }
+        .unwrap()
+        .then(() => {
+          setDeleteDialogOpen(false);
+          setRoleToDelete(null);
+          fetchRolesData();
+        })
+        .catch((err:any) => {
+          console.error("刪除角色失敗:", err);
+          setDeleteDialogOpen(false); 
+          setRoleToDelete(null);
         });
     }
   };
 
-  // 處理搜索
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    dispatch(setCurrentPage(1)); // 重置到第一頁
+    dispatch(setCurrentPage(1));
   };
 
-  // 處理搜索提交
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    dispatch(fetchRoles({
-      page: 1,
-      limit: pagination.pageSize,
-      scope: scopeFilter || undefined,
-      search: searchTerm || undefined
-    }) as any);
+    dispatch(setCurrentPage(1));
+    fetchRolesData(1);
   };
 
-  // 處理範圍篩選
   const handleScopeChange = (e: SelectChangeEvent<string>) => {
     setScopeFilter(e.target.value);
-    dispatch(setCurrentPage(1)); // 重置到第一頁
-    
-    // 立即使用新篩選條件請求資料
-    dispatch(fetchRoles({
-      page: 1,
-      limit: pagination.pageSize,
-      scope: e.target.value || undefined,
-      search: searchTerm || undefined
-    }) as any);
+    dispatch(setCurrentPage(1));
   };
 
-  // 處理狀態篩選
   const handleStatusChange = (e: SelectChangeEvent<string>) => {
     setStatusFilter(e.target.value);
-    dispatch(setCurrentPage(1)); // 重置到第一頁
-    
-    // 注意：後端API可能還不支持按狀態篩選，這裡先使用前端篩選
+    dispatch(setCurrentPage(1));
   };
 
-  // 清除所有篩選器
   const handleClearFilters = () => {
     setSearchTerm('');
     setScopeFilter('');
     setStatusFilter('');
     dispatch(setCurrentPage(1));
-    
-    // 使用清除後的篩選條件請求資料
-    dispatch(fetchRoles({
-      page: 1,
-      limit: pagination.pageSize
-    }) as any);
   };
 
-  // 獲取角色範圍標籤顏色
   const getScopeColor = (scope: string) => {
     switch (scope) {
       case 'global':
         return 'primary';
       case 'tenant':
         return 'secondary';
+      case 'store':
+        return 'info';
       default:
         return 'default';
     }
   };
 
-  // 渲染系統角色標記
   const renderSystemRoleBadge = (isSystemRole: boolean) => {
     if (isSystemRole) {
       return <Chip size="small" label="系統角色" color="info" sx={{ ml: 1 }} />;
@@ -199,15 +309,21 @@ const RolesPage: React.FC = () => {
     return null;
   };
 
-  // 過濾角色列表（前端篩選方式）
   const filteredRoles = statusFilter 
-    ? roles.filter(role => 
-        (statusFilter === 'active' && role.isActive) || 
-        (statusFilter === 'inactive' && !role.isActive)
-      )
+    ? roles.filter(role => {
+        const roleStatus = (role as any).status || ((role as any).isActive ? 'active' : 'inactive');
+        return roleStatus === statusFilter;
+      })
     : roles;
 
-  if (loading && roles.length === 0) {
+  const handleTenantChangeForStores = useCallback((tenantId?: string) => {
+    dispatch(resetStoresForRoleForm());
+    if (tenantId) {
+      dispatch(fetchStoresByTenantId(tenantId) as any);
+    }
+  }, [dispatch]);
+
+  if (loading && roles.length === 0 && pagination.currentPage === 1) {
     return <LoadingState />;
   }
 
@@ -215,28 +331,40 @@ const RolesPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" component="h1">角色管理</Typography>
-        <Button 
+        <MuiButton 
           variant="contained" 
-          startIcon={<AddIcon />} 
-          onClick={handleAddRole}
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={handleOpenCreateModal}
         >
-          新增角色
-        </Button>
+          創建新角色
+        </MuiButton>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
+        <MuiAlert severity="error" sx={{ mb: 3 }}>
+          獲取角色列表失敗: {typeof error === 'string' ? error : JSON.stringify(error)}
+        </MuiAlert>
       )}
 
+      {createError && (
+        <MuiAlert severity="error" sx={{ mb: 3, mt: isModalVisible ? 0 : 2 }} onClose={() => dispatch(clearCreateError())}>
+          創建角色失敗: {typeof createError === 'string' ? createError : JSON.stringify(createError)}
+        </MuiAlert>
+      )}
+      
+      {updateError && (
+        <MuiAlert severity="error" sx={{ mb: 3, mt: isModalVisible ? 0 : 2 }} onClose={() => dispatch(clearUpdateError())}>
+          更新角色失敗: {typeof updateError === 'string' ? updateError : JSON.stringify(updateError)}
+        </MuiAlert>
+      )}
+      
       {deleteError && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          刪除角色失敗: {deleteError}
-        </Alert>
+        <MuiAlert severity="error" sx={{ mb: 3 }} onClose={() => dispatch(clearDeleteError())}>
+          刪除角色失敗: {typeof deleteError === 'string' ? deleteError : JSON.stringify(deleteError)}
+        </MuiAlert>
       )}
 
-      {/* 篩選工具欄 */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} sm={4}>
@@ -266,9 +394,10 @@ const RolesPage: React.FC = () => {
                 label="角色範圍"
                 onChange={handleScopeChange}
               >
-                <MenuItem value="">全部範圍</MenuItem>
-                <MenuItem value="global">全局</MenuItem>
-                <MenuItem value="tenant">租戶</MenuItem>
+                <MenuItem value=""><em>全部範圍</em></MenuItem>
+                <MenuItem value="global">全局 (Global)</MenuItem>
+                <MenuItem value="tenant">租戶 (Tenant)</MenuItem>
+                <MenuItem value="store">店鋪 (Store)</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -281,144 +410,142 @@ const RolesPage: React.FC = () => {
                 label="狀態"
                 onChange={handleStatusChange}
               >
-                <MenuItem value="">全部狀態</MenuItem>
-                <MenuItem value="active">啟用</MenuItem>
-                <MenuItem value="inactive">停用</MenuItem>
+                <MenuItem value=""><em>全部狀態</em></MenuItem>
+                <MenuItem value="active">啟用 (Active)</MenuItem>
+                <MenuItem value="inactive">停用 (Inactive)</MenuItem>
               </Select>
             </FormControl>
           </Grid>
           <Grid item xs={12} sm={2}>
-            <Button
-              variant="outlined"
+            <MuiButton 
+              fullWidth 
+              variant="outlined" 
+              onClick={handleClearFilters} 
               startIcon={<FilterListIcon />}
-              onClick={handleClearFilters}
-              fullWidth
+              size="medium"
             >
               清除篩選
-            </Button>
+            </MuiButton>
           </Grid>
         </Grid>
       </Paper>
 
-      {filteredRoles.length === 0 && !loading ? (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="body1" color="textSecondary">
-            無符合條件的角色資料。
-          </Typography>
-        </Paper>
-      ) : (
-        <>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>角色名稱</TableCell>
-                  <TableCell>描述</TableCell>
-                  <TableCell>範圍</TableCell>
-                  <TableCell>權限等級</TableCell>
-                  <TableCell>狀態</TableCell>
-                  <TableCell align="right">操作</TableCell>
+      <TableContainer component={Paper} sx={{ mb:3 }}>
+        <Table sx={{ minWidth: 650 }} aria-label="roles table">
+          <TableHead>
+            <TableRow>
+              <TableCell>角色名稱</TableCell>
+              <TableCell>描述</TableCell>
+              <TableCell>範圍</TableCell>
+              <TableCell>等級</TableCell>
+              <TableCell>狀態</TableCell>
+              <TableCell align="right">操作</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading && pagination.currentPage === 1 && filteredRoles.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <CircularProgress />
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading && filteredRoles.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <Typography>沒有找到符合條件的角色。</Typography>
+                </TableCell>
+              </TableRow>
+            )}
+            {filteredRoles.map((role) => {
+              const roleStatus = (role as any).status || ((role as any).isActive ? 'active' : 'inactive');
+              return (
+                <TableRow key={role.roleId}>
+                  <TableCell>
+                    {role.roleName}
+                    {renderSystemRoleBadge(role.isSystemRole)}
+                  </TableCell>
+                  <TableCell>{role.description}</TableCell>
+                  <TableCell>
+                    <Chip label={role.scope} color={getScopeColor(role.scope) as any} size="small" />
+                  </TableCell>
+                  <TableCell>{role.roleLevel}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={roleStatus === 'active' ? '啟用' : '停用'}
+                      color={roleStatus === 'active' ? 'success' : 'default'} 
+                      size="small" 
+                    />
+                  </TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="編輯">
+                      <IconButton onClick={() => handleEditRole(role)} size="small" disabled={role.isSystemRole}>
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="刪除">
+                      <IconButton onClick={() => handleDeleteClick(role)} size="small" disabled={role.isSystemRole}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      <CircularProgress size={40} />
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredRoles.map((role: Role) => (
-                    <TableRow key={role.roleId}>
-                      <TableCell>
-                        {role.roleName}
-                        {renderSystemRoleBadge(role.isSystemRole)}
-                      </TableCell>
-                      <TableCell>{role.description}</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={role.scope === 'global' ? '全局' : '租戶'} 
-                          color={getScopeColor(role.scope) as any}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{role.roleLevel}</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={role.isActive ? '啟用' : '停用'} 
-                          color={role.isActive ? 'success' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="編輯">
-                          <IconButton 
-                            onClick={() => handleEditRole(role.roleId)}
-                            disabled={role.isSystemRole}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="刪除">
-                          <IconButton 
-                            onClick={() => handleDeleteClick(role)}
-                            disabled={role.isSystemRole}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-          {/* 分頁控制 */}
-          <Pagination
-            currentPage={pagination.currentPage}
-            totalPages={pagination.totalPages}
-            totalItems={pagination.totalItems}
-            pageSize={pagination.pageSize}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-          />
-        </>
+      <Pagination
+        totalItems={pagination.totalItems}
+        itemsPerPage={pagination.pageSize}
+        currentPage={pagination.currentPage}
+        onPageChange={handlePageChange}
+        onItemsPerPageChange={handlePageSizeChange}
+      />
+
+      {isModalVisible && (
+        <RoleFormModal
+          visible={isModalVisible}
+          onCancel={handleModalCancel}
+          onOk={handleModalOk}
+          initialData={editingRole}
+          isLoading={createLoading || updateLoading || allPermissionsLoading}
+          allPermissions={allPermissions}
+          allPermissionsLoading={allPermissionsLoading}
+          allPermissionsError={allPermissionsError}
+          createError={createError}
+          updateError={updateError}
+          clearCreateError={() => dispatch(clearCreateError())}
+          clearUpdateError={() => dispatch(clearUpdateError())}
+          clearPermissionsError={allPermissionsError ? () => dispatch(clearPermissionsError()) : undefined}
+          okButtonProps={{
+            disabled: allPermissionsLoading || !!allPermissionsError || tenantsLoading || !!tenantsError || storesLoading || !!storesError || createLoading || updateLoading
+          }}
+          tenantsList={tenantsList}
+          tenantsLoading={tenantsLoading}
+          tenantsError={tenantsError}
+          clearTenantsError={tenantsError ? () => dispatch(clearTenantsError()) : undefined}
+          onTenantChange={handleTenantChangeForStores}
+          storesList={storesForSelectedTenant}
+          storesLoading={storesLoading}
+          storesError={storesError}
+          clearStoresError={storesError ? () => dispatch(clearStoresForRoleFormError()) : undefined}
+        />
       )}
 
-      {/* 刪除確認對話框 */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleCloseDeleteDialog}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-      >
-        <DialogTitle id="alert-dialog-title">
-          確認刪除角色
-        </DialogTitle>
+      <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>
+        <DialogTitle>確認刪除</DialogTitle>
         <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            您確定要刪除角色 "{roleToDelete?.name}" 嗎？此操作無法撤銷。
+          <DialogContentText>
+            確定要刪除角色 "{roleToDelete?.name}" 嗎？此操作無法撤銷。
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={handleCloseDeleteDialog} 
-            disabled={deleteLoading}
-          >
-            取消
-          </Button>
-          <Button 
-            onClick={handleConfirmDelete} 
-            color="error" 
-            variant="contained"
-            disabled={deleteLoading}
-            startIcon={deleteLoading ? <CircularProgress size={20} color="inherit" /> : null}
-            autoFocus
-          >
-            {deleteLoading ? '刪除中...' : '確認刪除'}
-          </Button>
+          <MuiButton onClick={handleCloseDeleteDialog} disabled={deleteLoading}>取消</MuiButton>
+          <MuiButton onClick={handleConfirmDelete} color="error" disabled={deleteLoading}>
+            {deleteLoading ? <CircularProgress size={24} /> : '刪除'}
+          </MuiButton>
         </DialogActions>
       </Dialog>
 

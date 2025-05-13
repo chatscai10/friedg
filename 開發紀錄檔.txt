@@ -1151,3 +1151,81 @@ LINE登入功能的基礎架構已經完成並解決了關鍵問題。下一步�
 [2023-10-27 10:30:00] 問題簡述: 完成管理後台員工列表頁前端核心邏輯修改方案。 解決方式: 針對 web-admin/src/components/EmployeeManagement/EmployeeList.tsx 提交了完整的程式碼修改建議，包括狀態管理、API 調用、篩選與排序功能增強、表格數據渲染更新，並加入前端 RBAC 考量。文件更新將另行處理。
 
 [2025-05-13 21:31:34] 問題簡述: 完成管理後台員工列表頁前端核心邏輯修改方案。 解決方式: 針對 web-admin/src/components/EmployeeManagement/EmployeeList.tsx 提交了完整的程式碼修改建議，包括狀態管理、API 調用、篩選與排序功能增強、表格數據渲染更新，並加入前端 RBAC 考量。文件更新將另行處理。
+
+## 2024-05-30
+
+### 任務 2.2 (前端): 管理後台 - 角色與分店管理頁 (角色管理部分)
+*   進度：
+    *   查閱了 `設計文件/wireframes/`，確認無角色管理頁面相關設計稿。
+    *   查閱了 `web-admin/src/components/RoleManagement/RoleList.tsx`、`web-admin/src/pages/RolesPage.tsx` (部分)、`web-admin/src/types/role.ts` 的現有內容。
+    *   回顧了 `api-specs/roles.yaml` 中關於角色管理的 API 規格。
+    *   **完成對「角色管理頁面」前端實現的初步分析和規劃，提出了針對類型定義、服務層、頁面容器組件 (`RolesPage.tsx`)、列表展示組件 (`RoleList.tsx`) 以及新增表單模態框 (`RoleFormModal.tsx`) 和權限選擇器 (`PermissionSelector.tsx`) 的詳細修改/實現建議。**
+    *   **提供了 `PermissionSelector.tsx` 組件的規格草案。**
+    *   **指導創建了 `web-admin/src/components/RoleManagement/PermissionSelector.tsx` 檔案，並填入了基礎的 React Functional Component 結構和 Props 定義。**
+    *   **關於 `整合專案報告.txt` 的更新，建議由使用者手動操作以確保準確性。**
+*   後續：根據規格和建議，逐步實現 `PermissionSelector.tsx` 及角色管理相關前端頁面和組件。
+
+### 任務 A：安全地記錄組件規格
+*   進度：
+    *   在 `docs/specifications/` 目錄下創建了 `PermissionSelector_Component_Spec.md` 檔案。
+    *   已將 `PermissionSelector` 組件的詳細規格內容寫入該檔案。
+*   後續：使用者將後續整理此規格檔案內容至主要專案報告中。
+
+### 任務：實作 `PermissionSelector.tsx` 組件 (階段一：結構確認與類型定義)
+*   進度：
+    *   查閱了 `web-admin/src/types/role.ts`，確認現有 `PermissionItem` 定義。
+    *   查閱了 `api-specs/roles.yaml` 及 `api-specs/openapi.yaml`，分析了後端 `Permission` 模型的結構，確認包含 `id (string)`, `resourceType (string)`, `action (string)`, `description (string)`, `conditions (object)`，且為扁平結構。
+    *   根據 API 規格和前端需求，更新了 `web-admin/src/types/role.ts` 中的 `PermissionItem` 介面定義，使其包含 `id`, `resourceType`, `action`, `name?`, `description?`, `conditions?`。
+*   後續：將基於新的 `PermissionItem` 定義進一步實作 `PermissionSelector.tsx` 的 UI 與邏輯。
+
+### 任務：實作 `PermissionSelector.tsx` 組件 (階段二：UI 與選擇邏輯)
+*   進度：
+    *   更新了 `PermissionSelector.tsx` 以正確導入 `PermissionItem`。
+    *   使用 Ant Design 的 `Checkbox.Group` 和 `Checkbox` 實現了權限列表的展示。
+    *   Checkbox 的顯示名稱優先使用 `permission.description`，若無則組合 `permission.resourceType` 和 `permission.action`。
+    *   實現了權限選擇邏輯，使用 `useState` 和 `useEffect` 管理選中狀態，並在變更時觸發 `onChange` 回調。
+    *   移除了組件中的臨時內容。
+*   注意：實作過程中遇到 `antd` 相關的 linter 錯誤，可能與類型定義或項目配置有關，程式碼邏輯本身已按要求實現。
+*   後續：進一步完善顯示名稱的生成邏輯 (例如集成 `RESOURCE_DISPLAY_NAMES`)，並考慮權限分組展示。
+
+### 任務：優化 `PermissionSelector.tsx` 權限顯示名稱
+*   進度：
+    *   確認了 `web-admin/src/types/role.ts` 中 `RESOURCE_DISPLAY_NAMES` 和 `ACTION_DISPLAY_NAMES` 的存在及其結構。
+    *   修改了 `PermissionSelector.tsx` 中的 `getPermissionDisplayName` 函數。
+    *   現在該函數會導入並使用 `RESOURCE_DISPLAY_NAMES` 和 `ACTION_DISPLAY_NAMES` 來將 `resourceType` 和 `action` 翻譯成更友好的顯示文字，並提供了完整的回退機制。
+*   後續：可根據實際效果進一步調整顯示邏輯或分組。
+
+### 任務：準備整合 `PermissionSelector` 到角色表單中
+*   進度：
+    *   檢查發現 `RoleFormModal.tsx` 檔案不存在。
+    *   在 `web-admin/src/components/RoleManagement/` 目錄下創建了 `RoleFormModal.tsx`。
+    *   為 `RoleFormModal.tsx` 添加了基本的 React Functional Component 骨架，包含 Ant Design Modal 和 Form，定義了 Props (`visible`, `onCancel`, `onOk`, `initialData`)，並加入了角色名稱、描述、範圍、等級等表單欄位占位符，以及 `PermissionSelector` 的預留註解位置。
+*   注意：新創建的檔案也遇到 `antd` 相關的 linter 錯誤，與 `PermissionSelector.tsx` 情況類似。
+*   後續：將細化 `RoleFormModal.tsx` 的表單邏輯，並實際引入和配置 `PermissionSelector`。
+
+### 任務：將 `PermissionSelector` 整合到 `RoleFormModal.tsx`
+*   進度：
+    *   **`PermissionSelector.tsx` 修改**：
+        *   將 `selectedPermissions` prop 更名為 `value`。
+        *   更新了 `useEffect` 以監聽 `value` prop 的變化來同步內部 `checkedList` 狀態。
+        *   `value` 和 `onChange` props 在接口中設為可選，並為 `value` 提供了默認空數組。
+    *   **`RoleFormModal.tsx` 修改**：
+        *   成功引入 `PermissionSelector` 並取消了相關註解。
+        *   `RoleFormModalProps` 中新增了 `allPermissions: PermissionItem[]` prop，並可選地加入了 `isLoading` prop。
+        *   `useEffect` 鉤子中正確處理了 `initialData.permissions`，將其從 `PermissionItem[]` 映射為 ID 列表 (`string[]`) 並設置到表單的 `permissions` 欄位。
+        *   在 Modal 的 Form 中，於 `Form.Item name="permissions"` 內渲染了 `PermissionSelector`，並將 `allPermissions` prop 傳遞給它。`value` 和 `onChange` 由 `Form.Item` 自動處理。
+        *   定義了 `RoleFormValues` 介面來明確表單數據結構，並更新了 `onOk` prop 及 `handleOk` 函數以使用此類型。
+        *   從 `../../types/role` 導入了 `ROLE_SCOPES` 並應用於 Scope 選擇器。
+*   注意：兩個檔案中 `antd` 相關的 linter 錯誤依舊存在，需關注環境配置。
+*   後續：測試角色創建與編輯流程，實現 `tenantId` 和 `storeId` 的條件渲染邏輯。
+
+[2024-05-22 15:00:00] 任務 2.2 (角色管理): 員工列表頁前端核心邏輯修改方案完成 (web-admin/src/components/EmployeeManagement/EmployeeList.tsx)，使用者將手動更新。
+[2024-05-22 17:20:00] 任務 2.2 (角色管理): 查閱 RoleList.tsx, RolesPage.tsx, web-admin/src/types/role.ts, api-specs/roles.yaml。分析現狀並提出角色管理頁面相關組件 (types, service, RolesPage, RoleList, RoleFormModal, PermissionSelector) 的修改/實現建議。
+[2024-05-22 17:45:00] 任務 2.2 (角色管理): 成功創建 docs/specifications/PermissionSelector_Component_Spec.md 並寫入 PermissionSelector.tsx 組件規格。
+[2024-05-22 17:50:00] 任務 2.2 (角色管理): 成功創建 web-admin/src/components/RoleManagement/PermissionSelector.tsx 並填入基礎結構與 Props。
+[2024-05-23 10:30:00] 任務 2.2 (角色管理): 更新 web-admin/src/types/role.ts 中的 ROLE_SCOPES，添加了 { value: 'store', label: '店鋪角色' } 選項。
+[2024-05-23 10:35:00] 任務 2.2 (角色管理): 更新 web-admin/src/components/RoleManagement/RoleFormModal.tsx，移除了角色範圍選擇器中硬編碼的「店鋪 (Store)」選項，使其完全依賴 ROLE_SCOPES。
+[2024-05-23 11:00:00] 任務 2.2 (角色管理): 查閱 API 規格 (roles.yaml, openapi.yaml) 以釐清獲取所有可用權限的端點及創建/更新角色時 permissions 欄位的格式。
+[2024-05-23 11:30:00] 任務 2.2 (角色管理): 在 web-admin/src/types/role.ts 中新增 generateMockAllPermissions() 函數，用於前端臨時生成所有可用權限列表。
+[2024-05-23 11:35:00] 任務 2.2 (角色管理): 創建 web-admin/src/utils/roleTransformations.ts 並實現 transformPermissionIdsToApiObjects() 函數，用於將權限 ID 數組轉換為 API 所需的對象數組格式。
+[2024-05-23 12:00:00] 任務 2.2 (角色管理): 更新 web-admin/src/components/RoleManagement/RoleFormModal.tsx，實現了基於 'scope' 選擇動態顯示/隱藏 'tenantId' 和 'storeId' 輸入欄位，並處理其條件必填驗證及值的清空邏輯。

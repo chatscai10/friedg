@@ -8,16 +8,21 @@ const initialState: RoleState = {
   currentRole: null,
   loading: false,
   error: null,
-  saveLoading: false,
   deleteLoading: false,
-  saveError: null,
   deleteError: null,
+  createLoading: false,
+  createError: null,
+  updateLoading: false,
+  updateError: null,
   pagination: {
     currentPage: 1,
     pageSize: 10,
     totalItems: 0,
     totalPages: 1
-  }
+  },
+  searchTerm: '',
+  scopeFilter: '',
+  statusFilter: '',
 };
 
 // 異步 Thunks
@@ -69,7 +74,11 @@ export const createRole = createAsyncThunk(
       const response = await roleService.createRole(roleData);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error instanceof Error ? error.message : '創建角色失敗');
+      const errorMessage = error instanceof Error ? error.message : '創建角色失敗，請稍後再試。';
+      if ((error as any).response?.data?.message) {
+        return rejectWithValue((error as any).response.data.message);
+      }
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -77,12 +86,17 @@ export const createRole = createAsyncThunk(
 // 更新現有角色
 export const updateRole = createAsyncThunk(
   'roles/updateRole',
-  async ({ roleId, roleData }: { roleId: string; roleData: UpdateRolePayload }, { rejectWithValue }) => {
+  async (data: UpdateRolePayload & { roleId: string }, { rejectWithValue }) => {
     try {
+      const { roleId, ...roleData } = data;
       const response = await roleService.updateRole(roleId, roleData);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error instanceof Error ? error.message : '更新角色失敗');
+      const errorMessage = error instanceof Error ? error.message : '更新角色失敗，請稍後再試。';
+      if ((error as any).response?.data?.message) {
+        return rejectWithValue((error as any).response.data.message);
+      }
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -95,7 +109,11 @@ export const deleteRole = createAsyncThunk(
       await roleService.deleteRole(roleId);
       return roleId;
     } catch (error) {
-      return rejectWithValue(error instanceof Error ? error.message : '刪除角色失敗');
+      const errorMessage = error instanceof Error ? error.message : '刪除角色失敗，請稍後再試。';
+      if ((error as any).response?.data?.message) {
+        return rejectWithValue((error as any).response.data.message);
+      }
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -105,32 +123,33 @@ const roleSlice = createSlice({
   name: 'roles',
   initialState,
   reducers: {
-    // 清除當前選中的角色
     clearCurrentRole: (state) => {
       state.currentRole = null;
     },
-    // 清除錯誤
-    clearErrors: (state) => {
-      state.error = null;
-      state.saveError = null;
-      state.deleteError = null;
-    },
-    // 手動設置當前角色（用於編輯時）
     setCurrentRole: (state, action: PayloadAction<Role | null>) => {
       state.currentRole = action.payload;
     },
-    // 設置當前頁碼
     setCurrentPage: (state, action: PayloadAction<number>) => {
       state.pagination.currentPage = action.payload;
     },
-    // 設置每頁數量
     setPageSize: (state, action: PayloadAction<number>) => {
       state.pagination.pageSize = action.payload;
-      state.pagination.currentPage = 1; // 重置到第一頁
+      state.pagination.currentPage = 1;
+    },
+    clearCreateError: (state) => {
+      state.createError = null;
+    },
+    clearUpdateError: (state) => {
+      state.updateError = null;
+    },
+    clearDeleteError: (state) => {
+      state.deleteError = null;
+    },
+    clearGeneralError: (state) => {
+      state.error = null;
     }
   },
   extraReducers: (builder) => {
-    // 處理 fetchWorkspaceRoles
     builder
       .addCase(fetchWorkspaceRoles.pending, (state) => {
         state.loading = true;
@@ -145,90 +164,90 @@ const roleSlice = createSlice({
         state.error = action.payload as string;
       })
     
-    // 處理 fetchRoles
-      .addCase(fetchRoles.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(fetchRoles.fulfilled, (state, action) => {
-        const response = action.payload as RolesResponse;
-        state.roles = response.data;
-        if (response.pagination) {
-          state.pagination = response.pagination;
-        }
-        state.loading = false;
-      })
-      .addCase(fetchRoles.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      })
+    .addCase(fetchRoles.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    })
+    .addCase(fetchRoles.fulfilled, (state, action: PayloadAction<RolesResponse>) => {
+      state.roles = action.payload.data;
+      if (action.payload.pagination) {
+        state.pagination = action.payload.pagination;
+      }
+      state.loading = false;
+    })
+    .addCase(fetchRoles.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+    })
     
-    // 處理 fetchRoleById
-      .addCase(fetchRoleById.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(fetchRoleById.fulfilled, (state, action) => {
+    .addCase(fetchRoleById.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    })
+    .addCase(fetchRoleById.fulfilled, (state, action: PayloadAction<Role>) => {
+      state.currentRole = action.payload;
+      state.loading = false;
+    })
+    .addCase(fetchRoleById.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+    })
+    
+    .addCase(createRole.pending, (state) => {
+      state.createLoading = true;
+      state.createError = null;
+    })
+    .addCase(createRole.fulfilled, (state, action: PayloadAction<Role>) => {
+      state.createLoading = false;
+    })
+    .addCase(createRole.rejected, (state, action) => {
+      state.createLoading = false;
+      state.createError = action.payload as string;
+    })
+    
+    .addCase(updateRole.pending, (state) => {
+      state.updateLoading = true;
+      state.updateError = null;
+    })
+    .addCase(updateRole.fulfilled, (state, action: PayloadAction<Role>) => {
+      const index = state.roles.findIndex(role => role.roleId === action.payload.roleId);
+      if (index !== -1) {
+        state.roles[index] = action.payload;
+      }
+      if (state.currentRole && state.currentRole.roleId === action.payload.roleId) {
         state.currentRole = action.payload;
-        state.loading = false;
-      })
-      .addCase(fetchRoleById.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      })
+      }
+      state.updateLoading = false;
+    })
+    .addCase(updateRole.rejected, (state, action) => {
+      state.updateLoading = false;
+      state.updateError = action.payload as string;
+    })
     
-    // 處理 createRole
-      .addCase(createRole.pending, (state) => {
-        state.saveLoading = true;
-        state.saveError = null;
-      })
-      .addCase(createRole.fulfilled, (state, action) => {
-        state.roles.push(action.payload);
-        state.currentRole = action.payload;
-        state.saveLoading = false;
-      })
-      .addCase(createRole.rejected, (state, action) => {
-        state.saveLoading = false;
-        state.saveError = action.payload as string;
-      })
-    
-    // 處理 updateRole
-      .addCase(updateRole.pending, (state) => {
-        state.saveLoading = true;
-        state.saveError = null;
-      })
-      .addCase(updateRole.fulfilled, (state, action) => {
-        const index = state.roles.findIndex(role => role.roleId === action.payload.roleId);
-        if (index !== -1) {
-          state.roles[index] = action.payload;
-        }
-        state.currentRole = action.payload;
-        state.saveLoading = false;
-      })
-      .addCase(updateRole.rejected, (state, action) => {
-        state.saveLoading = false;
-        state.saveError = action.payload as string;
-      })
-    
-    // 處理 deleteRole
-      .addCase(deleteRole.pending, (state) => {
-        state.deleteLoading = true;
-        state.deleteError = null;
-      })
-      .addCase(deleteRole.fulfilled, (state, action) => {
-        state.roles = state.roles.filter(role => role.roleId !== action.payload);
-        if (state.currentRole && state.currentRole.roleId === action.payload) {
-          state.currentRole = null;
-        }
-        state.deleteLoading = false;
-      })
-      .addCase(deleteRole.rejected, (state, action) => {
-        state.deleteLoading = false;
-        state.deleteError = action.payload as string;
-      });
+    .addCase(deleteRole.pending, (state) => {
+      state.deleteLoading = true;
+      state.deleteError = null;
+    })
+    .addCase(deleteRole.fulfilled, (state, action: PayloadAction<string>) => {
+      state.deleteLoading = false;
+      state.deleteError = null;
+    })
+    .addCase(deleteRole.rejected, (state, action) => {
+      state.deleteLoading = false;
+      state.deleteError = action.payload as string;
+    });
   }
 });
 
-// 導出 actions 和 reducer
-export const { clearCurrentRole, clearErrors, setCurrentRole, setCurrentPage, setPageSize } = roleSlice.actions;
+export const { 
+  clearCurrentRole, 
+  setCurrentRole, 
+  setCurrentPage, 
+  setPageSize,
+  clearCreateError,
+  clearUpdateError,
+  clearDeleteError,
+  clearGeneralError
+} = roleSlice.actions;
+
 export default roleSlice.reducer; 

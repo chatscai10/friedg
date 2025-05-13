@@ -1,0 +1,23 @@
+# 組件規格：PermissionSelector
+
+- **檔案路徑:** `web-admin/src/components/RoleManagement/PermissionSelector.tsx`
+- **功能目標:**
+    - 提供一個清晰、易用的界面，用於展示所有可用的權限。
+    - 允許用戶勾選或取消勾選權限，以賦予或移除角色相應的操作許可。
+    - 能夠接收目前已選中的權限列表，並在界面上正確顯示。
+    - 當權限選擇變更時，能夠將最新的權限列表回傳給父組件。
+    - (進階) 考慮權限的分組或樹狀結構展示，以便於管理大量權限 (此點依據 `api-specs/permissions.yaml` 的結構設計)。
+- **接收屬性 (Props):**
+    - `availablePermissions: PermissionItem[]`: 所有可選的權限列表 (通常來自 `web-admin/src/types/role.ts` 中的 `PermissionItem` 或類似定義)。 `PermissionItem` 應包含權限的唯一識別碼 (ID)、可讀名稱，以及可能的層級關係所需欄位（如 `children`）。
+    - `selectedPermissions: string[]` (或 `number[]`, 依據權限ID的實際類型): 當前角色已擁有的權限ID列表。
+    - `onChange: (newSelectedPermissions: string[]) => void`: 當選擇變更時觸發的回調函數，回傳最新的權限ID列表。
+- **內部狀態 (State):**
+    - 可能需要管理當前界面上勾選的權限狀態，特別是使用如 Ant Design Tree 等受控組件時。
+- **建議技術/UI元件:**
+    - 可考慮使用 Ant Design 的 `Tree` 組件 (若權限有層級，並包含 `checkable` 及 `onCheck` 功能) 或 `Checkbox.Group` 與 `Checkbox` (若權限為扁平列表)。
+    - 使用 TypeScript 進行開發。
+- **預期用途:**
+    - 用於角色創建表單 (`RoleFormModal.tsx`) 中，讓管理者可以為新角色選擇權限。
+    - 用於角色編輯表單 (`RoleFormModal.tsx`) 中，讓管理者可以修改既有角色的權限。
+- **依賴類型定義:**
+    - `PermissionItem`: 應在 `web-admin/src/types/role.ts` (或相關類型定義檔案) 中明確定義。至少應包含 `id` (唯一鍵，`string` 或 `number`)、`name` (顯示名稱, `string`)，以及潛在的 `children: PermissionItem[]` (用於樹狀結構)。 
