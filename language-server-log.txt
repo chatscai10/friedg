@@ -342,3 +342,7 @@
 17:02:16 stream.go:85: Received: {"jsonrpc":"2.0","id":4,"method":"workspace/executeCommand","params":{"command":"activeDocument","arguments":["output:vscode.git.Git"]}}
 17:02:16 stream.go:37: Sent: {"jsonrpc":"2.0","result":null,"id":4}
 17:02:39 stream.go:85: Received: {"jsonrpc":"2.0","method":"$/setTraceNotification","params":{"value":"off"}}
+17:04:40 stream.go:85: Received: {"jsonrpc":"2.0","id":5,"method":"workspace/executeCommand","params":{"command":"activeDocument","arguments":["output:vscode.git.Git"]}}
+17:04:40 stream.go:37: Sent: {"jsonrpc":"2.0","result":null,"id":5}
+17:07:58 stream.go:85: Received: {"jsonrpc":"2.0","id":6,"method":"workspace/executeCommand","params":{"command":"activeDocument","arguments":["output:vscode.git.Git"]}}
+17:07:58 stream.go:37: Sent: {"jsonrpc":"2.0","result":null,"id":6}
