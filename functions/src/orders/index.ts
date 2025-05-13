@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { 
   createOrder,
@@ -6,7 +6,8 @@ import {
   queryOrders,
   updateOrderStatus,
   recordOrderPayment,
-  getOrderStats
+  getOrderStats,
+  getOrderStatusHistory
 } from './services/orderService';
 import { 
   generateReceipt, 
@@ -15,13 +16,6 @@ import {
 } from './services/receiptService';
 import { OrderStatus, PaymentMethod } from './types';
 import { hasPermission, getUserInfoFromClaims } from '../libs/rbac';
-
-// 確保Firebase Admin已初始化
-try {
-  admin.app();
-} catch (e) {
-  admin.initializeApp();
-}
 
 // 訂單API區域設置為台灣
 const region = 'asia-east1'; // 台灣區域
@@ -719,5 +713,82 @@ export const getOrderReceipt = functions.region(region).https.onRequest(async (r
     
     console.error('獲取收據錯誤:', error);
     res.status(500).json({ error: `獲取收據失敗: ${errorMessage}` });
+  }
+});
+
+/**
+ * 獲取訂單狀態歷史
+ */
+export const getOrderHistory = functions.region(region).https.onCall(async (data, context) => {
+  // 驗證用戶是否已登入
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      '需要登入才能獲取訂單狀態歷史'
+    );
+  }
+  
+  // 獲取用戶資訊
+  const userInfo = await getUserInfoFromClaims(context.auth.token);
+  
+  if (!userInfo) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      '無法獲取用戶權限資訊'
+    );
+  }
+  
+  try {
+    const { orderId } = data;
+    
+    if (!orderId) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '訂單ID不能為空'
+      );
+    }
+    
+    // 獲取訂單
+    const order = await getOrderById(orderId);
+    
+    if (!order) {
+      throw new functions.https.HttpsError(
+        'not-found',
+        '找不到指定的訂單'
+      );
+    }
+    
+    // 權限檢查
+    const permissionResult = await hasPermission(
+      userInfo,
+      { action: 'read', resource: 'orders', resourceId: orderId },
+      { storeId: order.storeId, tenantId: order.tenantId }
+    );
+    
+    if (!permissionResult.granted) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        permissionResult.reason || '您沒有權限查看此訂單歷史'
+      );
+    }
+    
+    // 獲取訂單狀態歷史
+    const history = await getOrderStatusHistory(order.tenantId, orderId);
+    
+    return history;
+  } catch (error) {
+    // 定義通用錯誤訊息
+    let errorMessage = "發生未知錯誤";
+    // 檢查 error 是否為 Error 的實例
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+    
+    throw new functions.https.HttpsError(
+      'internal',
+      `獲取訂單狀態歷史失敗: ${errorMessage}`
+    );
   }
 }); 

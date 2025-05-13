@@ -9,6 +9,9 @@ export * from './types';
 // 匯出常量定義
 export * from './constants';
 
+// 匯出工具函數
+export * from './utils';
+
 // 匯出核心權限解析層功能
 import { hasPermission, isRoleAtLeast, getMinimumRoleForAction } from './core/permissionResolver';
 export { hasPermission, isRoleAtLeast, getMinimumRoleForAction };
@@ -42,59 +45,84 @@ export function withPermissionCheck<T>(
   permissionCheck: (user: UserInfo) => Promise<boolean | PermissionQuery>
 ): (data: any, context: CallableContext) => Promise<T> {
   return async (data: any, context: CallableContext) => {
-    // 驗證用戶是否已登入
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
-        'unauthenticated',
-        '需要登入才能執行此操作'
-      );
-    }
-
-    // 獲取用戶資訊
-    const userInfo = await getUserInfoFromClaims(context.auth.token);
-    
-    if (!userInfo) {
-      throw new functions.https.HttpsError(
-        'permission-denied',
-        '無法獲取用戶權限資訊'
-      );
-    }
-
-    // 執行權限檢查
-    const checkResult = await permissionCheck(userInfo);
-    
-    // 如果檢查結果是布爾值
-    if (typeof checkResult === 'boolean') {
-      if (!checkResult) {
+    try {
+      // 驗證用戶是否已登入
+      if (!context.auth) {
         throw new functions.https.HttpsError(
-          'permission-denied',
-          '您沒有執行此操作的權限'
+          'unauthenticated',
+          '需要登入才能執行此操作'
         );
       }
-    } 
-    // 如果檢查結果是權限查詢
-    else {
-      const permissionResult = await hasPermission(
-        userInfo,
-        checkResult,
-        // 自動建立上下文
-        await buildPermissionContext(
+
+      // 獲取用戶資訊
+      const userInfo = await getUserInfoFromClaims(context.auth.token);
+      
+      if (!userInfo) {
+        console.error('無法獲取用戶權限資訊:', context.auth.uid);
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          '無法獲取用戶權限資訊，請確認帳號權限或重新登入'
+        );
+      }
+
+      // 記錄用戶嘗試訪問的資源，方便故障排除
+      if (process.env.NODE_ENV === 'development' || process.env.FUNCTIONS_EMULATOR === 'true') {
+        console.log(`用戶 ${userInfo.uid} (角色: ${userInfo.role}) 嘗試訪問資源，租戶ID: ${userInfo.tenantId || 'N/A'}`);
+      }
+
+      // 執行權限檢查
+      const checkResult = await permissionCheck(userInfo);
+      
+      // 如果檢查結果是布爾值
+      if (typeof checkResult === 'boolean') {
+        if (!checkResult) {
+          throw new functions.https.HttpsError(
+            'permission-denied',
+            '您沒有執行此操作的權限'
+          );
+        }
+      } 
+      // 如果檢查結果是權限查詢
+      else {
+        // 構建上下文
+        const context = await buildPermissionContext(
           checkResult.resource,
           checkResult.resourceId || '',
           data
-        )
-      );
-
-      if (!permissionResult.granted) {
-        throw new functions.https.HttpsError(
-          'permission-denied',
-          permissionResult.reason || '權限拒絕'
         );
-      }
-    }
 
-    // 執行實際的處理邏輯
-    return handler(data, context, userInfo);
+        // 檢查完整權限
+        const permissionResult = await hasPermission(
+          userInfo,
+          checkResult,
+          context
+        );
+
+        if (!permissionResult.granted) {
+          console.warn(`權限拒絕: ${userInfo.uid} 嘗試 ${checkResult.action} ${checkResult.resource}${checkResult.resourceId ? (' - ' + checkResult.resourceId) : ''} - ${permissionResult.reason}`);
+          throw new functions.https.HttpsError(
+            'permission-denied',
+            permissionResult.reason || '權限拒絕'
+          );
+        }
+      }
+
+      // 執行實際的處理邏輯
+      return handler(data, context, userInfo);
+    } catch (error) {
+      // 處理權限檢查過程中的錯誤
+      console.error('權限檢查過程中發生錯誤:', error);
+      
+      if (error instanceof functions.https.HttpsError) {
+        throw error; // 已經是格式化的錯誤，直接拋出
+      }
+      
+      // 其他未知錯誤
+      throw new functions.https.HttpsError(
+        'internal',
+        `權限檢查時發生內部錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
+      );
+    }
   };
 }
 

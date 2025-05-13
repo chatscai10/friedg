@@ -1,6 +1,6 @@
 {
     "source_dir": "D:/friedg",
-    "dest_dir": "D:/系統備份",
+    "dest_dir": "D:/分析",
     "excluded_exact": [
         "node_modules",
         ".git"
@@ -8,5 +8,63 @@
     "excluded_prefix": [
         "firebase-export-"
     ],
-    "append_timestamp": true
+    "excluded_suffix": [
+        ".map",
+        "_debug",
+        ".tmp",
+        "-debug",
+        ".log",
+        ".cache"
+    ],
+    "excluded_paths": [
+        "web-admin/.firebase",
+        "functions/lib",
+        "firebase-export-1746211654071QtVfqL",
+        "firebase-export-1746211287188S4pPQ3",
+        "專案備份",
+        "風格",
+        "functions/coverage",
+        "firebase-export-1746210189572DASsYd",
+        "設計文件",
+        "functions/.nyc_output",
+        "functions/logs"
+    ],
+    "max_file_size": 115343360,
+    "minimize_extensions": [
+        ".eot",
+        ".config",
+        ".png",
+        ".webp",
+        ".ppt",
+        ".woff2",
+        ".xls",
+        ".d.ts",
+        ".ico",
+        ".gif",
+        ".json",
+        ".csv",
+        ".xlsx",
+        ".pdf",
+        ".doc",
+        ".bmp",
+        ".yaml",
+        ".docx",
+        ".min.css",
+        ".yml",
+        ".jpg",
+        ".woff",
+        ".svg",
+        ".toml",
+        ".jpeg",
+        ".ini",
+        ".txt",
+        ".pptx",
+        ".min.js",
+        ".ttf",
+        ".map",
+        ".otf",
+        ".md"
+    ],
+    "append_timestamp": false,
+    "minimize_mode": true
 }

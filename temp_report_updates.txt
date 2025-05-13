@@ -1,0 +1,61 @@
+### 專案配置與環境更新摘要 (截至 2025年05月10日)
+
+#### 1. Firebase Emulator 推薦端口配置變更
+為避免與開發環境中其他常見應用程序或系統服務的潛在端口衝突，Firebase Emulator 的標準運行端口已進行如下調整：
+* **Auth Service:** 7099
+* **Functions Service:** 5002
+* **Firestore Service:** 8090
+* **Emulator UI:** 6001
+* **Emulator Hub:** 4400 (若啟用)
+* 相關 `firebase.json` 配置已更新，並建議設定 `singleProjectMode: true`。
+
+#### 2. 前端 API 客戶端配置 (`web-admin` 項目)
+* 前端應用程式 (`web-admin`) 的 API 客戶端 (`src/services/api.ts`) 現已配置為優先從環境變數 `VITE_API_BASE_URL` 讀取 API 基礎路徑。
+* 在本地開發環境中，應通過在 `web-admin` 目錄下的 `.env.development` 文件設置 `VITE_API_BASE_URL=http://127.0.0.1:5002/friedg/us-central1/api`，以確保正確指向本地運行的 Firebase Functions 模擬器 (端口 `5002`)。
+* 已為生產環境準備 `.env.production` 模板文件。
+* 相關的 `.gitignore` 文件已更新，以排除 `.env.*` 文件進入版本控制。
+
+#### 3. 後端 API 路由健壯性改進 (`functions/src/index.ts`)
+* 為提升 API 路由的健壯性和錯誤處理能力，已在 Express 應用中：
+    * 為 `/test` 相關路徑添加了通配符處理 `app.all('/test*', ...)`。
+    * 添加了全局未匹配路由處理器 `app.use('*', ...)`，用於返回標準的 404 錯誤響應。
+
+#### 4. 員工 (Employee) 管理模組 - API 設計與資料模型
+* **API 端點版本：** v1 (路徑: `/api/v1/employees`)
+* **核心功能：** 提供對員工資源的 CRUD (Create, Read, Update, Delete) 操作。
+* **分層架構 (`functions/src/employees/`)：**
+    * `employee.types.ts`: 定義 `Employee` 核心數據接口及相關請求/響應類型。
+    * `employee.validators.ts`: 使用 Zod 進行請求數據（body, params, query）的驗證。
+    * `employee.routes.ts`: 定義 Express 路由，集成驗證、認證 (`withAuthentication`)、租戶隔離 (`withTenantIsolation`) 和角色權限 (`withRole`) 中介軟體。
+    * `employee.handlers.ts`: 處理 HTTP 請求，調用服務層，並格式化 HTTP 響應。
+    * `employee.service.ts`: 封裝核心業務邏輯和與 Firestore 的數據庫交互（包括租戶數據隔離和基於角色的訪問控制邏輯）。
+* **`Employee` 資料模型核心欄位 (示例)：**
+    * `employeeId`: String (業務ID，也是 Firestore 文檔 ID)
+    * `userId`: String (可選, 關聯 Firebase Auth User ID)
+    * `tenantId`: String (強制, 租戶ID)
+    * `storeId`: String (主要所屬店鋪ID)
+    * `additionalStoreIds`: Array<String> (可選, 額外可訪問的店鋪ID)
+    * `firstName`: String
+    * `lastName`: String
+    * `displayName`: String (自動生成)
+    * `position`: String (職位)
+    * `employmentType`: Enum ('full_time', 'part_time', ...)
+    * `status`: Enum ('active', 'inactive', 'on_leave', 'terminated') (刪除操作為邏輯刪除，更新此狀態)
+    * `contactInfo`: Object (包含 email, phone 等)
+    * `createdAt`: Timestamp (Firestore Timestamp)
+    * `updatedAt`: Timestamp (Firestore Timestamp)
+    * `createdBy`: String (用戶UID)
+    * `updatedBy`: String (用戶UID)
+    * (其他欄位如 `hireDate`, `terminationDate`, `photoURL`, `schedule`, `employmentInfo`, `payInfo` 等根據 `employee.types.ts` 詳細定義)
+* **主要 API 端點：**
+    * `POST /api/v1/employees`: 創建新員工。
+    * `GET /api/v1/employees`: 獲取員工列表 (支持分頁、篩選、排序)。
+    * `GET /api/v1/employees/{employeeId}`: 根據員工ID獲取員工詳情。
+    * `PUT /api/v1/employees/{employeeId}`: 全量更新員工信息。
+    * `PATCH /api/v1/employees/{employeeId}`: (通過 `UpdateEmployeeSchema` 支持) 部分更新員工信息。
+    * `DELETE /api/v1/employees/{employeeId}`: 邏輯刪除員工。
+
+#### 5. Firebase 模擬器「多實例」警告
+* 在本地開發環境中啟動 Firebase 模擬器 (`firebase emulators:start`) 時，可能會持續出現「多實例 (multiple instances)」警告。
+* **當前狀態：** 儘管此警告存在，但所有核心模擬器服務（Auth, Functions, Firestore, UI）均能在其新配置的端口上成功啟動並正常運行，前端應用程式的功能和 API 通信不受影響。
+* **建議：** 暫時將此警告視為可接受的環境特性。如果未來此警告引發了實際的開發或運行問題，則需要投入時間進行更深層次的系統排查（例如，嘗試重啟操作系統，或使用如 Process Explorer 等專業工具來追蹤潛在的衝突源）。 

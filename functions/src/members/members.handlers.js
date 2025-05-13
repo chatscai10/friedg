@@ -1,5 +1,6 @@
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
+const z = require("zod"); // 添加 Zod 導入
 
 // Assuming Firestore is initialized elsewhere and db is available
 const db = admin.firestore();
@@ -150,6 +151,9 @@ exports.createMember = async (req, res) => {
       tenantId: tenantId,
       userId: null, // Initially null, to be linked later if needed
       isActive: true,
+      referralCode: null, // 初始為空，由generateReferralCode生成
+      referredBy: null, // 未被推薦
+      referralCount: 0, // 初始推薦計數為0
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       // Add other fields like membershipLevel, points, etc. later
@@ -498,6 +502,155 @@ exports.linkAuthToMember = async (req, res) => {
   } catch (error) {
     console.error(`Error linking auth for user ${uid} (phone: ${phoneNumber}):`, error);
     res.status(500).send({ message: "Failed to link account due to an internal error.", error: error.message });
+  }
+};
+
+// Zod schema for profile validation
+const updateProfileSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  email: z.string().email().optional().nullable(),
+  phone: z.string().min(8).max(15).optional(),
+});
+
+/**
+ * Handler to get current authenticated member's profile
+ * @param {import("express").Request} req Express request object with auth info.
+ * @param {import("express").Response} res Express response object.
+ * @returns {Promise<void>} A promise that resolves when the response is sent.
+ */
+exports.getMemberProfile = async (req, res) => {
+  try {
+    // Get memberId from authenticated user claims
+    const user = req.user;
+    if (!user || !user.memberId) {
+      return res.status(403).json({
+        status: "error",
+        message: "未授權：請先登入會員帳號",
+      });
+    }
+
+    const memberId = user.memberId;
+
+    // Query the member document
+    const memberRef = db.collection("members").doc(memberId);
+    const memberDoc = await memberRef.get();
+
+    if (!memberDoc.exists) {
+      return res.status(404).json({
+        status: "error",
+        message: "會員資料不存在",
+      });
+    }
+
+    const memberData = memberDoc.data();
+
+    // Format timestamps for consistent response
+    const formattedData = {
+      id: memberDoc.id,
+      ...memberData,
+      createdAt: memberData.createdAt ? memberData.createdAt.toDate().toISOString() : null,
+      updatedAt: memberData.updatedAt ? memberData.updatedAt.toDate().toISOString() : null,
+      lastLoginAt: memberData.lastLoginAt ? memberData.lastLoginAt.toDate().toISOString() : null,
+    };
+
+    return res.status(200).json({
+      status: "success",
+      data: formattedData,
+    });
+  } catch (error) {
+    console.error("Error fetching member profile:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "系統錯誤，無法取得會員資料",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Handler to update current authenticated member's profile
+ * @param {import("express").Request} req Express request object with auth info.
+ * @param {import("express").Response} res Express response object.
+ * @returns {Promise<void>} A promise that resolves when the response is sent.
+ */
+exports.updateMemberProfile = async (req, res) => {
+  try {
+    // Get memberId from authenticated user claims
+    const user = req.user;
+    if (!user || !user.memberId) {
+      return res.status(403).json({
+        status: "error",
+        message: "未授權：請先登入會員帳號",
+      });
+    }
+
+    const memberId = user.memberId;
+
+    // Validate request data using Zod
+    const validationResult = updateProfileSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({
+        status: "error",
+        message: "請求資料格式錯誤",
+        errors: validationResult.error.errors,
+      });
+    }
+
+    const validatedUpdateData = validationResult.data;
+
+    // Check if there are any fields to update
+    if (Object.keys(validatedUpdateData).length === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "未提供任何有效更新欄位",
+      });
+    }
+
+    // Fetch the member document to ensure it exists
+    const memberRef = db.collection("members").doc(memberId);
+    const memberDoc = await memberRef.get();
+
+    if (!memberDoc.exists) {
+      return res.status(404).json({
+        status: "error",
+        message: "會員資料不存在",
+      });
+    }
+
+    // Prepare update data with audit fields
+    const updateData = {
+      ...validatedUpdateData,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: user.uid,
+    };
+
+    // Update the member document
+    await memberRef.update(updateData);
+
+    // Fetch the updated document
+    const updatedDoc = await memberRef.get();
+    const updatedData = updatedDoc.data();
+
+    // Format timestamps for consistent response
+    const formattedData = {
+      id: updatedDoc.id,
+      ...updatedData,
+      createdAt: updatedData.createdAt ? updatedData.createdAt.toDate().toISOString() : null,
+      updatedAt: updatedData.updatedAt ? updatedData.updatedAt.toDate().toISOString() : null,
+      lastLoginAt: updatedData.lastLoginAt ? updatedData.lastLoginAt.toDate().toISOString() : null,
+    };
+
+    return res.status(200).json({
+      status: "success",
+      data: formattedData,
+    });
+  } catch (error) {
+    console.error("Error updating member profile:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "系統錯誤，無法更新會員資料",
+      error: error.message,
+    });
   }
 };
 

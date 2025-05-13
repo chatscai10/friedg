@@ -1,0 +1,3 @@
+[2025-05-09 23:50:15] 問題簡述: 修復Firebase環境配置問題與Vite環境變數處理 解決方式: 在package.json添加build:testing和deploy:testing腳本，確保構建時正確使用測試環境變數。修改firebaseConfig.ts，添加環境判斷邏輯(isTestingEnv, isDevelopment, isUsingEmulator)，確保測試環境正確連接Firebase模擬器，並在日誌中顯示環境變數狀態。通過為API密鑰添加備用值確保即使環境變數加載失敗也能使用硬編碼值。經測試，build:testing構建的應用程式成功識別測試環境並正確連接Firebase模擬器。
+
+[2025-05-10 00:15:30] 問題簡述: PWA圖示問題修復與頁面路徑優化 解決方式: 在public/assets/創建logo192.svg、logo512.svg和maskable_icon.svg替代原有的PNG圖標文件，修改manifest.json中的圖示路徑為SVG格式。確認MainLayout.tsx中已將未實作的路徑(/inventory、/schedules、/reports)正確標記為「開發中」並禁用點擊。確認App.tsx中根路徑(/)正確指向DashboardPage，顯示系統概覽而非訂單管理。所有修改經build:testing驗證均無顯示問題。 

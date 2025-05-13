@@ -1,0 +1,1100 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早系統 API - 店鋪管理模組
+  description: 吃雞排找不早系統的店鋪管理相關API
+  version: 1.0.0
+
+paths:
+  /stores:
+    get:
+      tags:
+        - stores
+      summary: 獲取店鋪列表
+      description: 獲取系統中的店鋪列表，支持分頁、排序和篩選
+      operationId: getStores
+      parameters:
+        - name: page
+          in: query
+          description: 頁碼 (從1開始)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: 每頁記錄數量
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: 排序欄位
+          schema:
+            type: string
+            enum: [createdAt, name, status]
+            default: createdAt
+        - name: order
+          in: query
+          description: 排序方向
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: status
+          in: query
+          description: 按狀態篩選
+          schema:
+            type: string
+            enum: [active, inactive, temporary_closed, permanently_closed]
+        - name: tenantId
+          in: query
+          description: 按租戶ID篩選
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: 搜尋關鍵字 (搜尋店鋪名稱、代碼、地址)
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: read
+      responses:
+        '200':
+          description: 成功獲取店鋪列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: './openapi.yaml#/components/schemas/Store'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    post:
+      tags:
+        - stores
+      summary: 創建新店鋪
+      description: 建立新店鋪記錄
+      operationId: createStore
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenantId
+                - name
+                - status
+              properties:
+                tenantId:
+                  type: string
+                  description: 所屬租戶ID
+                name:
+                  type: string
+                  description: 店鋪名稱
+                storeCode:
+                  type: string
+                  description: 店鋪代碼
+                description:
+                  type: string
+                  description: 店鋪描述
+                status:
+                  type: string
+                  enum: [active, inactive, temporary_closed, permanently_closed]
+                  description: 店鋪狀態
+                address:
+                  type: object
+                  properties:
+                    street:
+                      type: string
+                    city:
+                      type: string
+                    state:
+                      type: string
+                    postalCode:
+                      type: string
+                    country:
+                      type: string
+                location:
+                  type: object
+                  properties:
+                    latitude:
+                      type: number
+                      format: double
+                    longitude:
+                      type: number
+                      format: double
+                contactInfo:
+                  type: object
+                  properties:
+                    email:
+                      type: string
+                      format: email
+                    phone:
+                      type: string
+                    managerId:
+                      type: string
+                      description: 店長用戶ID
+                operatingHours:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      day:
+                        type: integer
+                        minimum: 0
+                        maximum: 6
+                        description: 星期幾 (0=星期日, 6=星期六)
+                      isOpen:
+                        type: boolean
+                      openTime:
+                        type: string
+                        pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                        description: 開店時間 (HH:MM 24小時制)
+                      closeTime:
+                        type: string
+                        pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                        description: 關店時間 (HH:MM 24小時制)
+                gpsFence:
+                  type: object
+                  description: GPS打卡圍欄設定
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: 是否啟用GPS打卡圍欄
+                    radius:
+                      type: number
+                      format: float
+                      description: 圍欄半徑（單位：公尺）
+                    center:
+                      type: object
+                      properties:
+                        latitude:
+                          type: number
+                          format: double
+                          description: 圍欄中心點緯度
+                        longitude:
+                          type: number
+                          format: double
+                          description: 圍欄中心點經度
+                printerSettings:
+                  type: object
+                  description: 雲端出單設定
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: 是否啟用雲端出單
+                    apiUrl:
+                      type: string
+                      format: uri
+                      description: 雲端印表機API網址
+                    apiKey:
+                      type: string
+                      description: 雲端印表機API金鑰
+                    printerType:
+                      type: string
+                      enum: [thermal, label, normal]
+                      description: 印表機類型
+                    templates:
+                      type: object
+                      description: 不同單據的模板設定
+                      properties:
+                        receipt:
+                          type: string
+                          description: 收據模板
+                        kitchen:
+                          type: string
+                          description: 廚房出單模板
+                        takeout:
+                          type: string
+                          description: 外帶單模板
+      responses:
+        '201':
+          description: 店鋪創建成功
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Store'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 店鋪代碼已存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /stores/{storeId}:
+    get:
+      tags:
+        - stores
+      summary: 獲取店鋪詳情
+      description: 獲取特定店鋪的詳細資訊
+      operationId: getStoreById
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: read
+      responses:
+        '200':
+          description: 成功獲取店鋪詳情
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Store'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - stores
+      summary: 更新店鋪
+      description: 更新特定店鋪的資訊
+      operationId: updateStore
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 店鋪名稱
+                storeCode:
+                  type: string
+                  description: 店鋪代碼
+                description:
+                  type: string
+                  description: 店鋪描述
+                status:
+                  type: string
+                  enum: [active, inactive, temporary_closed, permanently_closed]
+                  description: 店鋪狀態
+                address:
+                  type: object
+                  properties:
+                    street:
+                      type: string
+                    city:
+                      type: string
+                    state:
+                      type: string
+                    postalCode:
+                      type: string
+                    country:
+                      type: string
+                location:
+                  type: object
+                  properties:
+                    latitude:
+                      type: number
+                      format: double
+                    longitude:
+                      type: number
+                      format: double
+                contactInfo:
+                  type: object
+                  properties:
+                    email:
+                      type: string
+                      format: email
+                    phone:
+                      type: string
+                    managerId:
+                      type: string
+                      description: 店長用戶ID
+                operatingHours:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      day:
+                        type: integer
+                        minimum: 0
+                        maximum: 6
+                        description: 星期幾 (0=星期日, 6=星期六)
+                      isOpen:
+                        type: boolean
+                      openTime:
+                        type: string
+                        pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                        description: 開店時間 (HH:MM 24小時制)
+                      closeTime:
+                        type: string
+                        pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                        description: 關店時間 (HH:MM 24小時制)
+                gpsFence:
+                  type: object
+                  description: GPS打卡圍欄設定
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: 是否啟用GPS打卡圍欄
+                    radius:
+                      type: number
+                      format: float
+                      description: 圍欄半徑（單位：公尺）
+                    center:
+                      type: object
+                      properties:
+                        latitude:
+                          type: number
+                          format: double
+                          description: 圍欄中心點緯度
+                        longitude:
+                          type: number
+                          format: double
+                          description: 圍欄中心點經度
+                printerSettings:
+                  type: object
+                  description: 雲端出單設定
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: 是否啟用雲端出單
+                    apiUrl:
+                      type: string
+                      format: uri
+                      description: 雲端印表機API網址
+                    apiKey:
+                      type: string
+                      description: 雲端印表機API金鑰
+                    printerType:
+                      type: string
+                      enum: [thermal, label, normal]
+                      description: 印表機類型
+                    templates:
+                      type: object
+                      description: 不同單據的模板設定
+                      properties:
+                        receipt:
+                          type: string
+                          description: 收據模板
+                        kitchen:
+                          type: string
+                          description: 廚房出單模板
+                        takeout:
+                          type: string
+                          description: 外帶單模板
+      responses:
+        '200':
+          description: 店鋪更新成功
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Store'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 店鋪代碼已存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    delete:
+      tags:
+        - stores
+      summary: 刪除店鋪
+      description: 刪除特定店鋪。默認為邏輯刪除（僅標記為已刪除），超級管理員可使用hardDelete參數執行物理刪除。
+      operationId: deleteStore
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+        - name: hardDelete
+          in: query
+          required: false
+          description: 是否執行物理刪除（只有超級管理員可使用此選項）
+          schema:
+            type: boolean
+            default: false
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: delete
+      responses:
+        '204':
+          description: 店鋪刪除成功
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 店鋪有關聯數據，無法刪除
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /stores/{storeId}/status:
+    patch:
+      tags:
+        - stores
+      summary: 更新店鋪狀態
+      description: 單獨更新店鋪的狀態
+      operationId: updateStoreStatus
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive, temporary_closed, permanently_closed]
+                  description: 新狀態
+                reason:
+                  type: string
+                  description: 狀態變更原因
+      responses:
+        '200':
+          description: 店鋪狀態更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                  previousStatus:
+                    type: string
+                  updatedAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /stores/{storeId}/gps-fence:
+    get:
+      tags:
+        - stores
+      summary: 獲取店鋪GPS圍欄設定
+      description: 獲取特定店鋪的GPS打卡圍欄設定
+      operationId: getStoreGpsFence
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: read
+      responses:
+        '200':
+          description: 成功獲取GPS圍欄設定
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    description: 是否啟用GPS打卡圍欄
+                  radius:
+                    type: number
+                    format: float
+                    description: 圍欄半徑（單位：公尺）
+                  center:
+                    type: object
+                    properties:
+                      latitude:
+                        type: number
+                        format: double
+                        description: 圍欄中心點緯度
+                      longitude:
+                        type: number
+                        format: double
+                        description: 圍欄中心點經度
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - stores
+      summary: 更新店鋪GPS圍欄設定
+      description: 更新特定店鋪的GPS打卡圍欄設定
+      operationId: updateStoreGpsFence
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+                  description: 是否啟用GPS打卡圍欄
+                radius:
+                  type: number
+                  format: float
+                  description: 圍欄半徑（單位：公尺）
+                center:
+                  type: object
+                  required:
+                    - latitude
+                    - longitude
+                  properties:
+                    latitude:
+                      type: number
+                      format: double
+                      description: 圍欄中心點緯度
+                    longitude:
+                      type: number
+                      format: double
+                      description: 圍欄中心點經度
+      responses:
+        '200':
+          description: GPS圍欄設定更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  radius:
+                    type: number
+                    format: float
+                  center:
+                    type: object
+                    properties:
+                      latitude:
+                        type: number
+                        format: double
+                      longitude:
+                        type: number
+                        format: double
+                  updatedAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /stores/{storeId}/printer-config:
+    get:
+      tags:
+        - stores
+      summary: 獲取店鋪印表機配置
+      description: 獲取特定店鋪的印表機配置設定
+      operationId: getStorePrinterConfig
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: read
+      responses:
+        '200':
+          description: 成功獲取印表機配置
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  receiptPrinter:
+                    type: object
+                    description: 收據印表機配置
+                    properties:
+                      name:
+                        type: string
+                        description: 印表機名稱
+                      model:
+                        type: string
+                        description: 印表機型號
+                      ipAddress:
+                        type: string
+                        description: IP地址
+                      port:
+                        type: integer
+                        description: 連接埠
+                      connectionType:
+                        type: string
+                        enum: [usb, network, bluetooth]
+                        description: 連接類型
+                      enabled:
+                        type: boolean
+                        description: 是否啟用
+                  kitchenPrinters:
+                    type: object
+                    description: 廚房印表機配置
+                    additionalProperties:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: 印表機名稱
+                        model:
+                          type: string
+                          description: 印表機型號
+                        ipAddress:
+                          type: string
+                          description: IP地址
+                        port:
+                          type: integer
+                          description: 連接埠
+                        connectionType:
+                          type: string
+                          enum: [usb, network, bluetooth]
+                          description: 連接類型
+                        enabled:
+                          type: boolean
+                          description: 是否啟用
+                  settings:
+                    type: object
+                    description: 印表機一般設定
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權訪問
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+    
+    put:
+      tags:
+        - stores
+      summary: 更新店鋪印表機配置
+      description: 更新特定店鋪的印表機配置設定
+      operationId: updateStorePrinterConfig
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: stores
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                receiptPrinter:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: 印表機名稱
+                    model:
+                      type: string
+                      description: 印表機型號
+                    ipAddress:
+                      type: string
+                      description: IP地址
+                    port:
+                      type: integer
+                      description: 連接埠
+                    connectionType:
+                      type: string
+                      enum: [usb, network, bluetooth]
+                      description: 連接類型
+                    enabled:
+                      type: boolean
+                      description: 是否啟用
+                kitchenPrinters:
+                  type: object
+                  description: 廚房印表機配置
+                  additionalProperties:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: 印表機名稱
+                      model:
+                        type: string
+                        description: 印表機型號
+                      ipAddress:
+                        type: string
+                        description: IP地址
+                      port:
+                        type: integer
+                        description: 連接埠
+                      connectionType:
+                        type: string
+                        enum: [usb, network, bluetooth]
+                        description: 連接類型
+                      enabled:
+                        type: boolean
+                        description: 是否啟用
+                settings:
+                  type: object
+                  description: 印表機一般設定
+                  properties:
+                    autoPrint:
+                      type: boolean
+                      description: 自動列印
+                    printCustomerCopy:
+                      type: boolean
+                      description: 列印客戶聯
+                    printMerchantCopy:
+                      type: boolean
+                      description: 列印商家聯
+                    printLogo:
+                      type: boolean
+                      description: 列印商標
+                    printQRCode:
+                      type: boolean
+                      description: 列印QR碼
+                    fontSize:
+                      type: integer
+                      description: 字型大小
+      responses:
+        '200':
+          description: 印表機配置更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  receiptPrinter:
+                    type: object
+                  kitchenPrinters:
+                    type: object
+                  settings:
+                    type: object
+                  updatedAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+
+components:
+  schemas:
+    Store:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 店鋪ID
+        name:
+          type: string
+          description: 店鋪名稱
+        storeCode:
+          type: string
+          description: 店鋪代碼
+        status:
+          type: string
+          enum: [active, inactive, temporary_closed, permanently_closed]
+          description: 店鋪狀態
+        tenantId:
+          type: string
+          description: 租戶ID
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            city:
+              type: string
+            state:
+              type: string
+            postalCode:
+              type: string
+            country:
+              type: string
+        location:
+          type: object
+          properties:
+            latitude:
+              type: number
+              format: double
+            longitude:
+              type: number
+              format: double
+        contactInfo:
+          type: object
+          properties:
+            email:
+              type: string
+              format: email
+            phone:
+              type: string
+            contactPerson:
+              type: string
+              description: 聯絡人姓名
+        operatingHours:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: integer
+                minimum: 0
+                maximum: 6
+                description: 星期幾 (0=星期日, 6=星期六)
+              isOpen:
+                type: boolean
+              openTime:
+                type: string
+                pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                description: 開店時間 (HH:MM 24小時制)
+              closeTime:
+                type: string
+                pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+                description: 關店時間 (HH:MM 24小時制)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time 

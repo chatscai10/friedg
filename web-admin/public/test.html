@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API 測試頁面</title>
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 10px 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .url-display {
+            margin-top: 5px;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Firebase API 測試頁面</h1>
+    <p>這是一個簡單的頁面，用於測試Firebase Functions API是否正常工作</p>
+    
+    <div>
+        <button id="testApi">測試API根路徑</button>
+        <button id="testEndpoint1">測試 /test</button>
+        <button id="testEndpoint2">測試 /test/</button>
+        <button id="testEndpoint3">測試 /api/test</button>
+        <button id="testHealth">測試 /health</button>
+    </div>
+    
+    <h2>回應結果:</h2>
+    <div class="url-display" id="requestUrl"></div>
+    <pre id="result">尚未執行測試...</pre>
+    
+    <script>
+        async function fetchWithTimeout(url, options, timeout = 8000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal,
+                    mode: 'cors',  // 啟用CORS模式
+                    credentials: 'omit', // 不發送憑證
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                clearTimeout(id);
+                return response;
+            } catch (error) {
+                clearTimeout(id);
+                throw error;
+            }
+        }
+        
+        async function testEndpoint(url) {
+            document.getElementById('requestUrl').textContent = `請求URL: ${url}`;
+            document.getElementById('result').textContent = '正在請求中...';
+            
+            try {
+                const response = await fetchWithTimeout(url, {}, 10000);
+                const contentType = response.headers.get('content-type');
+                
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                } else {
+                    const text = await response.text();
+                    document.getElementById('result').textContent = `非JSON響應: ${text.substring(0, 500)}`;
+                }
+            } catch (error) {
+                document.getElementById('result').textContent = `錯誤: ${error.name} - ${error.message}\n\n技術詳情: ${error.stack || '無堆疊信息'}`;
+                console.error('API請求錯誤:', error);
+            }
+        }
+
+        // 改用XMLHttpRequest作為備用方案測試連接性
+        function testWithXHR(url) {
+            document.getElementById('requestUrl').textContent = `XHR請求URL: ${url}`;
+            document.getElementById('result').textContent = '正在XHR請求中...';
+            
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 10000; // 10秒超時
+            
+            xhr.onload = function() {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                    } catch (e) {
+                        document.getElementById('result').textContent = `響應解析錯誤: ${e.message}\n\n${xhr.responseText.substring(0, 500)}`;
+                    }
+                } else {
+                    document.getElementById('result').textContent = `HTTP錯誤: ${xhr.status} - ${xhr.statusText}\n\n${xhr.responseText.substring(0, 500)}`;
+                }
+            };
+            
+            xhr.onerror = function() {
+                document.getElementById('result').textContent = `網絡錯誤: 請求失敗`;
+            };
+            
+            xhr.ontimeout = function() {
+                document.getElementById('result').textContent = `請求超時: 超過10秒未收到響應`;
+            };
+            
+            xhr.open('GET', url, true);
+            xhr.send();
+        }
+        
+        document.getElementById('testApi').addEventListener('click', () => {
+            testWithXHR('http://localhost:5002/friedg/us-central1/api');
+        });
+        
+        document.getElementById('testEndpoint1').addEventListener('click', () => {
+            testWithXHR('http://localhost:5002/friedg/us-central1/api/test');
+        });
+        
+        document.getElementById('testEndpoint2').addEventListener('click', () => {
+            testWithXHR('http://localhost:5002/friedg/us-central1/api/test/');
+        });
+        
+        document.getElementById('testEndpoint3').addEventListener('click', () => {
+            testWithXHR('http://localhost:5002/friedg/us-central1/api/api/test');
+        });
+        
+        document.getElementById('testHealth').addEventListener('click', () => {
+            testWithXHR('http://localhost:5002/friedg/us-central1/api/health');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#355891" rx="32" ry="32"/>
+  <text x="256" y="240" font-size="72" text-anchor="middle" fill="white" font-family="Arial, sans-serif">吃雞排</text>
+  <text x="256" y="320" font-size="72" text-anchor="middle" fill="white" font-family="Arial, sans-serif">找不早</text>
+</svg> 

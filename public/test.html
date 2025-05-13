@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase靜態測試頁</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+        }
+        h1 {
+            color: #4285F4;
+        }
+        .info {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #e9f5ff;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #3367D6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Firebase靜態測試頁</h1>
+        <div class="info">
+            <p>這是一個測試頁面，用於檢查Firebase Hosting服務是否正常運行。</p>
+            <p>如果您能看到此頁面，表示基本的靜態文件服務功能正常。</p>
+        </div>
+        <div id="timestamp"></div>
+        <button onclick="testApi()">測試API連接</button>
+        <div id="api-result" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        // 顯示當前時間
+        document.getElementById('timestamp').innerText = '頁面載入時間: ' + new Date().toLocaleString();
+
+        // 測試API連接
+        function testApi() {
+            const apiResultElement = document.getElementById('api-result');
+            apiResultElement.innerText = '正在連接API...';
+            
+            fetch('http://127.0.0.1:5001/friedg/us-central1/api/test')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP錯誤，狀態碼: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    apiResultElement.innerHTML = `<p style="color: green;">API連接成功!</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                })
+                .catch(error => {
+                    apiResultElement.innerHTML = `<p style="color: red;">API連接失敗: ${error.message}</p>
+                    <p>請確保Firebase模擬器運行在端口5001上，並且有/api/test端點可用。</p>`;
+                    console.error('API測試錯誤:', error);
+                });
+        }
+    </script>
+</body>
+</html> 

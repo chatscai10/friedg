@@ -7,7 +7,7 @@ service cloud.firestore {
     
     // 檢查使用者是否已登入
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid != null;
     }
     
     // 檢查使用者是否有特定角色
@@ -22,22 +22,29 @@ service cloud.firestore {
     
     // 檢查使用者是否為超級管理員
     function isSuperAdmin() {
-      return hasRole('super_admin') || hasRoleLevelLE(0);
+      return isAuthenticated() && request.auth.token.role == "super_admin";
     }
     
     // 檢查使用者是否為租戶管理員
     function isTenantAdmin() {
-      return hasRole('tenant_admin') || hasRoleLevelLE(1);
+      return isAuthenticated() && request.auth.token.role == "tenant_admin";
     }
     
     // 檢查使用者是否為店長
     function isStoreManager() {
-      return hasRole('store_manager') || hasRoleLevelLE(2);
+      return isAuthenticated() && request.auth.token.role == "store_manager";
     }
     
-    // 檢查使用者是否為班長
-    function isShiftLeader() {
-      return hasRole('shift_leader') || hasRoleLevelLE(3);
+    // 檢查使用者是否為班長或以上階級
+    function isShiftLeaderOrAbove() {
+      return isAuthenticated() && 
+             (request.auth.token.roleLevel <= 4); // 4 為班長等級
+    }
+    
+    // 檢查使用者是否為資深員工或以上階級
+    function isSeniorStaffOrAbove() {
+      return isAuthenticated() && 
+             (request.auth.token.roleLevel <= 5); // 5 為資深員工等級
     }
     
     // 檢查使用者是否為資深員工
@@ -198,18 +205,18 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(request.resource.data) && 
-                       request.resource.data.level > 1)); // 租戶管理員不能創建比自己權限高的角色
+                       request.resource.data.level > request.auth.token.roleLevel)); // 租戶管理員不能創建比自己權限高的角色
       
       allow update: if isAuthenticated() && 
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data) && 
-                       resource.data.level > 1)); // 租戶管理員不能修改比自己權限高的角色
+                       resource.data.level > request.auth.token.roleLevel)); // 租戶管理員不能修改比自己權限高的角色
       
       allow delete: if isAuthenticated() && 
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data) && 
-                       resource.data.level > 1 && 
-                       !resource.data.isSystem)); // 不能刪除系統預設角色
+                       resource.data.level > request.auth.token.roleLevel && 
+                       !resource.data.isSystemRole)); // 不能刪除系統預設角色
     }
     
     // === 員工(employees)集合規則 === //
@@ -227,8 +234,8 @@ service cloud.firestore {
         return request.auth.uid == employeeId;
       }
       
-      function hasHigherRole(targetRoleLevel) {
-        return request.auth.token.roleLevel < targetRoleLevel;
+      function hasHigherRole(targetLevel) {
+        return request.auth.token.roleLevel <= targetLevel;
       }
       
       function canManageEmployee() {
@@ -247,7 +254,7 @@ service cloud.firestore {
         isSuperAdmin() || 
         (isTenantAdmin() && isEmployeeInSameTenant()) || 
         (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
-        (isShiftLeader() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
+        (isShiftLeaderOrAbove() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
         isEmployeeSelf()
       );
       
@@ -259,7 +266,7 @@ service cloud.firestore {
         (isStoreManager() && request.query.limit() <= 50 && 
          request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1 && 
          request.query.where('storeId', '==', request.auth.token.storeId).size() == 1) ||
-        (isShiftLeader() && request.query.limit() <= 30 && 
+        (isShiftLeaderOrAbove() && request.query.limit() <= 30 && 
          request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1 && 
          request.query.where('storeId', '==', request.auth.token.storeId).size() == 1)
       );
@@ -370,8 +377,8 @@ service cloud.firestore {
                      // 員工可以更新訂單
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data)) || 
-                      (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                      (isSeniorStaff() && isSameStore(resource.data) && isSameTenant(resource.data) && 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isSeniorStaffOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data) && 
                        // 資深員工只能更新訂單狀態
                        resource.data.status != 'cancelled') || 
                       (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data) && 
@@ -423,8 +430,8 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data)) || 
-                      (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                      (isSeniorStaff() && isSameStore(resource.data) && isSameTenant(resource.data)));
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isSeniorStaffOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
       
       allow delete: if isAuthenticated() && 
                      (isSuperAdmin() || 
@@ -432,8 +439,8 @@ service cloud.firestore {
                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)));
     }
     
-    // === 出勤記錄(attendances)集合規則 === //
-    match /attendances/{attendanceId} {
+    // === 出勤記錄(attendanceRecords)集合規則 === //
+    match /attendanceRecords/{attendanceId} {
       // 員工可以讀取自己的出勤記錄
       // 店長可以讀取和管理自己店鋪員工的出勤記錄
       // 租戶管理員可以讀取和管理自己租戶所有員工的出勤記錄
@@ -442,7 +449,7 @@ service cloud.firestore {
                    (isSuperAdmin() || 
                     (isTenantAdmin() && isSameTenant(resource.data)) || 
                     (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                    (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
                     resource.data.employeeId == request.auth.uid);
       
       allow create: if isAuthenticated() && 
@@ -453,13 +460,13 @@ service cloud.firestore {
                       (isSuperAdmin() || 
                        (isTenantAdmin() && isSameTenant(request.resource.data)) || 
                        (isStoreManager() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)) || 
-                       (isShiftLeader() && isSameStore(request.resource.data) && isSameTenant(request.resource.data))));
+                       (isShiftLeaderOrAbove() && isSameStore(request.resource.data) && isSameTenant(request.resource.data))));
       
       allow update: if isAuthenticated() && 
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data)) || 
                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                      (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)));
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
       
       allow delete: if isAuthenticated() && 
                      (isSuperAdmin() || 
@@ -487,7 +494,7 @@ service cloud.firestore {
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data)) || 
                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                      (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)));
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
       
       allow delete: if isAuthenticated() && 
                      (isSuperAdmin() || 
@@ -515,7 +522,7 @@ service cloud.firestore {
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data)) || 
                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                      (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)));
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
       
       allow delete: if isAuthenticated() && 
                      (isSuperAdmin() || 
@@ -543,7 +550,7 @@ service cloud.firestore {
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data)) || 
                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                      (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)));
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
       
       allow delete: if isAuthenticated() && 
                      (isSuperAdmin() || 
@@ -567,13 +574,13 @@ service cloud.firestore {
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(request.resource.data)) || 
                       (isStoreManager() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)) || 
-                      (isShiftLeader() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)));
+                      (isShiftLeaderOrAbove() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)));
       
       allow update: if isAuthenticated() && 
                      (isSuperAdmin() || 
                       (isTenantAdmin() && isSameTenant(resource.data)) || 
                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                      (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)));
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
       
       allow delete: if isAuthenticated() && 
                      (isSuperAdmin() || 
@@ -591,7 +598,7 @@ service cloud.firestore {
                    (isSuperAdmin() || 
                     (isTenantAdmin() && isSameTenant(resource.data)) || 
                     (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
-                    (isShiftLeader() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
                     resource.data.employeeId == request.auth.uid);
       
       allow create: if isAuthenticated() && 
@@ -619,6 +626,16 @@ service cloud.firestore {
                       (isSuperAdmin() || 
                        (isTenantAdmin() && isSameTenant(resource.data)) || 
                        (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data))));
+    }
+
+    // === auditLogs 集合規則 === //
+    match /auditLogs/{logId} {
+      // 僅 super_admin 可讀所有日誌，tenant_admin 只能讀自己租戶日誌
+      allow read: if isSuperAdmin() ||
+        (isTenantAdmin() && resource.data.tenantId == request.auth.token.tenantId);
+
+      // 嚴禁任何用戶直接寫入、更新、刪除（僅允許 Cloud Functions 服務帳號，若有特殊 claims 可加下列判斷）
+      allow create, update, delete: if false;
     }
 
     // === 默認規則 === //

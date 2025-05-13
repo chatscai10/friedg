@@ -27,6 +27,7 @@ import {
 } from '@mui/icons-material';
 import { MenuItem as MenuItemType, MenuItemStockStatus, MenuCategory } from '../../types/menuItem';
 import { createMenuItem, updateMenuItem, uploadMenuItemImage, getMenuCategories, MenuItemInput } from '../../services/menuService';
+import { getPlaceholderImage } from '../../utils/placeholder';
 
 interface MenuItemFormProps {
   menuItem?: MenuItemType; // 如果提供，則表示編輯模式
@@ -494,7 +495,7 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ menuItem, onCancel, onSubmi
               <CardMedia
                 component="img"
                 height="200"
-                image={imagePreview || 'https://via.placeholder.com/300x200?text=無圖片'}
+                image={imagePreview || getPlaceholderImage()}
                 alt="菜單項目圖片"
               />
             </Card>

@@ -9,8 +9,116 @@ import datetime # 匯入 datetime
 
 # --- 設定區 ---
 # 預設排除規則 - 如果設定檔沒有會用這些
-DEFAULT_EXCLUDED_FOLDERS_EXACT = {".git", "node_modules"}
-DEFAULT_EXCLUDED_FOLDERS_PREFIX = {"firebase-export-"}
+DEFAULT_EXCLUDED_FOLDERS_EXACT = {
+    ".git", "node_modules", ".firebase", "coverage", ".nyc_output", 
+    "logs", "lib", "public", "reports", "__tests__", "__mocks__",
+    "test", "tests", "testing", "integration", "fixtures", ".vscode",
+    ".idea", ".github", "assets", "dist", "build", "temp", "tmp",
+    "cache", ".cache", "snapshots"
+}
+DEFAULT_EXCLUDED_FOLDERS_PREFIX = {
+    "firebase-export-", "firebase-", "firestore-", "test-", 
+    "test_", "__test", "_test", "mock-", "mock_", 
+    "coverage-", "snapshot-", "temp-", "tmp-", "backup-", "bak-",
+    "log-", "logs-", "debug-", "cache-"
+}
+DEFAULT_EXCLUDED_FILES_SUFFIX = {
+    ".log", ".cache", ".tmp", "-debug", "_debug", ".map",
+    ".test.js", ".test.ts", ".test.jsx", ".test.tsx", 
+    ".spec.js", ".spec.ts", ".spec.jsx", ".spec.tsx",
+    "-test.js", "-test.ts", "_test.js", "_test.ts",
+    ".min.js", ".min.css", ".lock", ".backup", ".bak",
+    "-export", "_export", ".pdf", ".zip", ".gz", ".tar",
+    ".mp3", ".mp4", ".avi", ".mov", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+    ".ttf", ".woff", ".woff2", ".eot", ".otf",
+    ".d.ts.map", ".js.map", "package-lock.json", ".DS_Store"
+}
+
+# 特定檔案類型排除（用於極簡模式，只保留重要程式碼）
+DEFAULT_MINIMIZE_EXTENSIONS = {
+    # 編譯後檔案
+    ".min.js", ".min.css",
+    # 中繼檔案
+    ".d.ts", ".map", 
+    # 文件和圖片
+    ".md", ".txt", ".json", ".yml", ".yaml", ".toml", ".ini", ".config",
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".bmp", ".webp",
+    # 字體
+    ".ttf", ".woff", ".woff2", ".eot", ".otf",
+    # 其他資源
+    ".csv", ".xls", ".xlsx", ".doc", ".docx", ".pdf", ".ppt", ".pptx"
+}
+
+# 檔案大小限制 (位元組) - 大於此大小的檔案將被排除
+# 10MB = 10 * 1024 * 1024
+DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024
+
+# 預設排除特定路徑 (相對於來源資料夾根目錄的路徑)
+DEFAULT_EXCLUDED_PATHS = {
+    # 函數和測試相關
+    "functions/coverage", "functions/.nyc_output", "functions/logs", 
+    "functions/lib", "functions/public", "functions/functions",
+    "functions/src/types", "functions/src/middleware/__tests__",
+    "functions/src/libs/rbac/__tests__", 
+    
+    # 備份和導出
+    "web-admin/.firebase", "firebase-export-1746210189572DASsYd", 
+    "firebase-export-1746211287188S4pPQ3", "firebase-export-1746211654071QtVfqL",
+    
+    # 文檔和輔助資料夾
+    "專案備份", "設計文件", "風格", "docs", "api-specs", "reports",
+    
+    # web-admin 非核心部分
+    "web-admin/public/assets", "web-admin/src/mock-data",
+    "web-admin/src/assets", "web-admin/src/components/examples",
+    "web-admin/src/test", "web-admin/web-admin",
+    "web-admin/src/components/AttendanceManagement",
+    "web-admin/src/components/EmployeeManagement",
+    "web-admin/src/components/EquityManagement",
+    "web-admin/src/components/Inventory",
+    "web-admin/src/components/LeaveManagement",
+    "web-admin/src/components/RoleManagement",
+    "web-admin/src/components/Scheduling",
+    "web-admin/src/components/StoreManagement",
+    "web-admin/src/components/UserManagement",
+    "web-admin/src/pages/coupons",
+    "web-admin/src/pages/CRM",
+    "web-admin/src/pages/employee",
+    "web-admin/src/pages/EmployeeView",
+    "web-admin/src/pages/EquityManagement",
+    "web-admin/src/pages/Inventory",
+    "web-admin/src/pages/loyalty",
+    
+    # 冗餘項目
+    ".github", ".firebase", "tests/firestore-rules", 
+    "scripts", "public",
+    
+    # 函數庫冗餘部分
+    "functions/lib/ads", "functions/lib/attendance", "functions/lib/auth",
+    "functions/lib/communication", "functions/lib/coupons", "functions/lib/discovery",
+    "functions/lib/employees", "functions/lib/equity", "functions/lib/feedback",
+    "functions/lib/financial", "functions/lib/inventory", "functions/lib/leave",
+    "functions/lib/src", "functions/lib/libs", "functions/lib/members",
+    "functions/lib/menus", "functions/lib/middleware", "functions/lib/orders",
+    "functions/lib/payments", "functions/lib/payroll", "functions/lib/performance",
+    "functions/lib/printing", "functions/lib/referrals", "functions/lib/roles",
+    "functions/lib/scheduling", "functions/lib/scripts", "functions/lib/stores",
+    "functions/lib/superadmin", "functions/lib/test", "functions/lib/users",
+    
+    # 函數源碼非核心部分
+    "functions/src/ads", "functions/src/attendance", "functions/src/auth",
+    "functions/src/communication", "functions/src/coupons", "functions/src/crm",
+    "functions/src/discovery", "functions/src/employees", "functions/src/equity",
+    "functions/src/feedback", "functions/src/financial", "functions/src/inventory",
+    "functions/src/leave", "functions/src/loyalty", "functions/src/members",
+    "functions/src/performance", "functions/src/pickup", "functions/src/pos",
+    "functions/src/printing", "functions/src/referrals", "functions/src/roles",
+    "functions/src/scheduling", "functions/src/scripts", "functions/src/stores",
+    "functions/src/superadmin", "functions/src/users",
+    
+    # 根目錄非核心內容
+    "test", "tests", "src/test", "src/types", "src/validation"
+}
 # --- 設定區結束 ---
 
 # 設定檔名稱
@@ -19,9 +127,19 @@ CONFIG_FILE = "config.json"
 # 將排除列表轉換為小寫，方便比較 - 現在由 load_config 初始化
 EXCLUDED_FOLDERS_EXACT_LOWER = set()
 EXCLUDED_FOLDERS_PREFIX_LOWER = set()
+EXCLUDED_FILES_SUFFIX_LOWER = set()  # 新增檔案後綴排除集合
+EXCLUDED_PATHS_LOWER = set()  # 新增路徑排除集合
+MINIMIZE_EXTENSIONS_LOWER = set()  # 新增最小化模式排除檔案類型
 # 全域變數儲存原始大小寫的排除列表，用於編輯器
 excluded_exact_list = []
 excluded_prefix_list = []
+excluded_suffix_list = []  # 新增檔案後綴排除列表
+excluded_paths_list = []  # 新增路徑排除列表
+minimize_extensions_list = []  # 新增最小化模式排除檔案類型列表
+# 檔案大小限制
+max_file_size = DEFAULT_MAX_FILE_SIZE
+# 最小化模式開關 - 僅宣告變數，不初始化
+minimize_mode_var = None
 
 # --- 全域變數 ---
 source_dir_var = None
@@ -57,14 +175,46 @@ def get_actual_dest_dir():
     else:
         return base_dest_dir
 
-def is_excluded(folder_name):
-    """檢查資料夾名稱是否應該被排除 (使用全域小寫集合)"""
-    lower_name = folder_name.lower()
+def is_excluded(path, is_dir=False):
+    """檢查路徑、資料夾名稱或檔案名稱是否應該被排除 (使用全域小寫集合)"""
+    # 檢查是否是完整路徑而非單純檔名或資料夾名
+    if os.path.sep in path:
+        # 如果是完整路徑，取得路徑的最後一個部分(檔名或資料夾名)
+        name = os.path.basename(path)
+    else:
+        name = path
+    
+    lower_name = name.lower()
+    lower_path = path.lower()
+    
+    # 檢查完整路徑是否在排除路徑列表中
+    for excluded_path in EXCLUDED_PATHS_LOWER:
+        if lower_path == excluded_path or lower_path.startswith(excluded_path + os.path.sep):
+            return True
+            
+    # 檢查精確名稱排除
     if lower_name in EXCLUDED_FOLDERS_EXACT_LOWER:
         return True
+        
+    # 檢查前綴排除
     for prefix in EXCLUDED_FOLDERS_PREFIX_LOWER:
         if lower_name.startswith(prefix):
             return True
+            
+    # 檢查檔案後綴排除 (只有當不是目錄時)
+    if not is_dir:
+        for suffix in EXCLUDED_FILES_SUFFIX_LOWER:
+            if lower_name.endswith(suffix):
+                return True
+                
+        # 最小化模式時排除非關鍵檔案
+        if minimize_mode_var.get():
+            # 取得檔案副檔名
+            _, ext = os.path.splitext(lower_name)
+            # 如果有副檔名且在最小化排除列表中，則排除
+            if ext and ext in MINIMIZE_EXTENSIONS_LOWER:
+                return True
+                
     return False
 
 def select_directory(dir_var, title="選擇資料夾"):
@@ -153,11 +303,35 @@ def _start_file_calculation(ignore_exclusions, mode):
             for dirpath, dirs, files in os.walk(source_dir, topdown=True):
                 # --- 核心排除/完整邏輯 --- #
                 if not ignore_exclusions:
-                    # 只有在非忽略排除模式下才修改 dirs
-                    dirs[:] = [d for d in dirs if not is_excluded(d)]
+                    # 檢查相對路徑是否在排除列表中
+                    rel_dirpath = os.path.relpath(dirpath, source_dir)
+                    
+                    # 如果當前目錄本身被排除，則跳過其所有子目錄和文件
+                    if rel_dirpath != '.' and is_excluded(rel_dirpath, is_dir=True):
+                        dirs[:] = []  # 清空子目錄列表，避免繼續遍歷
+                        continue      # 跳過當前目錄
+                    
+                    # 只有在非忽略排除模式下才修改 dirs，過濾子目錄
+                    dirs[:] = [d for d in dirs if not is_excluded(d, is_dir=True)]
                 # --- 邏輯結束 --- #
 
                 for file in files:
+                    # 檢查檔案是否應被排除
+                    if not ignore_exclusions:
+                        # 構建檔案的相對路徑
+                        file_rel_path = os.path.join(os.path.relpath(dirpath, source_dir), file)
+                        if is_excluded(file) or is_excluded(file_rel_path):
+                            continue  # 排除符合條件的檔案
+                        
+                        # 檢查檔案大小是否超過限制
+                        source_path = os.path.join(dirpath, file)
+                        try:
+                            if os.path.getsize(source_path) > max_file_size:
+                                continue  # 排除大檔案
+                        except OSError:
+                            # 如果無法獲取檔案大小，則忽略這個錯誤並繼續
+                            pass
+                    
                     source_path = os.path.join(dirpath, file)
                     relative_path = os.path.relpath(source_path, source_dir)
                     dest_path = os.path.join(actual_dest_dir, relative_path)
@@ -182,9 +356,15 @@ def update_calculation_result(calculated_list, calculated_count):
     total_files_count = calculated_count
 
     mode_text = "(完整模式)" if last_calculation_mode == 'full' else "(排除模式)"
+    
+    # 顯示檔案數量和大小限制資訊
+    size_limit_mb = round(max_file_size / (1024 * 1024), 2)
 
     if total_files_count > 0:
-        status_label_var.set(f"計算完成 {mode_text}！總共需要複製 {total_files_count} 個檔案。可以開始複製。")
+        if total_files_count > 1000:
+            status_label_var.set(f"計算完成 {mode_text}！總共需要複製 {total_files_count} 個檔案。注意：檔案數量超過1000，請增加排除規則或減小檔案大小限制 (目前：{size_limit_mb} MB)。")
+        else:
+            status_label_var.set(f"計算完成 {mode_text}！總共需要複製 {total_files_count} 個檔案 (檔案大小限制：{size_limit_mb} MB)。可以開始複製。")
         copy_button.config(state=tk.NORMAL)
         if preview_button:
             preview_button.config(state=tk.NORMAL)
@@ -350,9 +530,9 @@ def show_file_preview():
 # --- 路徑與設定存取功能 ---
 def load_config():
     """載入設定檔 (路徑和排除規則)"""
-    global source_dir_var, dest_dir_var, excluded_exact_list, excluded_prefix_list
-    global EXCLUDED_FOLDERS_EXACT_LOWER, EXCLUDED_FOLDERS_PREFIX_LOWER
-    global append_timestamp_var # 包含時間戳記變數
+    global source_dir_var, dest_dir_var, excluded_exact_list, excluded_prefix_list, excluded_suffix_list, excluded_paths_list
+    global EXCLUDED_FOLDERS_EXACT_LOWER, EXCLUDED_FOLDERS_PREFIX_LOWER, EXCLUDED_FILES_SUFFIX_LOWER, EXCLUDED_PATHS_LOWER, MINIMIZE_EXTENSIONS_LOWER
+    global append_timestamp_var, max_file_size, minimize_extensions_list, minimize_mode_var # 包含時間戳記變數和檔案大小限制
 
     config = {}
     try:
@@ -376,24 +556,44 @@ def load_config():
     # 載入排除規則 (若無則使用預設值)
     excluded_exact_list = config.get('excluded_exact', list(DEFAULT_EXCLUDED_FOLDERS_EXACT))
     excluded_prefix_list = config.get('excluded_prefix', list(DEFAULT_EXCLUDED_FOLDERS_PREFIX))
+    excluded_suffix_list = config.get('excluded_suffix', list(DEFAULT_EXCLUDED_FILES_SUFFIX))
+    excluded_paths_list = config.get('excluded_paths', list(DEFAULT_EXCLUDED_PATHS))
+    
+    # 載入檔案大小限制
+    global max_file_size
+    max_file_size = config.get('max_file_size', DEFAULT_MAX_FILE_SIZE)
 
-    # 更新小寫集合供 is_excluded 使用
-    EXCLUDED_FOLDERS_EXACT_LOWER = {f.lower() for f in excluded_exact_list}
-    EXCLUDED_FOLDERS_PREFIX_LOWER = {p.lower() for p in excluded_prefix_list}
+    # 載入最小化模式排除檔案類型
+    minimize_extensions_list = config.get('minimize_extensions', list(DEFAULT_MINIMIZE_EXTENSIONS))
 
     # 載入時間戳記開關狀態
     if append_timestamp_var:
         append_timestamp_var.set(config.get('append_timestamp', False))
 
+    # 載入最小化模式開關
+    minimize_mode_var.set(config.get('minimize_mode', False))
+
+    # 更新小寫集合供 is_excluded 使用
+    EXCLUDED_FOLDERS_EXACT_LOWER = {f.lower() for f in excluded_exact_list}
+    EXCLUDED_FOLDERS_PREFIX_LOWER = {p.lower() for p in excluded_prefix_list}
+    EXCLUDED_FILES_SUFFIX_LOWER = {s.lower() for s in excluded_suffix_list}
+    EXCLUDED_PATHS_LOWER = {p.lower() for p in excluded_paths_list}
+    MINIMIZE_EXTENSIONS_LOWER = {m.lower() for m in minimize_extensions_list}
+
 def save_config():
     """儲存目前的設定 (路徑、排除規則和時間戳記開關)"""
-    global excluded_exact_list, excluded_prefix_list, append_timestamp_var # 包含時間戳記變數
+    global excluded_exact_list, excluded_prefix_list, excluded_suffix_list, excluded_paths_list, append_timestamp_var, max_file_size, minimize_extensions_list, minimize_mode_var # 包含時間戳記變數和檔案大小限制
     config = {
         'source_dir': source_dir_var.get(),
         'dest_dir': dest_dir_var.get(),
         'excluded_exact': excluded_exact_list,
         'excluded_prefix': excluded_prefix_list,
-        'append_timestamp': append_timestamp_var.get() if append_timestamp_var else False # 儲存開關狀態
+        'excluded_suffix': excluded_suffix_list,
+        'excluded_paths': excluded_paths_list,
+        'max_file_size': max_file_size,
+        'minimize_extensions': minimize_extensions_list,
+        'append_timestamp': append_timestamp_var.get() if append_timestamp_var else False, # 儲存開關狀態
+        'minimize_mode': minimize_mode_var.get() # 儲存最小化模式開關狀態
     }
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -406,8 +606,8 @@ def save_config():
 # --- 排除規則編輯器 --- #
 def show_exclusion_editor():
     """顯示排除規則編輯視窗"""
-    global excluded_exact_list, excluded_prefix_list
-    global EXCLUDED_FOLDERS_EXACT_LOWER, EXCLUDED_FOLDERS_PREFIX_LOWER
+    global excluded_exact_list, excluded_prefix_list, excluded_suffix_list, excluded_paths_list
+    global EXCLUDED_FOLDERS_EXACT_LOWER, EXCLUDED_FOLDERS_PREFIX_LOWER, EXCLUDED_FILES_SUFFIX_LOWER, EXCLUDED_PATHS_LOWER
 
     editor_window = tk.Toplevel(root)
     editor_window.title("編輯排除規則")
@@ -418,9 +618,11 @@ def show_exclusion_editor():
     # --- 內部 Helper 函式 ---
     def update_lower_sets():
         """根據目前的列表更新小寫集合"""
-        global EXCLUDED_FOLDERS_EXACT_LOWER, EXCLUDED_FOLDERS_PREFIX_LOWER
+        global EXCLUDED_FOLDERS_EXACT_LOWER, EXCLUDED_FOLDERS_PREFIX_LOWER, EXCLUDED_FILES_SUFFIX_LOWER, EXCLUDED_PATHS_LOWER
         EXCLUDED_FOLDERS_EXACT_LOWER = {f.lower() for f in excluded_exact_list}
         EXCLUDED_FOLDERS_PREFIX_LOWER = {p.lower() for p in excluded_prefix_list}
+        EXCLUDED_FILES_SUFFIX_LOWER = {s.lower() for s in excluded_suffix_list}
+        EXCLUDED_PATHS_LOWER = {p.lower() for p in excluded_paths_list}
 
     def add_item(entry_widget, listbox_widget, target_list):
         item = entry_widget.get().strip()
@@ -513,6 +715,48 @@ def show_exclusion_editor():
     prefix_remove_button = tk.Button(right_frame, text="移除選定", command=lambda: remove_selected(prefix_listbox, excluded_prefix_list))
     prefix_remove_button.pack(fill=tk.X)
 
+    # --- 檔案後綴排除 (右欄) ---
+    tk.Label(right_frame, text="排除檔案後綴:").pack(anchor='w')
+    suffix_list_frame = tk.Frame(right_frame)
+    suffix_list_frame.pack(fill=tk.BOTH, expand=True)
+    suffix_scrollbar = tk.Scrollbar(suffix_list_frame)
+    suffix_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    suffix_listbox = tk.Listbox(suffix_list_frame, yscrollcommand=suffix_scrollbar.set, selectmode=tk.EXTENDED)
+    suffix_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    suffix_scrollbar.config(command=suffix_listbox.yview)
+    for item in excluded_suffix_list:
+        suffix_listbox.insert(tk.END, item)
+
+    suffix_input_frame = tk.Frame(right_frame)
+    suffix_input_frame.pack(fill=tk.X, pady=5)
+    suffix_entry = tk.Entry(suffix_input_frame)
+    suffix_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+    suffix_add_button = tk.Button(suffix_input_frame, text="新增", command=lambda: add_item(suffix_entry, suffix_listbox, excluded_suffix_list))
+    suffix_add_button.pack(side=tk.LEFT)
+    suffix_remove_button = tk.Button(right_frame, text="移除選定", command=lambda: remove_selected(suffix_listbox, excluded_suffix_list))
+    suffix_remove_button.pack(fill=tk.X)
+
+    # --- 路徑排除 (右欄) ---
+    tk.Label(right_frame, text="排除路徑:").pack(anchor='w')
+    paths_list_frame = tk.Frame(right_frame)
+    paths_list_frame.pack(fill=tk.BOTH, expand=True)
+    paths_scrollbar = tk.Scrollbar(paths_list_frame)
+    paths_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    paths_listbox = tk.Listbox(paths_list_frame, yscrollcommand=paths_scrollbar.set, selectmode=tk.EXTENDED)
+    paths_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    paths_scrollbar.config(command=paths_listbox.yview)
+    for item in excluded_paths_list:
+        paths_listbox.insert(tk.END, item)
+
+    paths_input_frame = tk.Frame(right_frame)
+    paths_input_frame.pack(fill=tk.X, pady=5)
+    paths_entry = tk.Entry(paths_input_frame)
+    paths_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+    paths_add_button = tk.Button(paths_input_frame, text="新增", command=lambda: add_item(paths_entry, paths_listbox, excluded_paths_list))
+    paths_add_button.pack(side=tk.LEFT)
+    paths_remove_button = tk.Button(right_frame, text="移除選定", command=lambda: remove_selected(paths_listbox, excluded_paths_list))
+    paths_remove_button.pack(fill=tk.X)
+
     # --- 底部按鈕 --- #
     bottom_frame = tk.Frame(main_editor_frame)
     bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
@@ -524,11 +768,113 @@ def show_exclusion_editor():
     # --- 綁定 Enter 鍵 --- #
     exact_entry.bind("<Return>", lambda event: add_item(exact_entry, exact_listbox, excluded_exact_list))
     prefix_entry.bind("<Return>", lambda event: add_item(prefix_entry, prefix_listbox, excluded_prefix_list))
+    suffix_entry.bind("<Return>", lambda event: add_item(suffix_entry, suffix_listbox, excluded_suffix_list))
+    paths_entry.bind("<Return>", lambda event: add_item(paths_entry, paths_listbox, excluded_paths_list))
 
     # --- 等待視窗關閉 ---
     root.wait_window(editor_window)
 
+# --- 檔案大小限制編輯框 ---
+def show_size_limit_dialog():
+    """顯示檔案大小限制設定對話框"""
+    global max_file_size
+    
+    size_dialog = tk.Toplevel(root)
+    size_dialog.title("設定檔案大小限制")
+    size_dialog.geometry("400x200")
+    size_dialog.transient(root)
+    size_dialog.grab_set()
+    
+    # 單位轉換函數
+    def bytes_to_mb(bytes_value):
+        """轉換位元組為MB，四捨五入到小數點後兩位"""
+        return round(bytes_value / (1024 * 1024), 2)
+    
+    def mb_to_bytes(mb_value):
+        """轉換MB為位元組"""
+        return int(mb_value * 1024 * 1024)
+    
+    # 計算當前值的MB表示
+    current_mb = bytes_to_mb(max_file_size)
+    
+    # 創建可變值
+    mb_var = tk.DoubleVar(value=current_mb)
+    
+    # 創建說明標籤
+    tk.Label(size_dialog, text="設定檔案大小上限 (MB)：", pady=10).pack()
+    
+    # 創建輸入框
+    size_entry = tk.Entry(size_dialog, textvariable=mb_var, width=10)
+    size_entry.pack(pady=5)
+    
+    # 創建說明文本
+    tk.Label(size_dialog, text="超過此大小的檔案將被排除不複製\n建議值: 5-20 MB", pady=10).pack()
+    
+    # 創建按鈕框架
+    button_frame = tk.Frame(size_dialog)
+    button_frame.pack(pady=20)
+    
+    # 保存按鈕
+    def save_size():
+        try:
+            # 獲取輸入值並轉換
+            mb_value = float(mb_var.get())
+            if mb_value <= 0:
+                messagebox.showerror("錯誤", "檔案大小必須大於 0 MB", parent=size_dialog)
+                return
+                
+            global max_file_size
+            max_file_size = mb_to_bytes(mb_value)
+            save_config()  # 保存到設定檔
+            
+            # 如果先前有計算過，提示需要重新計算
+            if total_files_count > 0 or files_to_copy_list:
+                reset_calculation()
+                status_label_var.set("檔案大小限制已變更，請重新計算檔案數量。")
+                
+            size_dialog.destroy()
+            
+        except ValueError:
+            messagebox.showerror("錯誤", "請輸入有效的數字", parent=size_dialog)
+    
+    save_button = tk.Button(button_frame, text="確定", command=save_size)
+    save_button.pack(side=tk.LEFT, padx=10)
+    
+    # 取消按鈕
+    cancel_button = tk.Button(button_frame, text="取消", command=size_dialog.destroy)
+    cancel_button.pack(side=tk.LEFT, padx=10)
+    
+    # 綁定 Enter 鍵
+    size_entry.bind("<Return>", lambda event: save_size())
+    
+    # 等待對話框關閉
+    root.wait_window(size_dialog)
 
+# --- 在界面中添加設置檔案大小限制的按鈕 ---
+
+# 主界面中添加檔案大小限制按鈕
+def create_interface():
+    # 這裡添加到指定位置的界面代碼
+    # 一般在按鈕區或者設置區添加
+    global editor_button, size_limit_button
+    
+    # 先取得原先的編輯規則按鈕
+    # 如果已經存在了，我們不需要重複創建
+    if 'size_limit_button' in globals() and size_limit_button:
+        return
+    
+    # 假設編輯規則按鈕在 button_frame 中
+    if 'editor_button' in globals() and editor_button:
+        # 尋找編輯規則按鈕的父組件
+        parent = editor_button.master
+        
+        # 在同一個父組件中創建檔案大小限制按鈕
+        size_limit_button = tk.Button(parent, text="設定檔案大小限制", command=show_size_limit_dialog)
+        size_limit_button.pack(side=tk.LEFT, padx=5)
+
+# 修改現有界面添加按鈕
+# 在 GUI 設定部分調用
+size_limit_button = None
 
 # --- GUI 設定 ---
 root = tk.Tk()
@@ -541,6 +887,8 @@ status_label_var = tk.StringVar()
 
 # --- 新增：時間戳記開關變數 --- #
 append_timestamp_var = tk.BooleanVar()
+# --- 新增：最小化模式開關變數 --- #
+minimize_mode_var = tk.BooleanVar()
 # --- 新增結束 --- #
 
 # 載入設定檔 (路徑、排除規則和時間戳記狀態)
@@ -583,11 +931,22 @@ preview_button.pack(side=tk.LEFT, padx=5)
 editor_button = tk.Button(button_frame, text="編輯排除規則", command=show_exclusion_editor)
 editor_button.pack(side=tk.LEFT, padx=5)
 
+# 檔案大小限制按鈕
+size_limit_button = tk.Button(button_frame, text="設定檔案大小限制", command=show_size_limit_dialog)
+size_limit_button.pack(side=tk.LEFT, padx=5)
+
 # --- 新增：時間戳記 Checkbutton --- #
 timestamp_check = tk.Checkbutton(main_frame, text="目標資料夾附加時間戳記 (例如：目標_YYYYMMDD_HHMMSS)",
                                  variable=append_timestamp_var,
                                  command=save_config) # 點擊即儲存狀態
 timestamp_check.pack(pady=5, anchor='w')
+# --- 新增結束 --- #
+
+# --- 新增：最小化模式 Checkbutton --- #
+minimize_check = tk.Checkbutton(main_frame, text="最小化模式 (僅保留核心程式碼，排除所有文件、圖片和多數資源檔)",
+                             variable=minimize_mode_var,
+                             command=save_config) # 點擊即儲存狀態
+minimize_check.pack(pady=5, anchor='w')
 # --- 新增結束 --- #
 
 # 進度條

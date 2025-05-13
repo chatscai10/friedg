@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -18,14 +19,15 @@ import {
   CircularProgress,
   Alert,
   Snackbar,
+  SelectChangeEvent
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { zhTW } from 'date-fns/locale';
 import { ArrowBack as ArrowBackIcon, Save as SaveIcon } from '@mui/icons-material';
-import { createEmployee, updateEmployee } from '../../services/employeeService';
-import { Employee } from '../../types/employee';
+import { createEmployee, updateEmployee, getEmployeeById } from '../../services/employeeService';
+import { Employee, EmploymentType, EmployeeStatus } from '../../types/employee';
 
 // 星期幾選項
 const daysOfWeek = [
@@ -53,22 +55,41 @@ interface EmployeeFormProps {
   onSuccess?: () => void;
 }
 
-const EmployeeForm: React.FC<EmployeeFormProps> = ({ isEdit = false, employeeId, employeeData, onCancel, onSuccess }) => {
-  const [formData, setFormData] = useState(employeeData || {
+// 擴展 Employee 類型，增加扁平化的欄位
+interface EmployeeFormData extends Partial<Employee> {
+  phone: string;
+  emergencyContact: string;
+  emergencyPhone: string;
+  preferredShifts: string[];
+  maxHoursPerWeek: number;
+  daysUnavailable: number[];
+  hourlyRate: string;
+  salaryType: string;
+  bankAccount: string;
+}
+
+const EmployeeForm: React.FC<EmployeeFormProps> = ({ isEdit: isEditProp, employeeId: employeeIdProp, employeeData: initialEmployeeData, onCancel, onSuccess }) => {
+  const params = useParams();
+  const navigate = useNavigate();
+  const employeeId = employeeIdProp || params.id;
+  const isEdit = isEditProp || !!employeeId;
+  
+  const [isLoading, setIsLoading] = useState(isEdit && !initialEmployeeData);
+  const [formData, setFormData] = useState<EmployeeFormData>({
     firstName: '',
     lastName: '',
     position: '',
-    employmentType: '',
-    status: '',
+    employmentType: '' as EmploymentType,
+    status: '' as EmployeeStatus,
     storeId: '',
-    hireDate: null,
-    terminationDate: null,
+    hireDate: undefined,
+    terminationDate: undefined,
     phone: '',
     emergencyContact: '',
     emergencyPhone: '',
-    preferredShifts: [] as string[],
+    preferredShifts: [],
     maxHoursPerWeek: 40,
-    daysUnavailable: [] as number[],
+    daysUnavailable: [],
     hourlyRate: '',
     salaryType: '',
     bankAccount: '',
@@ -79,8 +100,57 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isEdit = false, employeeId,
   const [apiError, setApiError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // 在編輯模式下載入員工資料
+  useEffect(() => {
+    // 如果是編輯模式且有提供 employeeId，但沒有初始數據
+    if (isEdit && employeeId && !initialEmployeeData) {
+      const fetchEmployeeData = async () => {
+        setIsLoading(true);
+        try {
+          const employeeData = await getEmployeeById(employeeId);
+          
+          // 將嵌套資料扁平化
+          setFormData({
+            ...employeeData,
+            phone: employeeData.contactInfo?.phone || '',
+            emergencyContact: employeeData.contactInfo?.emergencyContact || '',
+            emergencyPhone: employeeData.contactInfo?.emergencyPhone || '',
+            preferredShifts: employeeData.schedule?.preferredShifts || [],
+            maxHoursPerWeek: employeeData.schedule?.maxHoursPerWeek || 40,
+            daysUnavailable: employeeData.schedule?.daysUnavailable || [],
+            hourlyRate: employeeData.payInfo?.hourlyRate?.toString() || '',
+            salaryType: employeeData.payInfo?.salaryType || '',
+            bankAccount: employeeData.payInfo?.bankAccount || '',
+          });
+        } catch (error) {
+          console.error('載入員工資料失敗:', error);
+          setApiError('載入員工資料時發生錯誤，請稍後再試。');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchEmployeeData();
+    } else if (initialEmployeeData) {
+      // 如果有提供初始數據，則直接使用
+      // 將嵌套資料扁平化
+      setFormData({
+        ...initialEmployeeData,
+        phone: initialEmployeeData.contactInfo?.phone || '',
+        emergencyContact: initialEmployeeData.contactInfo?.emergencyContact || '',
+        emergencyPhone: initialEmployeeData.contactInfo?.emergencyPhone || '',
+        preferredShifts: initialEmployeeData.schedule?.preferredShifts || [],
+        maxHoursPerWeek: initialEmployeeData.schedule?.maxHoursPerWeek || 40,
+        daysUnavailable: initialEmployeeData.schedule?.daysUnavailable || [],
+        hourlyRate: initialEmployeeData.payInfo?.hourlyRate?.toString() || '',
+        salaryType: initialEmployeeData.payInfo?.salaryType || '',
+        bankAccount: initialEmployeeData.payInfo?.bankAccount || '',
+      });
+    }
+  }, [isEdit, employeeId, initialEmployeeData]);
+
   // 處理文本輸入變化
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }> | SelectChangeEvent<string>) => {
     const { name, value } = event.target;
     setFormData({
       ...formData,
@@ -201,7 +271,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isEdit = false, employeeId,
         setSuccessMessage('員工資料已成功更新！');
       } else {
         // 創建新員工
-        await createEmployee(employeeDataToSubmit as any);
+        await createEmployee(employeeDataToSubmit as Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>);
         setSuccessMessage('新員工已成功創建！');
       }
       
@@ -209,6 +279,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isEdit = false, employeeId,
       setTimeout(() => {
         if (onSuccess) {
           onSuccess();
+        } else {
+          // 如果沒有提供 onSuccess 回調，則導航回列表頁
+          navigate('/employees');
         }
       }, 1500);
     } catch (error) {
@@ -219,17 +292,38 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isEdit = false, employeeId,
     }
   };
 
+  // 返回按鈕處理函數
+  const handleBack = () => {
+    if (onCancel) {
+      onCancel();
+    } else {
+      navigate('/employees');
+    }
+  };
+
   // 關閉成功消息
   const handleCloseSuccessMessage = () => {
     setSuccessMessage(null);
   };
+
+  // 如果正在載入數據，顯示載入中
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress color="primary" />
+        <Typography variant="h6" sx={{ ml: 2 }}>
+          載入中...
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={onCancel}
+          onClick={handleBack}
           sx={{ mr: 2 }}
         >
           返回
@@ -533,7 +627,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isEdit = false, employeeId,
               <Button
                 variant="outlined"
                 color="inherit"
-                onClick={onCancel}
+                onClick={handleBack}
                 disabled={isSubmitting}
               >
                 取消

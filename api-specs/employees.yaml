@@ -86,25 +86,25 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '../openapi.yaml#/components/schemas/PaginatedResponse'
+                  - $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
                   - type: object
                     properties:
                       data:
                         type: array
                         items:
-                          $ref: '../openapi.yaml#/components/schemas/Employee'
+                          $ref: './openapi.yaml#/components/schemas/Employee'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權訪問
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
     
     post:
       tags:
@@ -212,31 +212,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Employee'
+                $ref: './openapi.yaml#/components/schemas/Employee'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權執行此操作
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '409':
           description: 員工記錄已存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /employees/{employeeId}:
     get:
@@ -264,25 +264,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Employee'
+                $ref: './openapi.yaml#/components/schemas/Employee'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權訪問此員工資訊
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 員工不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
     
     put:
       tags:
@@ -383,31 +383,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Employee'
+                $ref: './openapi.yaml#/components/schemas/Employee'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權更新此員工
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 員工不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
     
     delete:
       tags:
@@ -447,19 +447,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權刪除此員工
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 員工不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /employees/{employeeId}/status:
     put:
@@ -514,31 +514,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Employee'
+                $ref: './openapi.yaml#/components/schemas/Employee'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權更新此員工狀態
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 員工不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /employees/{employeeId}/transfer:
     post:
@@ -591,37 +591,37 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Employee'
+                $ref: './openapi.yaml#/components/schemas/Employee'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權執行調職操作
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 員工不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '409':
           description: 目標店鋪不存在或非同一租戶
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /employees/bulk-import:
     post:
@@ -711,16 +711,272 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權執行批量導入
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error' 
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /employees/{employeeId}/role:
+    patch:
+      tags:
+        - employees
+      summary: 更新員工角色
+      description: 更新特定員工的角色和權限等級
+      operationId: updateEmployeeRole
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          description: 員工ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: update
+        resourceId: '{employeeId}'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+                - roleLevel
+              properties:
+                role:
+                  type: string
+                  description: 系統登入角色
+                  enum: [admin, staff]
+                roleLevel:
+                  type: integer
+                  description: 權限等級（數字越大權限越高）
+                  minimum: 1
+                  maximum: 10
+                reason:
+                  type: string
+                  description: 角色變更原因
+      responses:
+        '200':
+          description: 員工角色更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  role:
+                    type: string
+                  roleLevel:
+                    type: integer
+                  previousRole:
+                    type: string
+                  previousRoleLevel:
+                    type: integer
+                  updatedAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /employees/{employeeId}/assign-stores:
+    put:
+      tags:
+        - employees
+      summary: 分配員工至多店鋪
+      description: 將員工分配到多個店鋪（跨店分派功能）
+      operationId: assignEmployeeToStores
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          description: 員工ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assignedStores
+              properties:
+                assignedStores:
+                  type: array
+                  items:
+                    type: string
+                  description: 員工可工作的店鋪ID列表
+                isPrimaryStoreChanged:
+                  type: boolean
+                  description: 是否將首個店鋪設為主店鋪
+                  default: false
+                reason:
+                  type: string
+                  description: 分派原因
+      responses:
+        '200':
+          description: 店鋪分派成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  storeId:
+                    type: string
+                    description: 主要店鋪ID
+                  assignedStores:
+                    type: array
+                    items:
+                      type: string
+                    description: 已分派的店鋪ID列表
+                  updatedAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /employees/{employeeId}/primary-store:
+    patch:
+      tags:
+        - employees
+      summary: 變更員工主要店鋪
+      description: 設定員工的主要所屬店鋪
+      operationId: updateEmployeePrimaryStore
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          description: 員工ID
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      x-rbac:
+        resourceType: employees
+        action: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - storeId
+              properties:
+                storeId:
+                  type: string
+                  description: 新的主要店鋪ID
+                reason:
+                  type: string
+                  description: 變更原因
+      responses:
+        '200':
+          description: 主要店鋪更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  storeId:
+                    type: string
+                  previousStoreId:
+                    type: string
+                  updatedAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '403':
+          description: 無權執行此操作
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 員工不存在或店鋪不存在
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 指定店鋪不在員工的分派店鋪清單中
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error' 

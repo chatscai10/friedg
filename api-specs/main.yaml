@@ -4,6 +4,14 @@ info:
   description: |
     吃雞排找不早系統的完整API文檔，包含所有功能模組。
     本API遵循RESTful設計原則，支援JWT認證，並基於RBAC權限控制。
+    
+    ## 租戶ID(tenantId)處理原則
+    本系統採用多租戶架構，大部分API都需要指定租戶上下文：
+    1. 查詢列表時：通過查詢參數 `?tenantId=xxx` 指定要查詢的租戶數據
+    2. 創建資源時：在請求體中提供 `tenantId` 字段
+    3. 資源訪問控制：系統會根據用戶所屬租戶和RBAC權限自動過濾數據，確保用戶只能訪問其有權訪問的租戶數據
+    
+    未來版本可能會改為使用路徑參數(例如 `/tenants/{tenantId}/resources`)以更符合RESTful設計。
   version: 1.0.0
   contact:
     name: 吃雞排找不早系統開發團隊
@@ -11,77 +19,107 @@ info:
 
 # 引用主要OpenAPI定義文件
 components:
-  $ref: 'openapi.yaml#/components'
+  $ref: './openapi.yaml#/components'
 
 # 合併所有路徑
 paths:
   # 認證相關API
   /auth/signin:
-    $ref: 'auth.yaml#/paths/~1auth~1signin'
+    $ref: './auth.yaml#/paths/~1auth~1signin'
   /auth/signup:
-    $ref: 'auth.yaml#/paths/~1auth~1signup'
+    $ref: './auth.yaml#/paths/~1auth~1signup'
   /auth/signout:
-    $ref: 'auth.yaml#/paths/~1auth~1signout'
+    $ref: './auth.yaml#/paths/~1auth~1signout'
   /auth/reset-password:
-    $ref: 'auth.yaml#/paths/~1auth~1reset-password'
+    $ref: './auth.yaml#/paths/~1auth~1reset-password'
   /auth/verify-email:
-    $ref: 'auth.yaml#/paths/~1auth~1verify-email'
+    $ref: './auth.yaml#/paths/~1auth~1verify-email'
   /auth/refresh-token:
-    $ref: 'auth.yaml#/paths/~1auth~1refresh-token'
+    $ref: './auth.yaml#/paths/~1auth~1refresh-token'
   /auth/me:
-    $ref: 'auth.yaml#/paths/~1auth~1me'
+    $ref: './auth.yaml#/paths/~1auth~1me'
 
   # 用戶管理API
   /users:
-    $ref: 'users.yaml#/paths/~1users'
+    $ref: './users.yaml#/paths/~1users'
   /users/{userId}:
-    $ref: 'users.yaml#/paths/~1users~1{userId}'
+    $ref: './users.yaml#/paths/~1users~1{userId}'
   /users/{userId}/reset-password:
-    $ref: 'users.yaml#/paths/~1users~1{userId}~1reset-password'
+    $ref: './users.yaml#/paths/~1users~1{userId}~1reset-password'
   /users/{userId}/disable:
-    $ref: 'users.yaml#/paths/~1users~1{userId}~1disable'
+    $ref: './users.yaml#/paths/~1users~1{userId}~1disable'
 
   # 員工管理API
   /employees:
-    $ref: 'employees.yaml#/paths/~1employees'
+    $ref: './employees.yaml#/paths/~1employees'
   /employees/{employeeId}:
-    $ref: 'employees.yaml#/paths/~1employees~1{employeeId}'
+    $ref: './employees.yaml#/paths/~1employees~1{employeeId}'
   /employees/{employeeId}/status:
-    $ref: 'employees.yaml#/paths/~1employees~1{employeeId}~1status'
+    $ref: './employees.yaml#/paths/~1employees~1{employeeId}~1status'
   /employees/{employeeId}/transfer:
-    $ref: 'employees.yaml#/paths/~1employees~1{employeeId}~1transfer'
+    $ref: './employees.yaml#/paths/~1employees~1{employeeId}~1transfer'
   /employees/bulk-import:
-    $ref: 'employees.yaml#/paths/~1employees~1bulk-import'
+    $ref: './employees.yaml#/paths/~1employees~1bulk-import'
+  /employees/{employeeId}/role:
+    $ref: './employees.yaml#/paths/~1employees~1{employeeId}~1role'
+  /employees/{employeeId}/assign-stores:
+    $ref: './employees.yaml#/paths/~1employees~1{employeeId}~1assign-stores'
+  /employees/{employeeId}/primary-store:
+    $ref: './employees.yaml#/paths/~1employees~1{employeeId}~1primary-store'
+    
+  # 店鋪管理API
+  /stores:
+    $ref: './stores.yaml#/paths/~1stores'
+  /stores/{storeId}:
+    $ref: './stores.yaml#/paths/~1stores~1{storeId}'
+  /stores/{storeId}/status:
+    $ref: './stores.yaml#/paths/~1stores~1{storeId}~1status'
+  /stores/{storeId}/gpsfence:
+    $ref: './stores.yaml#/paths/~1stores~1{storeId}~1gpsfence'
+  /stores/{storeId}/printer:
+    $ref: './stores.yaml#/paths/~1stores~1{storeId}~1printer'
+    
+  # 角色管理API
+  /roles:
+    $ref: './roles.yaml#/paths/~1roles'
+  /roles/{roleId}:
+    $ref: './roles.yaml#/paths/~1roles~1{roleId}'
+  /roles/{roleId}/permissions:
+    $ref: './roles.yaml#/paths/~1roles~1{roleId}~1permissions'
+  /roles/assign:
+    $ref: './roles.yaml#/paths/~1roles~1assign'
+  /roles/revoke:
+    $ref: './roles.yaml#/paths/~1roles~1revoke'
     
   # 菜單管理API
   /menu-categories:
-    $ref: 'menu.yaml#/paths/~1menu-categories'
+    $ref: './menu.yaml#/paths/~1menu-categories'
   /menu-categories/{categoryId}:
-    $ref: 'menu.yaml#/paths/~1menu-categories~1{categoryId}'
+    $ref: './menu.yaml#/paths/~1menu-categories~1{categoryId}'
   /menu-items:
-    $ref: 'menu.yaml#/paths/~1menu-items'
+    $ref: './menu.yaml#/paths/~1menu-items'
   /menu-items/{itemId}:
-    $ref: 'menu.yaml#/paths/~1menu-items~1{itemId}'
+    $ref: './menu.yaml#/paths/~1menu-items~1{itemId}'
   /menu-items/{itemId}/status:
-    $ref: 'menu.yaml#/paths/~1menu-items~1{itemId}~1status'
+    $ref: './menu.yaml#/paths/~1menu-items~1{itemId}~1status'
   /menu-items/images/upload:
-    $ref: 'menu.yaml#/paths/~1menu-items~1images~1upload'
+    $ref: './menu.yaml#/paths/~1menu-items~1images~1upload'
   /menu-options:
-    $ref: 'menu.yaml#/paths/~1menu-options'
+    $ref: './menu.yaml#/paths/~1menu-options'
     
   # 訂單管理API
   /orders:
-    $ref: 'orders.yaml#/paths/~1orders'
+    $ref: './orders.yaml#/paths/~1orders'
   /orders/{orderId}:
-    $ref: 'orders.yaml#/paths/~1orders~1{orderId}'
+    $ref: './orders.yaml#/paths/~1orders~1{orderId}'
   /orders/{orderId}/status:
-    $ref: 'orders.yaml#/paths/~1orders~1{orderId}~1status'
+    $ref: './orders.yaml#/paths/~1orders~1{orderId}~1status'
   /orders/{orderId}/payment:
-    $ref: 'orders.yaml#/paths/~1orders~1{orderId}~1payment'
+    $ref: './orders.yaml#/paths/~1orders~1{orderId}~1payment'
   /orders/{orderId}/receipt:
-    $ref: 'orders.yaml#/paths/~1orders~1{orderId}~1receipt'
+    $ref: './orders.yaml#/paths/~1orders~1{orderId}~1receipt'
   /orders/stats:
-    $ref: 'orders.yaml#/paths/~1orders~1stats'
+    $ref: './orders.yaml#/paths/~1orders~1stats'
 
 # 引用全局安全性定義
 security:
@@ -89,8 +127,13 @@ security:
 
 # 引用tags定義
 tags:
-  $ref: 'openapi.yaml#/tags'
+  $ref: './openapi.yaml#/tags'
 
-# 引用servers定義
+# 服務器定義
 servers:
-  $ref: 'openapi.yaml#/servers' 
+  - url: https://api.friedg-dev.web.app/v1
+    description: 開發環境
+  - url: https://api.friedg-staging.web.app/v1
+    description: 測試環境
+  - url: https://api.friedg.com/v1
+    description: 生產環境 

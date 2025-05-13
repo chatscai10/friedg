@@ -3,6 +3,7 @@ import { styled, keyframes, useTheme, Theme } from '@mui/material/styles';
 import { Box, Typography, Button } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { MenuItem } from '../../types/menuItem';
+import { getPlaceholderImage } from '../../utils/placeholder';
 
 // 定義卡片容器樣式
 const CardContainer = styled(Box)(() => ({
@@ -271,7 +272,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onDelete }) =
       
       {/* 食品圖片 */}
       <FoodImage
-        src={item.imageUrl || 'https://via.placeholder.com/300x160?text=無圖片'}
+        src={item.imageUrl || getPlaceholderImage()}
         alt={item.name}
       />
       

@@ -68,13 +68,21 @@ paths:
                     items:
                       $ref: '#/components/schemas/Order'
                   pagination:
-                    $ref: '#/components/schemas/Pagination'
+                    $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
         '400':
           description: 請求參數錯誤
         '401':
-          description: 未授權訪問
+          description: 未認證
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
       security:
         - BearerAuth: []
 

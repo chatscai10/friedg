@@ -1,0 +1,432 @@
+openapi: 3.0.3
+info:
+  title: 吃雞排找不早 - 排班與請假 API
+  description: 排班管理與請假申請的 API 端點
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/api
+    description: 生產環境 API 伺服器
+  - url: https://staging-api.example.com/api
+    description: 測試環境 API 伺服器
+tags:
+  - name: schedules
+    description: 排班管理相關操作
+  - name: leaves
+    description: 請假管理相關操作
+
+paths:
+  /schedules:
+    post:
+      summary: 創建新班次
+      description: 為員工創建新的排班記錄
+      tags:
+        - schedules
+      operationId: createSchedule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduleRequest'
+      responses:
+        '201':
+          description: 班次創建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '400':
+          description: 請求格式錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授權
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: 查詢班次
+      description: 根據條件查詢排班記錄
+      tags:
+        - schedules
+      operationId: listSchedules
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: employeeId
+          in: query
+          description: 員工 ID
+          required: false
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          description: 分店 ID
+          required: false
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: 開始日期 (YYYY-MM-DD)
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: 結束日期 (YYYY-MM-DD)
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          description: 班次狀態
+          required: false
+          schema:
+            type: string
+            enum: [draft, published, confirmed, cancelled]
+        - name: page
+          in: query
+          description: 頁碼 (從 1 開始)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每頁筆數
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 班次列表查詢成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleListResponse'
+        '400':
+          description: 請求格式錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授權
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /schedules/{scheduleId}:
+    put:
+      summary: 更新排班記錄
+      description: 更新指定的排班記錄
+      tags:
+        - schedules
+      operationId: updateSchedule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 要更新的排班記錄 ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScheduleRequest'
+      responses:
+        '200':
+          description: 排班記錄更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '400':
+          description: 請求參數無效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 沒有權限更新此排班記錄
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 找不到指定的排班記錄
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器內部錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    delete:
+      summary: 刪除排班記錄
+      description: 刪除或標記為取消指定的排班記錄
+      tags:
+        - schedules
+      operationId: deleteSchedule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 要刪除的排班記錄 ID
+      responses:
+        '200':
+          description: 排班記錄刪除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: '排班記錄已成功刪除'
+        '403':
+          description: 沒有權限刪除此排班記錄
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 找不到指定的排班記錄
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 伺服器內部錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 使用 Firebase JWT 令牌進行認證
+
+  schemas:
+    CreateScheduleRequest:
+      type: object
+      required:
+        - employeeId
+        - storeId
+        - startTime
+        - endTime
+        - role
+      properties:
+        employeeId:
+          type: string
+          description: 員工 ID
+        storeId:
+          type: string
+          description: 分店 ID
+        startTime:
+          type: string
+          format: date-time
+          description: 班次開始時間 (ISO 格式)
+        endTime:
+          type: string
+          format: date-time
+          description: 班次結束時間 (ISO 格式)
+        role:
+          type: string
+          description: 班次中的角色
+        notes:
+          type: string
+          description: 排班備註
+
+    UpdateScheduleRequest:
+      type: object
+      properties:
+        employeeId:
+          type: string
+          description: 員工 ID
+        storeId:
+          type: string
+          description: 商店 ID
+        startTime:
+          type: string
+          format: date-time
+          description: 排班開始時間 (ISO 格式)
+        endTime:
+          type: string
+          format: date-time
+          description: 排班結束時間 (ISO 格式)
+        role:
+          type: string
+          description: 排班角色
+        notes:
+          type: string
+          description: 備註
+        status:
+          type: string
+          enum: [draft, published, confirmed, cancelled]
+          description: 排班狀態
+
+    Schedule:
+      type: object
+      required:
+        - scheduleId
+        - employeeId
+        - storeId
+        - tenantId
+        - startTime
+        - endTime
+        - role
+        - status
+        - createdAt
+        - updatedAt
+        - createdBy
+      properties:
+        scheduleId:
+          type: string
+          description: 排班記錄 ID
+        employeeId:
+          type: string
+          description: 員工 ID
+        storeId:
+          type: string
+          description: 分店 ID
+        tenantId:
+          type: string
+          description: 租戶 ID
+        startTime:
+          type: string
+          format: date-time
+          description: 班次開始時間
+        endTime:
+          type: string
+          format: date-time
+          description: 班次結束時間
+        role:
+          type: string
+          description: 班次中的角色
+        notes:
+          type: string
+          description: 排班備註
+        status:
+          type: string
+          enum: [draft, published, confirmed, cancelled]
+          description: 班次狀態
+        confirmedAt:
+          type: string
+          format: date-time
+          description: 員工確認時間
+        confirmedBy:
+          type: string
+          description: 確認人員 ID
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+        createdBy:
+          type: string
+          description: 創建人員 ID
+
+    ScheduleResponse:
+      type: object
+      required:
+        - schedule
+      properties:
+        schedule:
+          $ref: '#/components/schemas/Schedule'
+
+    ScheduleListResponse:
+      type: object
+      required:
+        - schedules
+      properties:
+        schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Schedule'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              format: int32
+              description: 總筆數
+            page:
+              type: integer
+              format: int32
+              description: 當前頁碼
+            pageSize:
+              type: integer
+              format: int32
+              description: 每頁筆數
+            hasMore:
+              type: boolean
+              description: 是否有更多資料
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: 錯誤代碼
+        message:
+          type: string
+          description: 錯誤訊息
+        details:
+          type: object
+          description: 詳細錯誤資訊 

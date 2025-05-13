@@ -49,19 +49,19 @@ paths:
                     type: string
                     description: 令牌有效期（秒）
                   user:
-                    $ref: '../openapi.yaml#/components/schemas/User'
+                    $ref: './openapi.yaml#/components/schemas/User'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 認證失敗
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /auth/signup:
     post:
@@ -111,19 +111,19 @@ paths:
                     type: string
                     description: 刷新令牌
                   user:
-                    $ref: '../openapi.yaml#/components/schemas/User'
+                    $ref: './openapi.yaml#/components/schemas/User'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '409':
           description: 用戶已存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /auth/signout:
     post:
@@ -148,7 +148,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /auth/reset-password:
     post:
@@ -190,7 +190,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /auth/verify-email:
     post:
@@ -229,7 +229,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /auth/refresh-token:
     post:
@@ -273,13 +273,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 刷新令牌無效或已過期
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /auth/me:
     get:
@@ -294,10 +294,283 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/User'
+                $ref: './openapi.yaml#/components/schemas/User'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error' 
+                $ref: './openapi.yaml#/components/schemas/Error'
+  
+  /auth/line/login:
+    get:
+      tags:
+        - auth
+      summary: 啟動LINE登入流程
+      description: 重定向用戶到LINE Login授權頁面，進行OAuth認證流程
+      operationId: lineLogin
+      security: []  # 不需要認證
+      parameters:
+        - name: redirect_uri
+          in: query
+          required: true
+          description: 授權成功後的重定向URI
+          schema:
+            type: string
+            format: uri
+        - name: state
+          in: query
+          required: true
+          description: 防止CSRF攻擊的隨機字串，回調時會原樣返回
+          schema:
+            type: string
+        - name: tenant_hint
+          in: query
+          required: false
+          description: 多租戶環境中，用於識別特定租戶
+          schema:
+            type: string
+      responses:
+        '302':
+          description: 重定向到LINE授權頁面
+          headers:
+            Location:
+              description: LINE授權URL
+              schema:
+                type: string
+                format: uri
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+
+  /auth/line/callback:
+    get:
+      tags:
+        - auth
+      summary: LINE登入回調處理
+      description: 接收LINE授權回調，獲取授權碼，並重定向到前端應用
+      operationId: lineCallback
+      security: []  # 不需要認證
+      parameters:
+        - name: code
+          in: query
+          required: true
+          description: LINE授權碼
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          description: 與請求時相同的state值，用於驗證請求來源
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: 錯誤碼，授權失敗時返回
+          schema:
+            type: string
+        - name: error_description
+          in: query
+          required: false
+          description: 錯誤描述，授權失敗時返回
+          schema:
+            type: string
+      responses:
+        '302':
+          description: 重定向到前端應用，附帶授權碼
+          headers:
+            Location:
+              description: 前端應用URL，附加授權相關參數
+              schema:
+                type: string
+                format: uri
+        '400':
+          description: 請求參數錯誤或授權失敗
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+
+  /auth/line/token-exchange:
+    post:
+      tags:
+        - auth
+      summary: 交換LINE Token獲取Firebase認證
+      description: 使用LINE Access Token和ID Token交換Firebase自定義Token，完成登入
+      operationId: lineTokenExchange
+      security: []  # 不需要認證
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lineAccessToken
+                - lineIdToken
+              properties:
+                lineAccessToken:
+                  type: string
+                  description: 從LINE SDK獲取的訪問令牌
+                lineIdToken:
+                  type: string
+                  description: 從LINE SDK獲取的ID令牌
+                tenantHint:
+                  type: string
+                  description: 多租戶環境中，用於識別特定租戶（可選）
+      responses:
+        '200':
+          description: Token交換成功，返回Firebase自定義Token和用戶資訊
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "LINE登入成功"
+                  data:
+                    type: object
+                    properties:
+                      customToken:
+                        type: string
+                        description: Firebase自定義Token，用於前端Firebase認證
+                      userId:
+                        type: string
+                        description: 用戶ID
+                      isNewUser:
+                        type: boolean
+                        description: 是否新用戶
+                      user:
+                        type: object
+                        description: 用戶基本資訊
+                        properties:
+                          uid:
+                            type: string
+                            description: Firebase用戶ID
+                          displayName:
+                            type: string
+                            description: 用戶顯示名稱
+                          email:
+                            type: string
+                            format: email
+                            nullable: true
+                            description: 用戶電子郵件
+                          photoURL:
+                            type: string
+                            format: uri
+                            nullable: true
+                            description: 用戶頭像URL
+                          lineId:
+                            type: string
+                            description: LINE用戶ID
+                          tenantId:
+                            type: string
+                            nullable: true
+                            description: 用戶所屬租戶ID
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: LINE Token驗證失敗
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '500':
+          description: 服務器內部錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+
+  /auth/employee-line-login:
+    post:
+      tags:
+        - auth
+      summary: 員工LINE登入
+      description: 員工使用LINE登入並選擇所屬店鋪
+      operationId: employeeLineLogin
+      security: []  # 不需要認證
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lineAccessToken
+                - lineIdToken
+              properties:
+                lineAccessToken:
+                  type: string
+                  description: 從LINE SDK獲取的訪問令牌
+                lineIdToken:
+                  type: string
+                  description: 從LINE SDK獲取的ID令牌
+                tenantHint:
+                  type: string
+                  description: 多租戶環境中，用於識別特定租戶（可選）
+                storeId:
+                  type: string
+                  description: 員工所屬店鋪ID（如果員工屬於多個店鋪，需選擇）
+      responses:
+        '200':
+          description: 員工LINE登入成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "員工LINE登入成功"
+                  data:
+                    type: object
+                    properties:
+                      customToken:
+                        type: string
+                        description: Firebase自定義Token，用於前端Firebase認證
+                      userId:
+                        type: string
+                        description: 用戶ID
+                      employeeId:
+                        type: string
+                        description: 員工ID
+                      storeId:
+                        type: string
+                        description: 選擇的店鋪ID
+                      role:
+                        type: string
+                        description: 員工角色
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '401':
+          description: LINE Token驗證失敗或員工身份驗證失敗
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '500':
+          description: 服務器內部錯誤
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error' 

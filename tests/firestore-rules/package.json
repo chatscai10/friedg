@@ -1,0 +1,16 @@
+{
+  "name": "firestore-rules-tests",
+  "version": "1.0.0",
+  "description": "Tests for Firestore security rules",
+  "main": "test_firestore_rules.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node test_firestore_rules.js",
+    "setup": "node setup_test_users.js"
+  },
+  "dependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.6.1",
+    "firebase-admin": "^13.3.0"
+  }
+} 

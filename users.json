@@ -1,0 +1,14 @@
+{
+  "users": [
+    {
+      "localId": "admin-user-1",
+      "email": "admin@friedg-dev.com",
+      "emailVerified": true,
+      "passwordHash": "JDJhJDEwJGNCOUVRcFBCZThTTGYuRkVsQ3NjdXVZMUJRUk9zOVVtWFZEYjlhTENzbWJoZUdJRUFzNXBh",
+      "salt": "",
+      "displayName": "Admin User",
+      "photoUrl": "",
+      "customAttributes": "{\"role\":\"admin\",\"storeId\":\"default_store\"}"
+    }
+  ]
+} 

@@ -1,0 +1,64 @@
+# 訂單狀態管理與通知機制 - 實施進度
+
+## 已完成部分
+
+1. **訂單狀態定義擴展**
+   - 已在 `functions/src/orders/types.ts` 中更新 `OrderStatus` 枚舉
+   - 從 5 個狀態（PENDING, PREPARING, READY, COMPLETED, CANCELLED）擴展為 8 個狀態，新增了 CONFIRMED, DELIVERING, REJECTED
+   - 每個狀態都有明確的中文說明
+
+2. **訂單數據模型擴展**
+   - 已在 `functions/src/orders/types.ts` 中創建 `OrderStatusHistoryEntry` 接口
+   - 在 `Order` 接口中添加狀態時間戳字段 (confirmedAt, preparingAt 等) 和 statusHistory 數組
+
+3. **狀態轉換邏輯更新**
+   - 已在 `functions/src/orders/services/orderService.ts` 中更新 `isValidStatusTransition` 函數
+   - 實現嚴格的狀態轉換規則，對每個狀態定義了允許的下一步狀態
+
+4. **API 功能增強**
+   - 已更新 `updateOrderStatus` 函數，支持新參數（estimatedCompletionTime, statusNote）
+   - 實現自動記錄狀態時間戳和歷史記錄
+   - 添加 `getOrderStatusHistory` 函數，用於檢索訂單狀態變更歷史
+   - 新增 `getOrderHistory` Cloud Function，供前端調用
+
+## 待完成部分
+
+1. **通知機制實現**
+   - 實現在關鍵狀態變更時向顧客發送通知
+   - 支持 LINE Notify, 推送通知, Email 等多種渠道
+   - 實現通知模板配置系統，允許租戶自定義通知內容
+
+2. **前端界面調整**
+   - 更新店家管理界面，支持新的訂單狀態和轉換
+   - 添加預計完成時間和狀態備註輸入
+   - 實現狀態歷史記錄查看功能
+   - 更新顧客訂單查詢界面，顯示更豐富的狀態信息
+
+3. **廚房顯示系統（KDS）整合**
+   - 實現廚房顯示界面，展示訂單狀態及準備進度
+   - 提供狀態快速切換功能
+
+4. **批量操作支持**
+   - 支持批量狀態更新功能，如批量確認、批量準備完成等
+
+5. **租戶配置選項**
+   - 實現租戶自定義狀態通知設置
+   - 提供禁用特定狀態或自定義轉換規則的選項
+
+## 下一步執行計劃
+
+1. 先完成前端界面調整，讓管理員和店員能夠使用新的狀態系統
+2. 實現基本的通知機制，支持 LINE Notify
+3. 配置通知模板系統
+4. 開發廚房顯示界面
+5. 添加批量操作功能
+6. 實現租戶配置選項
+
+## 預計完成時間
+
+- 前端界面調整：2 週
+- 通知機制實現：3 週
+- 廚房顯示系統：2 週
+- 批量操作和配置選項：1 週
+
+總計：8 週完整實現深化訂單狀態管理與通知機制 

@@ -7,6 +7,8 @@ const {
   deleteMember, // Import delete handler
   // Import other handlers later
   linkAuthToMember, // Import link handler
+  getMemberProfile, // Import profile handler
+  updateMemberProfile, // Import profile update handler
 } = require("./members.handlers");
 const { checkAuth, checkRole } = require("../middleware/auth.middleware"); // Import checkRole
 
@@ -15,6 +17,12 @@ const router = express.Router();
 
 // GET /api/members - Get list of members (filtered, paginated)
 router.get("/", checkAuth, checkRole(["TenantAdmin", "StoreManager"]), getMembers);
+
+// GET /api/members/me - Get current member's profile
+router.get("/me", checkAuth, getMemberProfile);
+
+// PUT /api/members/me - Update current member's profile
+router.put("/me", checkAuth, updateMemberProfile);
 
 // GET /api/members/:memberId - Get specific member details
 // Permissions checked within the handler

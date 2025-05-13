@@ -1,6 +1,6 @@
 {
     "source_dir": "D:/friedg",
-    "dest_dir": "D:/系統備份",
+    "dest_dir": "D:/分析",
     "excluded_exact": [
         "node_modules",
         ".git"
@@ -8,5 +8,5 @@
     "excluded_prefix": [
         "firebase-export-"
     ],
-    "append_timestamp": true
+    "append_timestamp": false
 }

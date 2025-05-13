@@ -75,25 +75,25 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '../openapi.yaml#/components/schemas/PaginatedResponse'
+                  - $ref: './openapi.yaml#/components/schemas/PaginatedResponse'
                   - type: object
                     properties:
                       data:
                         type: array
                         items:
-                          $ref: '../openapi.yaml#/components/schemas/User'
+                          $ref: './openapi.yaml#/components/schemas/User'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權訪問
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
     
     post:
       tags:
@@ -162,31 +162,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/User'
+                $ref: './openapi.yaml#/components/schemas/User'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權執行此操作
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '409':
           description: 用戶已存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /users/{userId}:
     get:
@@ -214,25 +214,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/User'
+                $ref: './openapi.yaml#/components/schemas/User'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權訪問此用戶資訊
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 用戶不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
     
     put:
       tags:
@@ -297,31 +297,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/User'
+                $ref: './openapi.yaml#/components/schemas/User'
         '400':
           description: 請求參數錯誤
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權更新此用戶
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 用戶不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
     
     delete:
       tags:
@@ -361,19 +361,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權刪除此用戶
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 用戶不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /users/{userId}/reset-password:
     post:
@@ -429,19 +429,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權重設此用戶密碼
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 用戶不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
   
   /users/{userId}/disable:
     post:
@@ -493,22 +493,22 @@ paths:
                     type: string
                     example: 用戶已停用/啟用
                   user:
-                    $ref: '../openapi.yaml#/components/schemas/User'
+                    $ref: './openapi.yaml#/components/schemas/User'
         '401':
           description: 未認證
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '403':
           description: 無權操作此用戶狀態
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error'
+                $ref: './openapi.yaml#/components/schemas/Error'
         '404':
           description: 用戶不存在
           content:
             application/json:
               schema:
-                $ref: '../openapi.yaml#/components/schemas/Error' 
+                $ref: './openapi.yaml#/components/schemas/Error' 

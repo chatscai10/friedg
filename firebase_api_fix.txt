@@ -1,0 +1,47 @@
+# Firebase Emulator API路由問題修復
+
+## 已識別問題
+
+1. **缺失路由註冊**: 檢查發現，`functions/src/index.ts`中沒有註冊角色管理路由(`/api/v1/roles`)。
+
+2. **路由順序問題**: API路由註冊位於通配符路由處理之後，導致所有請求被通配符路由捕獲。
+
+3. **區域設置不一致**: API導出使用了`functions.https.onRequest`而非特定區域`functions.region('us-central1').https.onRequest`。
+
+4. **函數重複宣告**: 有多個同名函數導出(`checkEquityEligibility`, `openPurchaseWindow`等)，導致TypeScript編譯錯誤。
+
+## 修復措施
+
+1. **添加角色路由**: 已導入角色管理路由模組`rolesRoutes`，並註冊到`app.use('/api/v1/roles', rolesRoutes)`。
+
+2. **調整路由順序**: 將API路由註冊移到通配符路由處理之前，確保請求能正確匹配到特定路由。
+
+3. **標準化區域設置**: 將API導出更新為`functions.region('us-central1').https.onRequest(app)`，與其他函數保持一致。
+
+4. **解決函數衝突**: 需要解決命名衝突問題，如修改導入的模組名稱或調整本地函數名稱。
+
+## 遇到的TypeScript編譯錯誤
+
+嘗試編譯時發現多個TypeScript錯誤，主要包括：
+
+1. **函數與導入衝突**: 如`checkEquityEligibility`等函數既有本地實現又有導入。
+
+2. **類型定義不一致**: 一些請求處理器使用了不兼容的類型，特別是`AuthenticatedRequest`與標準`Request`間的差異。
+
+3. **可能的未定義值**: 多處代碼存在可能為undefined的屬性訪問。
+
+4. **參數不匹配**: 函數調用參數數量與定義不一致。
+
+## 後續建議
+
+1. **修復TypeScript錯誤**: 需通過重構解決TypeScript編譯錯誤，確保代碼質量。
+
+2. **標準化授權中間件**: `auth.middleware.ts`, `authenticateUser.ts`, `tenant.middleware.ts`等文件中的授權邏輯需統一。
+
+3. **API前綴標準化**: 考慮統一API路由前綴，目前混用了`/api/v1/roles`和`/api/stores`等不同格式。
+
+4. **監控和日誌改進**: 增強API請求日誌，添加結構化字段，便於排查問題。
+
+5. **測試覆蓋**: 為API端點添加自動化測試，特別是涉及路由和授權的部分。
+
+完成這些修復後，Firebase模擬器應能正確路由API請求，後續可繼續開發PWA功能。 

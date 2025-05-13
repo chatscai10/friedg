@@ -1,0 +1,27 @@
+整合專案報告 - 系統開發規範補充
+
+## 身份驗證及權限控制
+
+### Express API 路由身份驗證中間件標準
+
+所有 Express API 路由必須使用 `checkAuth` 中間件進行身份驗證，而非 `withAuthentication`。
+
+**原因說明：**
+1. `checkAuth` 中間件專為 Express 路由設計，能正確設置 `req.user` 對象，包含用戶ID、租戶ID和角色信息
+2. `withAuthentication` 中間件是為 Firebase Callable Functions 設計的，在 Express 路由環境中使用會導致 `TypeError` 或身份驗證無效
+
+**實施指南：**
+```javascript
+// 正確用法 - Express 路由
+router.post('/orders', checkAuth, orderHandlers.createOrder);
+
+// 錯誤用法 - 不要在 Express 路由中使用
+router.post('/orders', withAuthentication, orderHandlers.createOrder);
+```
+
+**注意事項：**
+- 確保所有現有和新增的 Express API 路由都遵循此標準
+- 在code review過程中特別注意此項規範
+- 若需要角色驗證，應在 `checkAuth` 之後添加 `withRole` 或 `checkRole` 中間件
+
+此標準已在 orders.routes.ts 相關問題修復過程中確立，有效解決了 TypeError: withRole is not a function 和請求處理失效的問題。 

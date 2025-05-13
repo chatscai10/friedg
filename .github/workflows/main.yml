@@ -1,0 +1,99 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+env:
+  NODE_VERSION: '18' # functions 預設 Node.js 18
+  WEBADMIN_NODE_VERSION: '18' # 如 web-admin 需不同版本可調整
+
+jobs:
+  lint-and-test-functions:
+    name: Functions Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test # Jest 單元測試
+      # - run: firebase emulators:exec --project demo "npm run int-test" # 整合測試 placeholder
+
+  lint-and-test-webadmin:
+    name: Web Admin Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-admin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ env.WEBADMIN_NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.WEBADMIN_NODE_VERSION }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test # Vitest 單元測試
+
+  build-webadmin:
+    name: Web Admin Build
+    runs-on: ubuntu-latest
+    needs: lint-and-test-webadmin
+    defaults:
+      run:
+        working-directory: web-admin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ env.WEBADMIN_NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.WEBADMIN_NODE_VERSION }}
+      - run: npm ci
+      - run: npm run build
+
+  deploy:
+    name: Deploy to Firebase
+    runs-on: ubuntu-latest
+    needs: [lint-and-test-functions, lint-and-test-webadmin, build-webadmin]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies (root for firebase-tools)
+        run: npm ci
+      - name: Setup Functions
+        run: |
+          cd functions
+          npm ci
+          npm run build
+      - name: Deploy to Firebase (Production)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        env:
+          PROJECT_ALIAS: ${{ secrets.PROD_PROJECT_ALIAS }} # 或直接填 'production'
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          npx firebase deploy --project $PROJECT_ALIAS --only functions,hosting,firestore:rules,firestore:indexes --token "$FIREBASE_TOKEN"
+      - name: Deploy to Firebase (Staging/Dev)
+        if: github.ref == 'refs/heads/develop'
+        env:
+          PROJECT_ALIAS: ${{ secrets.STAGING_PROJECT_ALIAS }} # 或直接填 'staging'
+          FIREBASE_TOKEN: ${{ secrets.STAGING_FIREBASE_TOKEN }}
+        run: |
+          npx firebase deploy --project $PROJECT_ALIAS --only functions,hosting,firestore:rules,firestore:indexes --token "$FIREBASE_TOKEN"
+
+# 備註：
+# - 可依需求細分更多 job（如 E2E 測試、API 規範驗證等）
+# - Secrets 需於 GitHub Repo 設定
+# - 若有多專案/多環境，firebase use --project <id> 可明確指定 

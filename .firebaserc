@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "friedg"
-  }
+    "default": "friedg",
+    "friedg": "friedg"
+  },
+  "targets": {},
+  "etags": {}
 }

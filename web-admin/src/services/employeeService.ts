@@ -14,7 +14,7 @@ interface GetEmployeesParams {
 
 // Assume a structure for the response that includes pagination
 interface EmployeesResponse {
-    employees: Employee[];
+    data: Employee[];
     pagination: {
         currentPage: number;
         totalPages: number;
@@ -24,7 +24,7 @@ interface EmployeesResponse {
 }
 
 // Fetch all employees with optional filtering and pagination
-export const getEmployees = async (params?: GetEmployeesParams): Promise<EmployeesResponse> => {
+export const listEmployees = async (params?: GetEmployeesParams): Promise<EmployeesResponse> => {
     try {
         // Use apiClient
         const response = await apiClient.get<EmployeesResponse>('/admin/employees', { params });
@@ -34,6 +34,9 @@ export const getEmployees = async (params?: GetEmployeesParams): Promise<Employe
         throw error;
     }
 };
+
+// 保留 getEmployees 以兼容可能的其他使用
+export const getEmployees = listEmployees;
 
 // Fetch a single employee by ID
 export const getEmployeeById = async (id: string): Promise<Employee> => {
@@ -82,4 +85,16 @@ export const deleteEmployee = async (id: string): Promise<void> => {
         console.error(`Error deleting employee ${id}:`, error);
         throw error;
     }
-}; 
+};
+
+// 在檔案最後添加默認導出
+const employeeService = {
+  getEmployees,
+  listEmployees,
+  getEmployeeById,
+  createEmployee,
+  updateEmployee,
+  deleteEmployee
+};
+
+export default employeeService; 

@@ -316,6 +316,10 @@
   "level": "number", // 職等等級(1-6)
   "description": "string", // 說明
   "isSystem": "boolean", // 是否系統預設角色
+  "canDiscount": "boolean", // 是否具備執行折扣操作的基礎權限
+  "maxDiscountPercentage": "number", // 最大折扣百分比，例如20代表允許最高20%折扣(即打8折)
+  "canRefund": "boolean", // 是否具備執行退款操作的基礎權限
+  "maxRefundAmount": "number", // 單次允許執行的最大退款金額
   "permissions": { // 權限設定，針對各模組的操作權限
     "employee": { // 員工管理模組
       "view": "boolean",

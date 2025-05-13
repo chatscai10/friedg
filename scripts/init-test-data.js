@@ -3,29 +3,37 @@
  * 用於在Firebase模擬器中創建測試用戶、測試商店和測試菜單項目
  */
 
-const { initializeApp } = require('firebase/app');
-const { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } = require('firebase/auth');
-const { getFirestore, connectFirestoreEmulator, collection, doc, setDoc } = require('firebase/firestore');
+// 使用 v9 Compat 版本 (符合專案規劃書)
+const firebase = require('firebase/compat/app');
+require('firebase/compat/auth');
+require('firebase/compat/firestore');
 
-// Firebase 配置
+// Firebase 配置 - 使用模擬器專用的虛擬配置
+// 在模擬器環境中，apiKey 實際上不會被使用，所以可以使用任何字符串
 const firebaseConfig = {
-  apiKey: "AIzaSyDummyApiKeyForEmulator",
-  authDomain: "friedg-dev.firebaseapp.com",
+  apiKey: "dummy-api-key-for-emulator-only",
   projectId: "friedg-dev",
+  // 在模擬器環境中，以下配置不會被使用
+  authDomain: "friedg-dev.firebaseapp.com",
   storageBucket: "friedg-dev.appspot.com",
   messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef1234567890",
-  measurementId: "G-ABCDEFGHIJ"
+  appId: "1:123456789012:web:abcdef1234567890"
 };
 
 // 初始化 Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+let app;
+try {
+  app = firebase.app();
+} catch {
+  app = firebase.initializeApp(firebaseConfig);
+}
+
+const auth = firebase.auth();
+const db = firebase.firestore();
 
 // 連接模擬器
-connectAuthEmulator(auth, "http://localhost:9199");
-connectFirestoreEmulator(db, "localhost", 9283);
+auth.useEmulator("http://localhost:9199");
+db.useEmulator("localhost", 9283);
 
 // 測試用戶數據
 const testUsers = [
@@ -127,11 +135,11 @@ async function createTestUsers() {
     try {
       // 創建用戶
       const { email, password, displayName, role, tenantId, storeId } = userData;
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await auth.createUserWithEmailAndPassword(email, password);
       const uid = userCredential.user.uid;
       
       // 存儲用戶附加信息到Firestore
-      await setDoc(doc(db, 'users', uid), {
+      await db.collection('users').doc(uid).set({
         uid,
         email,
         displayName,
@@ -159,7 +167,7 @@ async function createTestStores() {
   
   for (const storeData of testStores) {
     try {
-      await setDoc(doc(db, 'stores', storeData.id), storeData);
+      await db.collection('stores').doc(storeData.id).set(storeData);
       console.log(`已創建店鋪: ${storeData.name}`);
     } catch (error) {
       console.error(`創建店鋪 ${storeData.name} 失敗:`, error);
@@ -175,7 +183,7 @@ async function createTestMenuItems() {
   
   for (const itemData of testMenuItems) {
     try {
-      await setDoc(doc(db, 'menuItems', itemData.id), itemData);
+      await db.collection('menuItems').doc(itemData.id).set(itemData);
       console.log(`已創建菜單項目: ${itemData.name}`);
     } catch (error) {
       console.error(`創建菜單項目 ${itemData.name} 失敗:`, error);
@@ -216,7 +224,7 @@ async function createMenuCategories() {
   
   for (const categoryData of categories) {
     try {
-      await setDoc(doc(db, 'menuCategories', categoryData.id), categoryData);
+      await db.collection('menuCategories').doc(categoryData.id).set(categoryData);
       console.log(`已創建菜單分類: ${categoryData.name}`);
     } catch (error) {
       console.error(`創建菜單分類 ${categoryData.name} 失敗:`, error);

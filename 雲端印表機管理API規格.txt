@@ -1,0 +1,541 @@
+# 雲端印表機管理後端 API 規格
+
+## 概述
+
+雲端印表機管理 API 提供租戶統一管理連接、配置和監控雲端印表機的能力。這些 API 確保 POS 系統能夠將列印任務安全地發送至不同類型的印表機裝置，即使在沒有實體印表機的情況下也能正常運作。
+
+## API 基礎路徑
+
+所有雲端印表機管理 API 均使用以下基礎路徑：
+```
+/api/printing
+```
+
+## 認證與授權
+
+所有 API 呼叫都需要遵循以下安全要求：
+
+1. **認證**：必須在請求頭中包含有效的 JWT 令牌
+2. **授權**：呼叫者必須具有適當的管理員或印表機管理權限
+3. **租戶隔離**：每個請求都會經過租戶隔離檢查，確保只能管理自己租戶的印表機
+
+## 印表機管理 API 列表
+
+### 1. 獲取印表機列表
+
+獲取租戶下所有印表機裝置的列表。
+
+**請求**：
+```
+GET /api/printing/printers?storeId={storeId}
+```
+
+**參數**：
+- `storeId`：（必填）商店 ID
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "printers": [
+      {
+        "printerId": "printer123",
+        "name": "廚房印表機",
+        "type": "kitchen",
+        "model": "EPSON TM-T88VI",
+        "connectionType": "network",
+        "ipAddress": "192.168.1.100",
+        "port": 9100,
+        "status": "online",
+        "defaultPrinter": true,
+        "paperWidth": 80,
+        "paperHeight": 297,
+        "categories": ["熱食", "炸物"],
+        "enabled": true,
+        "lastConnected": "2024-07-10T08:30:00Z"
+      },
+      {
+        "printerId": "printer456",
+        "name": "結帳收據印表機",
+        "type": "receipt",
+        "model": "STAR TSP100III",
+        "connectionType": "usb",
+        "status": "offline",
+        "defaultPrinter": false,
+        "paperWidth": 58,
+        "paperHeight": 120,
+        "enabled": true,
+        "lastConnected": "2024-07-09T18:45:23Z"
+      }
+    ]
+  }
+}
+```
+
+**錯誤回應**：
+```json
+{
+  "success": false,
+  "error": "找不到商店資訊",
+  "code": "STORE_NOT_FOUND"
+}
+```
+
+### 2. 新增印表機
+
+新增一台印表機裝置到租戶的商店。
+
+**請求**：
+```
+POST /api/printing/printers
+```
+
+**請求體**：
+```json
+{
+  "storeId": "store123",
+  "name": "廚房印表機",
+  "type": "kitchen",
+  "model": "EPSON TM-T88VI",
+  "connectionType": "network",
+  "ipAddress": "192.168.1.100",
+  "port": 9100,
+  "paperWidth": 80,
+  "defaultPrinter": true,
+  "categories": ["熱食", "炸物"],
+  "enabled": true
+}
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "printerId": "printer123",
+    "name": "廚房印表機",
+    "type": "kitchen",
+    "model": "EPSON TM-T88VI",
+    "connectionType": "network",
+    "ipAddress": "192.168.1.100",
+    "port": 9100,
+    "status": "pending",
+    "defaultPrinter": true,
+    "paperWidth": 80,
+    "categories": ["熱食", "炸物"],
+    "enabled": true,
+    "createdAt": "2024-07-11T14:25:30Z"
+  }
+}
+```
+
+### 3. 更新印表機資訊
+
+更新指定印表機的設定資訊。
+
+**請求**：
+```
+PUT /api/printing/printers/{printerId}
+```
+
+**請求體**：
+```json
+{
+  "name": "新廚房印表機",
+  "model": "EPSON TM-T88VII",
+  "ipAddress": "192.168.1.101",
+  "port": 9100,
+  "paperWidth": 80,
+  "defaultPrinter": true,
+  "categories": ["熱食", "炸物", "冷飲"],
+  "enabled": true
+}
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "printerId": "printer123",
+    "name": "新廚房印表機",
+    "type": "kitchen",
+    "model": "EPSON TM-T88VII",
+    "connectionType": "network",
+    "ipAddress": "192.168.1.101",
+    "port": 9100,
+    "status": "online",
+    "defaultPrinter": true,
+    "paperWidth": 80,
+    "categories": ["熱食", "炸物", "冷飲"],
+    "enabled": true,
+    "updatedAt": "2024-07-11T15:30:45Z"
+  }
+}
+```
+
+### 4. 刪除印表機
+
+從系統中刪除指定的印表機。
+
+**請求**：
+```
+DELETE /api/printing/printers/{printerId}
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "message": "印表機已成功刪除"
+}
+```
+
+### 5. 獲取印表機狀態
+
+獲取指定印表機的詳細狀態資訊。
+
+**請求**：
+```
+GET /api/printing/printers/{printerId}/status
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "printerId": "printer123",
+    "status": "online",
+    "paperStatus": "ok",
+    "tonerStatus": "ok",
+    "errorCode": null,
+    "lastCheckTime": "2024-07-11T16:45:22Z",
+    "lastPrintTime": "2024-07-11T16:30:05Z",
+    "failedJobs": 0,
+    "completedJobs": 42,
+    "connectionLog": [
+      {
+        "timestamp": "2024-07-11T16:40:00Z",
+        "status": "online",
+        "message": "連線正常"
+      }
+    ]
+  }
+}
+```
+
+### 6. 測試印表機連接
+
+測試與指定印表機的連接並返回結果。
+
+**請求**：
+```
+POST /api/printing/printers/{printerId}/test-connection
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "connected": true,
+    "latency": 45,
+    "message": "連接成功",
+    "timestamp": "2024-07-11T16:50:30Z",
+    "printerInfo": {
+      "model": "EPSON TM-T88VI",
+      "firmware": "1.23",
+      "dpi": "203x203",
+      "paperWidth": 80
+    }
+  }
+}
+```
+
+### 7. 測試列印
+
+向指定印表機發送測試頁面。
+
+**請求**：
+```
+POST /api/printing/printers/{printerId}/test-print
+```
+
+**請求體** (可選):
+```json
+{
+  "content": "自訂測試內容",
+  "printOptions": {
+    "fontSize": 14,
+    "alignment": "center",
+    "cutPaper": true
+  }
+}
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": "job789",
+    "status": "sent",
+    "message": "測試頁面已發送至印表機",
+    "timestamp": "2024-07-11T17:00:15Z"
+  }
+}
+```
+
+### 8. 設定預設印表機
+
+設定指定類型的預設印表機。
+
+**請求**：
+```
+POST /api/printing/printers/default
+```
+
+**請求體**：
+```json
+{
+  "storeId": "store123",
+  "printerId": "printer123",
+  "type": "kitchen"
+}
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "message": "已成功設定預設廚房印表機",
+  "data": {
+    "printerId": "printer123",
+    "type": "kitchen",
+    "storeId": "store123"
+  }
+}
+```
+
+### 9. 獲取列印任務歷史記錄
+
+獲取指定印表機或商店的列印任務歷史記錄。
+
+**請求**：
+```
+GET /api/printing/jobs?storeId={storeId}&printerId={printerId}&status={status}&page={page}&limit={limit}&startDate={startDate}&endDate={endDate}
+```
+
+**參數**：
+- `storeId`：（可選）商店 ID
+- `printerId`：（可選）印表機 ID
+- `status`：（可選）任務狀態，可選值：pending, processing, completed, failed, cancelled
+- `page`：（可選）頁碼，預設 1
+- `limit`：（可選）每頁記錄數，預設 20
+- `startDate`：（可選）開始日期，ISO 格式
+- `endDate`：（可選）結束日期，ISO 格式
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "jobs": [
+      {
+        "jobId": "job123",
+        "printerId": "printer123",
+        "printerName": "廚房印表機",
+        "content": {
+          "type": "order",
+          "orderNumber": "A1001",
+          "items": []
+        },
+        "status": "completed",
+        "createdAt": "2024-07-11T14:30:00Z",
+        "completedAt": "2024-07-11T14:30:05Z",
+        "createdBy": "user456",
+        "retryCount": 0
+      }
+    ],
+    "pagination": {
+      "totalItems": 156,
+      "totalPages": 8,
+      "currentPage": 1,
+      "limit": 20
+    }
+  }
+}
+```
+
+### 10. 重新發送失敗的列印任務
+
+重新發送指定的失敗列印任務。
+
+**請求**：
+```
+POST /api/printing/jobs/{jobId}/retry
+```
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": "job123",
+    "status": "pending",
+    "message": "列印任務已重新排入佇列",
+    "timestamp": "2024-07-11T17:30:45Z",
+    "retryCount": 1
+  }
+}
+```
+
+### 11. 獲取印表機模板設定
+
+獲取或設定印表機的列印模板。
+
+**請求**：
+```
+GET /api/printing/templates?storeId={storeId}&type={type}
+```
+
+**參數**：
+- `storeId`：（必填）商店 ID
+- `type`：（可選）模板類型，可選值：receipt, kitchen, label
+
+**回應**：
+```json
+{
+  "success": true,
+  "data": {
+    "templates": [
+      {
+        "templateId": "template123",
+        "name": "標準收據",
+        "type": "receipt",
+        "content": "{{storeName}}\n{{address}}\n{{phone}}\n...",
+        "isDefault": true,
+        "variables": [
+          "storeName", "address", "phone", "orderNumber", 
+          "orderDate", "items", "subtotal", "tax", "total"
+        ],
+        "createdAt": "2024-06-10T10:00:00Z",
+        "updatedAt": "2024-07-01T11:30:00Z"
+      },
+      {
+        "templateId": "template456",
+        "name": "簡易收據",
+        "type": "receipt",
+        "content": "{{storeName}}\n{{orderNumber}}\n...",
+        "isDefault": false,
+        "variables": [
+          "storeName", "orderNumber", "items", "total"
+        ],
+        "createdAt": "2024-06-15T14:20:00Z",
+        "updatedAt": "2024-06-15T14:20:00Z"
+      }
+    ]
+  }
+}
+```
+
+## 數據模型
+
+### 印表機 (Printer)
+
+```json
+{
+  "printerId": "字串，唯一識別碼",
+  "tenantId": "字串，租戶ID",
+  "storeId": "字串，商店ID",
+  "name": "字串，印表機名稱",
+  "type": "字串，類型 (kitchen, receipt, label, general)",
+  "model": "字串，印表機型號",
+  "connectionType": "字串，連接類型 (network, usb, bluetooth, cloud)",
+  "ipAddress": "字串，IP位址 (網路印表機)",
+  "port": "數字，端口 (網路印表機)",
+  "macAddress": "字串，MAC位址 (藍牙印表機)",
+  "usbPath": "字串，USB路徑 (USB印表機)",
+  "apiUrl": "字串，API URL (雲端服務印表機)",
+  "apiKey": "字串，API金鑰 (雲端服務印表機)",
+  "status": "字串，狀態 (online, offline, error, pending)",
+  "defaultPrinter": "布林值，是否為預設印表機",
+  "paperWidth": "數字，紙張寬度 (mm)",
+  "paperHeight": "數字，紙張高度 (mm)",
+  "categories": "字串陣列，關聯的菜單類別",
+  "enabled": "布林值，是否啟用",
+  "lastConnected": "時間戳，最後連接時間",
+  "createdAt": "時間戳，創建時間",
+  "updatedAt": "時間戳，更新時間"
+}
+```
+
+### 列印任務 (PrintJob)
+
+```json
+{
+  "jobId": "字串，唯一識別碼",
+  "tenantId": "字串，租戶ID",
+  "storeId": "字串，商店ID",
+  "printerId": "字串，印表機ID",
+  "printerType": "字串，印表機類型",
+  "content": "物件，列印內容",
+  "rawCommands": "字串，原始印表機指令",
+  "status": "字串，狀態 (pending, processing, completed, failed, cancelled)",
+  "retryCount": "數字，重試次數",
+  "maxRetries": "數字，最大重試次數",
+  "errorMessage": "字串，錯誤訊息",
+  "createdAt": "時間戳，創建時間",
+  "updatedAt": "時間戳，更新時間",
+  "completedAt": "時間戳，完成時間",
+  "createdBy": "字串，創建者ID",
+  "source": "字串，來源 (user, system, auto)",
+  "relatedOrderId": "字串，關聯訂單ID",
+  "relatedEntityId": "字串，關聯實體ID",
+  "relatedEntityType": "字串，關聯實體類型"
+}
+```
+
+### 印表機模板 (PrintTemplate)
+
+```json
+{
+  "templateId": "字串，唯一識別碼",
+  "tenantId": "字串，租戶ID",
+  "storeId": "字串，商店ID",
+  "name": "字串，模板名稱",
+  "type": "字串，類型 (receipt, kitchen, label)",
+  "content": "字串，模板內容",
+  "isDefault": "布林值，是否為預設模板",
+  "variables": "字串陣列，支援的變數",
+  "createdAt": "時間戳，創建時間",
+  "updatedAt": "時間戳，更新時間"
+}
+```
+
+## 錯誤碼
+
+| 錯誤碼 | 描述 |
+|--------|------|
+| PRINTER_NOT_FOUND | 找不到指定的印表機 |
+| STORE_NOT_FOUND | 找不到指定的商店 |
+| PRINTER_CONNECTION_ERROR | 印表機連接錯誤 |
+| PRINTER_OFFLINE | 印表機離線 |
+| PRINTER_OUT_OF_PAPER | 印表機缺紙 |
+| PRINTER_ERROR | 印表機錯誤 |
+| JOB_NOT_FOUND | 找不到指定的列印任務 |
+| TEMPLATE_NOT_FOUND | 找不到指定的模板 |
+| INVALID_CONTENT | 無效的列印內容 |
+| PERMISSION_DENIED | 權限不足 |
+
+## 安全考量
+
+1. **身份驗證**：所有 API 呼叫都需要有效的 JWT 令牌
+2. **授權控制**：根據使用者角色和權限進行訪問控制
+3. **租戶隔離**：確保租戶只能訪問自己的資源
+4. **輸入驗證**：對所有輸入參數進行嚴格驗證
+5. **安全通信**：所有通信都使用 HTTPS 加密
+6. **資料脫敏**：敏感資訊（如 API 金鑰）在日誌和回應中隱藏
+7. **存取日誌**：記錄所有 API 呼叫和關鍵操作 

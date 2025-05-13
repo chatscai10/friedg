@@ -49,6 +49,7 @@ export const theme = createTheme({
     h1: {
       fontWeight: 500,
       fontSize: '2.5rem',
+      lineHeight: 1.1,
     },
     h2: {
       fontWeight: 500,
@@ -70,8 +71,49 @@ export const theme = createTheme({
       fontWeight: 500,
       fontSize: '1rem',
     },
+    body1: {
+      lineHeight: 1.5,
+      fontWeight: 400,
+    },
   },
   components: {
+    // 全局基本樣式設置
+    MuiCssBaseline: {
+      styleOverrides: `
+        :root {
+          font-synthesis: none;
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+        
+        body {
+          margin: 0;
+          min-height: 100vh;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+        }
+        
+        #root {
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+          width: 100%;
+        }
+        
+        a {
+          font-weight: 500;
+          color: #646cff;
+          text-decoration: none;
+        }
+        
+        a:hover {
+          color: #535bf2;
+        }
+      `,
+    },
+    
     MuiButton: {
       styleOverrides: {
         root: {
@@ -79,6 +121,14 @@ export const theme = createTheme({
           padding: '0.6em 1.2em',
           textTransform: 'none',
           fontWeight: 'bold',
+          fontSize: '1em',
+          fontFamily: 'inherit',
+          backgroundColor: '#1a1a1a',
+          cursor: 'pointer',
+          transition: 'border-color 0.25s',
+          '&:focus': {
+            outline: '4px auto -webkit-focus-ring-color',
+          },
         },
         containedPrimary: {
           background: 'linear-gradient(137.48deg, #ffdb3b 10%, #fe53bb 45%, #8f51ea 67%, #0044ff 87%)',
@@ -211,6 +261,47 @@ export const theme = createTheme({
             color: '#ffffff',
             '&:hover': {
               backgroundColor: '#5f82a9',
+            },
+          },
+        },
+      },
+    },
+    // 新增卡片組件樣式
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          padding: '2em',
+          backgroundColor: '#2a2b38',
+          borderRadius: '10px',
+          boxShadow: '0px 5px 15px rgba(0, 0, 0, 0.3)',
+        },
+      },
+    },
+    // 抽屜組件樣式
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          backgroundColor: '#2a2b38',
+          borderRight: '1px solid #355891',
+        },
+      },
+    },
+    // 應用欄組件樣式
+    MuiAppBar: {
+      styleOverrides: {
+        root: {
+          backgroundColor: '#1c3b6a',
+        },
+      },
+    },
+    // 列表項組件樣式
+    MuiListItem: {
+      styleOverrides: {
+        root: {
+          '&.Mui-selected': {
+            backgroundColor: 'rgba(53, 88, 145, 0.3)',
+            '&:hover': {
+              backgroundColor: 'rgba(53, 88, 145, 0.4)',
             },
           },
         },

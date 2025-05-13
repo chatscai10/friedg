@@ -309,6 +309,59 @@ components:
                 type: string
                 pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
                 description: 關店時間 (HH:MM 24小時制)
+        gpsFence:
+          type: object
+          description: GPS打卡圍欄設定
+          properties:
+            enabled:
+              type: boolean
+              description: 是否啟用GPS打卡圍欄
+            radius:
+              type: number
+              format: float
+              description: 圍欄半徑（單位：公尺）
+            center:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                  format: double
+                  description: 圍欄中心點緯度
+                longitude:
+                  type: number
+                  format: double
+                  description: 圍欄中心點經度
+        printerSettings:
+          type: object
+          description: 雲端出單設定
+          properties:
+            enabled:
+              type: boolean
+              description: 是否啟用雲端出單
+            apiUrl:
+              type: string
+              format: uri
+              description: 雲端印表機API網址
+            apiKey:
+              type: string
+              description: 雲端印表機API金鑰
+            printerType:
+              type: string
+              enum: [thermal, label, normal]
+              description: 印表機類型
+            templates:
+              type: object
+              description: 不同單據的模板設定
+              properties:
+                receipt:
+                  type: string
+                  description: 收據模板
+                kitchen:
+                  type: string
+                  description: 廚房出單模板
+                takeout:
+                  type: string
+                  description: 外帶單模板
         createdAt:
           type: string
           format: date-time
@@ -340,7 +393,12 @@ components:
           description: 所屬租戶ID
         storeId:
           type: string
-          description: 所屬店鋪ID
+          description: 主要所屬店鋪ID
+        assignedStores:
+          type: array
+          items:
+            type: string
+          description: 可工作的店鋪ID列表，支援跨店分派
         employeeCode:
           type: string
           description: 員工編號
@@ -353,6 +411,15 @@ components:
         position:
           type: string
           description: 職位
+        role:
+          type: string
+          description: 系統登入角色
+          enum: [admin, staff]
+        roleLevel:
+          type: integer
+          description: 權限等級（數字越大權限越高）
+          minimum: 1
+          maximum: 10
         employmentType:
           type: string
           enum: [full_time, part_time, contract, intern, temporary]
@@ -413,6 +480,73 @@ components:
           type: string
           format: date-time
           description: 更新時間
+    
+    # 角色模型
+    Role:
+      type: object
+      required:
+        - id
+        - name
+        - roleLevel
+        - scope
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 角色ID
+        name:
+          type: string
+          description: 角色名稱
+        description:
+          type: string
+          description: 角色描述
+        roleLevel:
+          type: integer
+          description: 權限等級（數字越大權限越高）
+          minimum: 1
+          maximum: 10
+        scope:
+          type: string
+          enum: [global, tenant, store]
+          description: 角色範圍（全局、租戶層級、店鋪層級）
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+          description: 角色關聯的權限列表
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+    
+    # 權限模型
+    Permission:
+      type: object
+      required:
+        - id
+        - resourceType
+        - action
+      properties:
+        id:
+          type: string
+          description: 權限ID
+        resourceType:
+          type: string
+          description: 資源類型（例如：employees, stores, orders等）
+        action:
+          type: string
+          enum: [create, read, update, delete, manage, approve]
+          description: 操作動作
+        description:
+          type: string
+          description: 權限描述
+        conditions:
+          type: object
+          description: 權限條件（例如：只能操作自己的數據或下屬數據）
 
 # 安全性要求
 security:

@@ -1,19 +1,26 @@
 // 菜單項目類型定義
+import { PaginationMeta } from './api.types';
 
 // 菜單分類類型
-export type MenuCategoryType = 'main_dish' | 'side_dish' | 'drink' | 'dessert' | 'combo' | 'seasonal';
+export type MenuCategoryType = 'STANDARD' | 'main_dish' | 'side_dish' | 'drink' | 'dessert' | 'combo' | 'seasonal';
 
 // 菜單分類
 export interface MenuCategory {
-  id: string;
+  categoryId: string;
   name: string;
   description?: string;
-  displayOrder: number;
+  sortOrder: number;
   type: MenuCategoryType;
   imageUrl?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// 標準API响應類型 - 菜單分類列表
+export interface MenuCategoriesResponse {
+  data: MenuCategory[];
+  meta: PaginationMeta;
 }
 
 // 菜單選項組 (例如：辣度、加料等)

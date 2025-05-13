@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "target": "es2020",
+    "target": "es2017",
     "outDir": "lib",
-    "rootDir": "src",
+    "rootDir": "./",
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
@@ -11,15 +11,28 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitReturns": true,
     "noUnusedLocals": true,
-    "allowJs": true
+    "allowJs": true,
+    "noImplicitAny": false,
+    "ignoreDeprecations": "5.0",
+    "noEmitOnError": false,
+    "baseUrl": ".",
+    "paths": {
+      "@src/*": ["src/*"]
+    }
   },
   "compileOnSave": true,
   "include": [
     "src/**/*.ts",
-    "src/**/*.js"
+    "src/**/*.js",
+    "test/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "**/*.test.ts"
+    "test/**/*.ts",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/**/*.tests.ts",
+    "src/menus/__tests__/menuItem.handlers.test.ts"
   ]
 } 

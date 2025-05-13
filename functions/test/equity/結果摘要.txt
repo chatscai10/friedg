@@ -1,0 +1,44 @@
+# 股權模組測試結果摘要
+
+## 已完成的測試
+
+我們已經為 equity 模組中的以下函數編寫了測試：
+
+1. **checkEquityEligibility**:
+   - 測試符合資格的員工是否被正確標記為合格
+   - 測試不符合資格的員工是否被正確標記為不合格
+
+2. **openPurchaseWindow**:
+   - 測試是否正確地為所有活躍租戶的股權池開啟購股窗口
+   - 測試是否正確地處理非活躍租戶（不應更新）
+
+3. **closePurchaseWindow**:
+   - 測試是否正確地關閉所有開啟中的購股窗口
+
+## 測試方法
+
+1. **測試環境**:
+   - 使用 Firebase Emulator 模擬 Firestore 環境
+   - 使用 Jest + ts-jest 作為測試框架
+   - 使用 Chai 做為斷言庫
+
+2. **模擬策略**:
+   - 模擬外部模組依賴（financial, payments, payroll）
+   - 使用 jest.mock 創建模擬函數
+
+3. **數據處理**:
+   - 在每次測試前清理相關集合
+   - 使用隨機 ID 避免數據衝突
+
+## 測試結果
+
+所有測試都成功通過，表明 equity 模組的核心功能按預期工作。在 openPurchaseWindow 和 closePurchaseWindow 測試中，我們成功地驗證了排程函數邏輯在與 Firestore Emulator 交互時的正確性。
+
+## 後續工作
+
+需要進一步擴展測試以涵蓋更多函數：
+- revalueShares
+- autoDistributeDividends
+- processInstallmentDebit
+
+這些函數需要更複雜的環境設置和模擬策略，因為它們涉及到與其他模組的交互和更複雜的業務邏輯。 

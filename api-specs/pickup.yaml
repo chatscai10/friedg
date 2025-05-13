@@ -1,0 +1,195 @@
+openapi: 3.0.3
+info:
+  title: 取餐叫號 API
+  description: 吃雞排找不早系統的取餐叫號相關 API，用於通知客戶取餐
+  version: 1.0.0
+
+paths:
+  /pickup/stores/{storeId}/call:
+    post:
+      summary: 叫取餐號碼
+      description: POS 或員工呼叫此 API 通知取餐顯示螢幕顯示下一個待取餐的號碼
+      tags:
+        - Pickup
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pickupNumber:
+                  type: string
+                  description: 取餐號碼（如 A053）
+                orderNumber:
+                  type: string
+                  description: 訂單號碼，如果沒有提供 pickupNumber，可以使用訂單號碼代替
+                orderInfo:
+                  type: object
+                  description: 訂單的額外信息（可選）
+                  properties:
+                    customerName:
+                      type: string
+                      description: 客戶名稱（若適用）
+                    orderItems:
+                      type: array
+                      description: 訂單項目（若適用）
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          quantity:
+                            type: integer
+              anyOf:
+                - required: [pickupNumber]
+                - required: [orderNumber]
+      responses:
+        '200':
+          description: 叫號成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 叫號成功
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        description: 叫號記錄ID
+                      pickupNumber:
+                        type: string
+                        description: 取餐號碼
+                      orderNumber:
+                        type: string
+                        description: 訂單號碼（如有）
+                      calledAt:
+                        type: string
+                        format: date-time
+                        description: 叫號時間
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足（非店鋪員工或管理員）
+        '404':
+          description: 店鋪不存在
+      security:
+        - BearerAuth: []
+
+  /pickup/stores/{storeId}/history:
+    get:
+      summary: 獲取叫號歷史
+      description: 獲取指定店鋪的叫號歷史記錄
+      tags:
+        - Pickup
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: 店鋪ID
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 每頁記錄數量
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+        - name: page
+          in: query
+          description: 頁碼
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+      responses:
+        '200':
+          description: 成功獲取叫號歷史
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 成功獲取叫號歷史
+                  data:
+                    type: object
+                    properties:
+                      history:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              description: 叫號記錄ID
+                            pickupNumber:
+                              type: string
+                              description: 取餐號碼
+                            orderNumber:
+                              type: string
+                              description: 訂單號碼（如有）
+                            calledAt:
+                              type: string
+                              format: date-time
+                              description: 叫號時間
+                            calledBy:
+                              type: string
+                              description: 叫號操作者ID
+                            orderInfo:
+                              type: object
+                              description: 訂單的額外信息（若有）
+                      pagination:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                            description: 總記錄數
+                          page:
+                            type: integer
+                            description: 當前頁碼
+                          limit:
+                            type: integer
+                            description: 每頁記錄數
+                          pages:
+                            type: integer
+                            description: 總頁數
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權訪問
+        '403':
+          description: 權限不足（非店鋪員工或管理員）
+        '404':
+          description: 店鋪不存在
+      security:
+        - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT 

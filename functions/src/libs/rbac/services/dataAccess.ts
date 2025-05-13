@@ -13,6 +13,7 @@ import {
   PermissionContext 
 } from '../types';
 import { CACHE_CONFIG } from '../constants';
+import { validateRoleType } from '../utils/validators';
 
 // 內部緩存，用於減少Firestore訪問次數
 const userCache = new Map<string, { user: UserInfo, timestamp: number }>();
@@ -78,34 +79,104 @@ export async function getUserInfo(uid: string): Promise<UserInfo | null> {
  * @returns 用戶資訊，包含角色等
  */
 export async function getUserInfoFromClaims(authClaims: Record<string, any>): Promise<UserInfo | null> {
-  const uid = authClaims.uid || authClaims.sub;
+  // 確保有 uid
+  const uid = authClaims.uid || authClaims.sub || authClaims.user_id;
   
   if (!uid) {
+    console.error('無法從 authClaims 獲取用戶 ID，缺少 uid/sub/user_id 欄位');
     return null;
   }
   
-  // 如果聲明中包含必要的用戶資訊，直接構建（避免訪問Firestore）
-  if (authClaims.role) {
-    const role: RoleType = authClaims.role;
+  try {
+    // 增強對聲明中角色信息的處理
+    let role: RoleType = 'customer'; // 預設為顧客角色
     
-    return {
+    // 支援多種可能的角色欄位名稱
+    if (typeof authClaims.role === 'string') {
+      // 直接使用role欄位
+      if (validateRoleType(authClaims.role)) {
+        role = authClaims.role as RoleType;
+      } else {
+        console.warn(`用戶 ${uid} 的角色類型無效: "${authClaims.role}"，使用預設角色: customer`);
+      }
+    } else if (Array.isArray(authClaims.roles) && authClaims.roles.length > 0) {
+      // 使用roles陣列中的第一個角色
+      const firstRole = authClaims.roles[0];
+      if (typeof firstRole === 'string' && validateRoleType(firstRole)) {
+        role = firstRole as RoleType;
+      } else {
+        console.warn(`用戶 ${uid} 的角色陣列首個角色無效: "${firstRole}"，使用預設角色: customer`);
+      }
+    } else if (authClaims.isAdmin === true) {
+      // 特殊處理，僅供測試與相容性使用
+      console.warn(`用戶 ${uid} 使用了傳統 isAdmin 標記，建議遷移至標準角色系統`);
+      role = 'tenant_admin';
+    }
+    
+    // 確定角色等級
+    const roleLevel = RoleLevelMap[role] || RoleLevel.CUSTOMER;
+    
+    // 增強對租戶ID的安全提取
+    let tenantId: string | undefined = undefined;
+    
+    if (typeof authClaims.tenantId === 'string' && authClaims.tenantId.trim() !== '') {
+      tenantId = authClaims.tenantId;
+    } else if (typeof authClaims.tenant_id === 'string' && authClaims.tenant_id.trim() !== '') {
+      // 支援可能的替代命名
+      tenantId = authClaims.tenant_id;
+      console.info(`用戶 ${uid} 使用非標準 tenant_id 欄位，建議標準化為 tenantId`);
+    }
+    
+    // 安全地獲取店鋪ID
+    let storeId: string | undefined = undefined;
+    
+    if (typeof authClaims.storeId === 'string' && authClaims.storeId.trim() !== '') {
+      storeId = authClaims.storeId;
+    } else if (typeof authClaims.store_id === 'string' && authClaims.store_id.trim() !== '') {
+      // 支援可能的替代命名
+      storeId = authClaims.store_id;
+      console.info(`用戶 ${uid} 使用非標準 store_id 欄位，建議標準化為 storeId`);
+    }
+    
+    // 安全地獲取額外店鋪ID列表
+    let additionalStoreIds: string[] = [];
+    
+    if (Array.isArray(authClaims.additionalStoreIds)) {
+      additionalStoreIds = authClaims.additionalStoreIds.filter(
+        (id: any) => typeof id === 'string' && id.trim() !== ''
+      );
+    } else if (Array.isArray(authClaims.additional_store_ids)) {
+      // 支援可能的替代命名
+      additionalStoreIds = authClaims.additional_store_ids.filter(
+        (id: any) => typeof id === 'string' && id.trim() !== ''
+      );
+      console.info(`用戶 ${uid} 使用非標準 additional_store_ids 欄位，建議標準化為 additionalStoreIds`);
+    }
+    
+    // 日誌記錄用戶身份詳情，有助於調試
+    if (process.env.NODE_ENV === 'development' || process.env.FUNCTIONS_EMULATOR === 'true') {
+      console.log(`用戶身份解析: ${uid}, 角色: ${role}, 租戶ID: ${tenantId || 'N/A'}, 店鋪ID: ${storeId || 'N/A'}, 額外店鋪: ${additionalStoreIds.length > 0 ? additionalStoreIds.join(',') : 'N/A'}`);
+    }
+    
+    // 構建用戶信息對象
+    const userInfo: UserInfo = {
       uid,
       role,
-      roleLevel: RoleLevelMap[role] || RoleLevel.CUSTOMER,
-      tenantId: authClaims.tenantId,
-      storeId: authClaims.storeId,
-      additionalStoreIds: authClaims.additionalStoreIds || [],
-      permissions: {
-        canDiscount: authClaims.canDiscount === true,
-        canRefund: authClaims.canRefund === true,
-        maxDiscountPercentage: authClaims.maxDiscountPercentage,
-        maxRefundAmount: authClaims.maxRefundAmount
-      }
+      roleLevel,
+      tenantId,
+      storeId,
+      additionalStoreIds,
+      permissions: extractPermissionsFromClaims(authClaims)
     };
+    
+    return userInfo;
+  } catch (error) {
+    console.error(`解析用戶 ${uid} claims 時發生錯誤:`, error instanceof Error ? error.message : error);
+    
+    // 嘗試從數據庫作為備選方案獲取
+    console.log(`嘗試從數據庫獲取用戶 ${uid} 信息作為備選方案`);
+    return getUserInfo(uid);
   }
-  
-  // 否則，從數據庫獲取完整的用戶資訊
-  return getUserInfo(uid);
 }
 
 /**
@@ -240,28 +311,71 @@ function extractSpecialPermissions(userData: any): SpecialPermissions {
 }
 
 /**
+ * 從聲明中提取特殊權限
+ * @param claims 認證聲明
+ * @returns 特殊權限對象
+ */
+function extractPermissionsFromClaims(claims: Record<string, any>): SpecialPermissions {
+  const permissions: SpecialPermissions = {};
+  
+  // 使用類型安全的方式提取特殊權限
+  if (claims.permissions && typeof claims.permissions === 'object') {
+    // 直接使用權限對象
+    if (typeof claims.permissions.canDiscount === 'boolean') {
+      permissions.canDiscount = claims.permissions.canDiscount;
+    }
+    
+    if (typeof claims.permissions.canRefund === 'boolean') {
+      permissions.canRefund = claims.permissions.canRefund;
+    }
+    
+    if (typeof claims.permissions.maxDiscountPercentage === 'number') {
+      permissions.maxDiscountPercentage = claims.permissions.maxDiscountPercentage;
+    }
+    
+    if (typeof claims.permissions.maxRefundAmount === 'number') {
+      permissions.maxRefundAmount = claims.permissions.maxRefundAmount;
+    }
+  } else {
+    // 備選：直接從頂層claims提取
+    if (typeof claims.canDiscount === 'boolean') {
+      permissions.canDiscount = claims.canDiscount;
+    }
+    
+    if (typeof claims.canRefund === 'boolean') {
+      permissions.canRefund = claims.canRefund;
+    }
+    
+    if (typeof claims.maxDiscountPercentage === 'number') {
+      permissions.maxDiscountPercentage = claims.maxDiscountPercentage;
+    }
+    
+    if (typeof claims.maxRefundAmount === 'number') {
+      permissions.maxRefundAmount = claims.maxRefundAmount;
+    }
+  }
+  
+  return permissions;
+}
+
+/**
  * 清理舊的緩存條目
  */
 function pruneCache() {
   const now = Date.now();
   const expiredThreshold = now - CACHE_CONFIG.USER_INFO_TTL;
   
-  // 刪除過期的條目
-  for (const [uid, entry] of userCache.entries()) {
-    if (entry.timestamp < expiredThreshold) {
-      userCache.delete(uid);
-    }
-  }
+  // 清理舊的緩存記錄
+  const expiredEntries = Array.from(userCache.entries())
+    .filter(([_, entry]) => now - entry.timestamp > expiredThreshold);
   
-  // 如果還是太多，按時間排序刪除最舊的條目
-  if (userCache.size > CACHE_CONFIG.MAX_CACHE_SIZE * 0.8) {
-    const entries = Array.from(userCache.entries())
-      .sort((a, b) => a[1].timestamp - b[1].timestamp);
-      
-    // 刪除最舊的20%
-    const toDelete = Math.floor(entries.length * 0.2);
-    for (let i = 0; i < toDelete; i++) {
-      userCache.delete(entries[i][0]);
-    }
+  for (const [uid, _] of expiredEntries) {
+    userCache.delete(uid);
   }
+}
+
+// 在測試環境下條件性導出內部函數和變數
+if (process.env.NODE_ENV === 'test') {
+  module.exports.pruneCacheInternal = pruneCache;
+  module.exports.userCacheInternal = userCache;
 } 

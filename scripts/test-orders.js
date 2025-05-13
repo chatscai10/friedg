@@ -3,28 +3,37 @@
  * 用於快速測試訂單創建、支付和收據生成功能
  */
 
-const { initializeApp } = require('firebase/app');
-const { getAuth, signInWithEmailAndPassword, signOut } = require('firebase/auth');
-const { getFunctions, httpsCallable, connectFunctionsEmulator } = require('firebase/functions');
+// 使用 v9 Compat 版本 (符合專案規劃書)
+const firebase = require('firebase/compat/app');
+require('firebase/compat/auth');
+require('firebase/compat/functions');
 
-// Firebase 配置
+// Firebase 配置 - 使用模擬器專用的虛擬配置
+// 在模擬器環境中，apiKey 實際上不會被使用，所以可以使用任何字符串
 const firebaseConfig = {
-  apiKey: "AIzaSyDummyApiKeyForEmulator",
-  authDomain: "friedg-dev.firebaseapp.com",
+  apiKey: "dummy-api-key-for-emulator-only",
   projectId: "friedg-dev",
+  // 在模擬器環境中，以下配置不會被使用
+  authDomain: "friedg-dev.firebaseapp.com",
   storageBucket: "friedg-dev.appspot.com",
   messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef1234567890",
-  measurementId: "G-ABCDEFGHIJ"
+  appId: "1:123456789012:web:abcdef1234567890"
 };
 
 // 初始化 Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const functions = getFunctions(app);
+let app;
+try {
+  app = firebase.app();
+} catch {
+  app = firebase.initializeApp(firebaseConfig);
+}
+
+const auth = firebase.auth();
+const functions = firebase.functions();
 
 // 連接模擬器
-connectFunctionsEmulator(functions, "localhost", 5101);
+functions.useEmulator("localhost", 5101);
+auth.useEmulator("http://localhost:9199");
 
 // 測試使用者憑證
 const testUserEmail = 'store_manager@test.com';
@@ -48,11 +57,11 @@ async function createTestOrder() {
   try {
     // 登入測試使用者
     console.log('正在登入測試使用者...');
-    await signInWithEmailAndPassword(auth, testUserEmail, testUserPassword);
+    await auth.signInWithEmailAndPassword(testUserEmail, testUserPassword);
     console.log('登入成功！');
 
     // 獲取訂單Cloud Function引用
-    const newOrderFunction = httpsCallable(functions, 'newOrder');
+    const newOrderFunction = functions.httpsCallable('newOrder');
 
     // 準備訂單數據
     const orderData = {
@@ -94,7 +103,7 @@ async function createTestOrder() {
 async function payTestOrder(orderId) {
   try {
     // 獲取支付Cloud Function引用
-    const recordPaymentFunction = httpsCallable(functions, 'recordPayment');
+    const recordPaymentFunction = functions.httpsCallable('recordPayment');
     
     // 準備支付數據
     const paymentData = {
@@ -123,7 +132,7 @@ async function payTestOrder(orderId) {
 async function generateTestReceipt(orderId) {
   try {
     // 獲取收據Cloud Function引用
-    const generateReceiptFunction = httpsCallable(functions, 'generateOrderReceipt');
+    const generateReceiptFunction = functions.httpsCallable('generateOrderReceipt');
     
     // 生成收據
     console.log('正在生成訂單收據...');
@@ -159,7 +168,7 @@ async function runOrderTest() {
     console.error('測試過程中發生錯誤：', error);
   } finally {
     // 登出
-    await signOut(auth);
+    await auth.signOut();
     console.log('已登出測試使用者');
   }
 }

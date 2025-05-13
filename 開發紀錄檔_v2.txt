@@ -1,0 +1,637 @@
+<!-- 開發紀錄檔 -->\n\n[2024-06-18 15:30:00] 問題簡述: [完成第一批開發任務中的Git策略與CI/CD流程定義] 解決方式: 定義了完整的Git分支策略與CI/CD流程構想。主要包含：(1)分支結構與用途：main(生產)、develop(開發主分支)、feature/xxx(功能開發)、bugfix/xxx(錯誤修復)、hotfix/xxx(緊急修補)、release/x.y.z(預發布)；(2)分支合併規則：強制Pull Request、代碼審核、自動化測試、版本標籤v主版本.次版本.修補版本；(3)CI/CD流程：PR時執行代碼檢查與單元測試，合併到develop/release/main時觸發相應環境部署，區分自動化測試層級，配置部署流程與失敗回滾機制。確保了版本控制與部署過程的標準化，提高開發效率與代碼品質。\n\n[2024-06-18 16:30:00] 問題簡述: [完成核心資料模型定義 (employees, stores, roles, auditLogs)] 解決方式: 定義了四個核心Firestore集合的完整結構，包括：(1) employees集合：包含員工的基本資料、僱用資訊、銀行帳戶、工作狀態和績效指標等；(2) stores集合：記錄分店的基本資訊、地理位置、營運資訊、特定設定與統計資料；(3) roles集合：定義角色名稱、權限等級和各項資源的操作權限；(4) auditLogs集合：記錄系統操作的完整日誌，包含操作者資訊、操作類型和詳細內容。設計中特別考慮了多租戶隔離策略、權限控制、稽核與追蹤機制、跨店支援和擴展性等關鍵需求，確保系統架構符合業務需求與技術規範。\n\n[2024-06-18 17:15:00] 問題簡述: [完成 Firestore 安全規則初版定義] 解決方式: 定義了Firestore安全規則，針對四個核心集合(employees, stores, roles, auditLogs)實現了基於角色的訪問控制與多租戶隔離。主要實現：(1)通用輔助函數：實現身份驗證、角色判斷、租戶/店鋪隔離、資源所有權驗證等基礎邏輯；(2)employees集合規則：確保員工資料適當隔離，租戶管理員可管理租戶內員工，店長僅能管理所屬門店員工，普通員工僅能讀取自己資料；(3)stores集合規則：確保適當隔離與權限控制，租戶管理員可管理租戶內所有店鋪，店長僅能管理自己店鋪；(4)roles集合規則：角色定義受到嚴格控制，僅超級管理員與租戶管理員可修改，且不能創建或修改比自己權限高的角色；(5)auditLogs集合規則：完全禁止刪除與更新，確保日誌完整性，允許合法讀取與寫入操作。規則依據RBAC函式庫設計文檔實現，支持多租戶系統需求，確保數據安全與隔離。\n\n[2024-06-18 17:30:00] 問題簡述: [完成 Firestore 索引初版定義] 解決方式: 定義了Firestore索引，優化查詢效能。主要包含：(1)針對employees集合：支持按租戶、分店和角色篩選的複合索引，便於管理和權限控制；支持按狀態、入職日期查詢的排序索引；(2)針對stores集合：支持按租戶過濾和地理位置排序的索引，為店鋪查詢優化；(3)針對roles集合：支持按租戶和權限等級排序的索引；(4)針對auditLogs集合：提供全面的查詢支持，包括按租戶、分店、操作者、操作類型和時間範圍的多種組合索引，便於系統審計和問題追蹤。所有索引均考慮到系統常見查詢模式，平衡了查詢效能和資源成本，符合專案整體架構需求。\n\n[2025-05-08 16:14:43] 問題簡述: [完成 Firestore 安全規則初版定義] 解決方式: rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // === 通用輔助函數 === //
+    
+    // 檢查使用者是否已登入
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+    
+    // 檢查使用者是否有特定角色
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
+    }
+    
+    // 檢查使用者角色等級是否小於等於指定等級 (等級數字越小，權限越高)
+    function hasRoleLevelLE(level) {
+      return isAuthenticated() && request.auth.token.roleLevel <= level;
+    }
+    
+    // 檢查使用者是否為超級管理員
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.role == "super_admin";
+    }
+    
+    // 檢查使用者是否為租戶管理員
+    function isTenantAdmin() {
+      return isAuthenticated() && request.auth.token.role == "tenant_admin";
+    }
+    
+    // 檢查使用者是否為店長
+    function isStoreManager() {
+      return isAuthenticated() && request.auth.token.role == "store_manager";
+    }
+    
+    // 檢查使用者是否為班長或以上階級
+    function isShiftLeaderOrAbove() {
+      return isAuthenticated() && 
+             (request.auth.token.roleLevel <= 4); // 4 為班長等級
+    }
+    
+    // 檢查使用者是否為資深員工或以上階級
+    function isSeniorStaffOrAbove() {
+      return isAuthenticated() && 
+             (request.auth.token.roleLevel <= 5); // 5 為資深員工等級
+    }
+    
+    // 檢查使用者是否為資深員工
+    function isSeniorStaff() {
+      return hasRole('senior_staff') || hasRoleLevelLE(4);
+    }
+    
+    // 檢查使用者是否為一般員工
+    function isStaff() {
+      return hasRole('staff') || hasRoleLevelLE(5);
+    }
+    
+    // 檢查使用者是否為顧客
+    function isCustomer() {
+      return hasRole('customer');
+    }
+    
+    // 檢查資源的租戶ID是否與使用者的租戶ID相同
+    function isSameTenant(resourceData) {
+      return isAuthenticated() && 
+             resourceData.tenantId == request.auth.token.tenantId;
+    }
+    
+    // 檢查使用者是否為資源對應的租戶管理員
+    function isTenantAdminOfResource(resourceData) {
+      return isTenantAdmin() && isSameTenant(resourceData);
+    }
+    
+    // 檢查資源的店鋪ID是否與使用者的店鋪ID相同
+    function isSameStore(resourceData) {
+      return isAuthenticated() && 
+             resourceData.storeId == request.auth.token.storeId;
+    }
+    
+    // 檢查使用者是否為資源對應的店長
+    function isStoreManagerOfResource(resourceData) {
+      return isStoreManager() && isSameStore(resourceData) && isSameTenant(resourceData);
+    }
+    
+    // 檢查使用者是否為資源的擁有者
+    function isOwner(resourceData) {
+      return isAuthenticated() && 
+             (resourceData.uid == request.auth.uid || 
+              resourceData.customerId == request.auth.uid || 
+              resourceData.employeeId == request.auth.uid);
+    }
+    
+    // 檢查資料請求中是否包含必要欄位
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+    
+    // 檢查請求者是否可訪問其他店鋪的資料 (對於多店訪問權限)
+    function canAccessStore(storeId) {
+      return isAuthenticated() && 
+             (isSuperAdmin() || 
+              (isTenantAdmin() && request.auth.token.tenantId == resource.data.tenantId) ||
+              request.auth.token.storeId == storeId || 
+              request.auth.token.additionalStoreIds.hasAny([storeId]));
+    }
+    
+    // === 租戶(tenants)集合規則 === //
+    match /tenants/{tenantId} {
+      // 超級管理員可以完全控制
+      // 租戶管理員只能讀取和更新自己租戶
+      // 店長及一般員工只能讀取自己租戶的基本資訊
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && request.auth.token.tenantId == tenantId) || 
+                    (isStaff() && request.auth.token.tenantId == tenantId));
+      
+      allow create: if isSuperAdmin();
+      
+      allow update: if isSuperAdmin() || 
+                     (isTenantAdmin() && request.auth.token.tenantId == tenantId);
+      
+      allow delete: if isSuperAdmin();
+      
+      // 租戶設定子集合
+      match /settings/{settingId} {
+        allow read: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isStaff() && request.auth.token.tenantId == tenantId));
+        
+        allow write: if isSuperAdmin() || 
+                      (isTenantAdmin() && request.auth.token.tenantId == tenantId);
+      }
+    }
+    
+    // === 分店(stores)集合規則 === //
+    match /stores/{storeId} {
+      // 超級管理員可以完全控制
+      // 租戶管理員可以管理自己租戶下的所有分店
+      // 店長及一般員工只能讀取自己工作的分店資訊
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    canAccessStore(storeId));
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data)));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && resource.data.storeId == storeId && isSameTenant(resource.data)));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)));
+    }
+    
+    // === 使用者(users)集合規則 === //
+    match /users/{userId} {
+      // 超級管理員可以讀取所有用戶
+      // 租戶管理員可以管理自己租戶的用戶
+      // 店長可以讀取和更新自己店鋪的用戶
+      // 所有用戶都可以讀取和更新自己的資料
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    request.auth.uid == userId);
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                      (isStoreManager() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      request.auth.uid == userId);
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)));
+      
+      // 裝置子集合
+      match /devices/{deviceId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
+    }
+    
+    // === 角色(roles)集合規則 === //
+    match /roles/{roleId} {
+      // 超級管理員可以完全控制角色
+      // 租戶管理員可以管理自己租戶的角色
+      // 店長及員工只能讀取角色資訊
+      
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data) && 
+                       request.resource.data.level > request.auth.token.roleLevel)); // 租戶管理員不能創建比自己權限高的角色
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data) && 
+                       resource.data.level > request.auth.token.roleLevel)); // 租戶管理員不能修改比自己權限高的角色
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data) && 
+                       resource.data.level > request.auth.token.roleLevel && 
+                       !resource.data.isSystemRole)); // 不能刪除系統預設角色
+    }
+    
+    // === 員工(employees)集合規則 === //
+    match /employees/{employeeId} {
+      // 定義輔助函數
+      function isEmployeeInSameTenant() {
+        return request.auth.token.tenantId == resource.data.tenantId;
+      }
+      
+      function isEmployeeInSameStore() {
+        return request.auth.token.storeId == resource.data.storeId;
+      }
+      
+      function isEmployeeSelf() {
+        return request.auth.uid == employeeId;
+      }
+      
+      function hasHigherRole(targetLevel) {
+        return request.auth.token.roleLevel <= targetLevel;
+      }
+      
+      function canManageEmployee() {
+        // 只有更高權限的人可以管理員工
+        return hasHigherRole(resource.data.roleLevel || 99);
+      }
+      
+      // 限制哪些欄位可以被普通員工自己修改
+      function isRestrictedToSelfEditFields() {
+        let allowedFields = ['displayName', 'phoneNumber', 'address', 'emergencyContact', 'bankInfo'];
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+      }
+      
+      // 獲取員工記錄 - 誰可以讀取單個員工資料？
+      allow get: if request.auth != null && (
+        isSuperAdmin() || 
+        (isTenantAdmin() && isEmployeeInSameTenant()) || 
+        (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
+        (isShiftLeaderOrAbove() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
+        isEmployeeSelf()
+      );
+      
+      // 列出員工 - 誰可以讀取員工列表？
+      allow list: if request.auth != null && (
+        isSuperAdmin() || 
+        (isTenantAdmin() && request.query.limit() <= 100 && 
+         request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1) ||
+        (isStoreManager() && request.query.limit() <= 50 && 
+         request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1 && 
+         request.query.where('storeId', '==', request.auth.token.storeId).size() == 1) ||
+        (isShiftLeaderOrAbove() && request.query.limit() <= 30 && 
+         request.query.where('tenantId', '==', request.auth.token.tenantId).size() == 1 && 
+         request.query.where('storeId', '==', request.auth.token.storeId).size() == 1)
+      );
+      
+      // 創建新員工 - 誰可以創建新的員工資料？
+      allow create: if request.auth != null && (
+        isSuperAdmin() || 
+        (isTenantAdmin() && request.resource.data.tenantId == request.auth.token.tenantId && 
+         request.resource.data.roleLevel > 1) || // 租戶管理員不能創建比自己權限高的角色
+        (isStoreManager() && request.resource.data.tenantId == request.auth.token.tenantId && 
+         request.resource.data.storeId == request.auth.token.storeId && 
+         request.resource.data.roleLevel > 2) // 店長不能創建比自己權限高的角色
+      ) && hasRequiredFields(request.resource.data, 
+         ['displayName', 'email', 'tenantId', 'storeId', 'roleLevel', 'status']);
+      
+      // 更新員工資料 - 誰可以修改員工資料？
+      allow update: if request.auth != null && (
+        isSuperAdmin() || 
+        (isTenantAdmin() && isEmployeeInSameTenant() && canManageEmployee()) || 
+        (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore() && canManageEmployee()) || 
+        (isEmployeeSelf() && isRestrictedToSelfEditFields())
+      ) && 
+      // 防止修改不可變欄位
+      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'tenantId']) &&
+      // 確保狀態變更合法
+      (resource.data.status == request.resource.data.status || 
+       (isSuperAdmin() || isTenantAdmin() || isStoreManager()));
+      
+      // 刪除員工資料 - 誰可以刪除員工資料？
+      allow delete: if request.auth != null && (
+        isSuperAdmin() || 
+        (isTenantAdmin() && isEmployeeInSameTenant())
+      );
+      
+      // 薪資歷史子集合
+      match /payrollHistory/{payrollId} {
+        allow read: if request.auth != null && (
+          isSuperAdmin() || 
+          (isTenantAdmin() && isEmployeeInSameTenant()) || 
+          (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore()) || 
+          isEmployeeSelf()
+        );
+        
+        allow write: if request.auth != null && (
+          isSuperAdmin() || 
+          (isTenantAdmin() && isEmployeeInSameTenant()) || 
+          (isStoreManager() && isEmployeeInSameTenant() && isEmployeeInSameStore())
+        );
+      }
+    }
+    
+    // === 系統設定(systemConfigs)集合規則 === //
+    match /systemConfigs/{configId} {
+      // 只有超級管理員可以管理系統設定
+      // 租戶管理員可以讀取系統設定
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || isTenantAdmin());
+      
+      allow write: if isAuthenticated() && isSuperAdmin();
+    }
+
+    // --- Menu Data Rules --- //
+    // Assumes collections: menuCategories, menuItems, menuOptions
+    // Assumes fields like tenantId, storeId on these documents
+    // Public read access for menus
+    match /menuCategories/{categoryId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && (isTenantAdmin() && isSameTenant(request.resource.data) || isManagerOfResourceStore(request.resource.data));
+    }
+    match /menuItems/{itemId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && (isTenantAdmin() && isSameTenant(request.resource.data) || isManagerOfResourceStore(request.resource.data));
+    }
+    match /menuOptions/{optionId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && (isTenantAdmin() && isSameTenant(request.resource.data) || isManagerOfResourceStore(request.resource.data));
+    }
+
+    // === 訂單(orders)集合規則 === //
+    match /orders/{orderId} {
+      // 顧客可以讀取自己的訂單
+      // 員工可以讀取和管理自己店鋪的訂單
+      // 租戶管理員可以讀取和管理自己租戶的所有訂單
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    resource.data.customerId == request.auth.uid);
+      
+      allow create: if isAuthenticated() && 
+                     // 顧客可以創建訂單
+                     ((request.resource.data.customerId == request.auth.uid && 
+                       request.resource.data.orderSource == 'online') || 
+                      // 員工可以創建訂單
+                      (isSuperAdmin() || 
+                       (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                       (isStaff() && isSameStore(request.resource.data) && isSameTenant(request.resource.data))));
+      
+      allow update: if isAuthenticated() && 
+                     // 顧客可以更新自己的訂單狀態（例如取消）
+                     (resource.data.customerId == request.auth.uid && 
+                      // 只能更新特定狀態
+                      (resource.data.status == 'pending' || resource.data.status == 'confirmed') && 
+                      // 只能更新到特定狀態
+                      request.resource.data.status == 'cancelled') || 
+                     // 員工可以更新訂單
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isSeniorStaffOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data) && 
+                       // 資深員工只能更新訂單狀態
+                       resource.data.status != 'cancelled') || 
+                      (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data) && 
+                       // 一般員工只能更新特定狀態
+                       resource.data.status != 'cancelled' && 
+                       request.resource.data.status != 'cancelled'));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)));
+                      
+      // 訂單事件子集合
+      match /events/{eventId} {
+        allow read: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(get(/databases/$(database)/documents/orders/$(orderId)).data)) || 
+                      (isStaff() && isSameStore(get(/databases/$(database)/documents/orders/$(orderId)).data) && 
+                       isSameTenant(get(/databases/$(database)/documents/orders/$(orderId)).data)) || 
+                      get(/databases/$(database)/documents/orders/$(orderId)).data.customerId == request.auth.uid);
+        
+        allow create: if isAuthenticated() && 
+                       (isSuperAdmin() || 
+                        (isTenantAdmin() && isSameTenant(get(/databases/$(database)/documents/orders/$(orderId)).data)) || 
+                        (isStaff() && isSameStore(get(/databases/$(database)/documents/orders/$(orderId)).data) && 
+                         isSameTenant(get(/databases/$(database)/documents/orders/$(orderId)).data)));
+        
+        allow update, delete: if false; // 事件記錄不允許修改或刪除
+      }
+    }
+    
+    // === 訂單項目(orderItems)集合規則 === //
+    match /orderItems/{orderItemId} {
+      // 訂單項目的存取權限與訂單相同
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    (exists(/databases/$(database)/documents/orders/$(resource.data.orderId)) && 
+                     get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.customerId == request.auth.uid));
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                      (isStaff() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)) || 
+                      (exists(/databases/$(database)/documents/orders/$(request.resource.data.orderId)) && 
+                       get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.customerId == request.auth.uid));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isSeniorStaffOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)));
+    }
+    
+    // === 出勤記錄(attendanceRecords)集合規則 === //
+    match /attendanceRecords/{attendanceId} {
+      // 員工可以讀取自己的出勤記錄
+      // 店長可以讀取和管理自己店鋪員工的出勤記錄
+      // 租戶管理員可以讀取和管理自己租戶所有員工的出勤記錄
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    resource.data.employeeId == request.auth.uid);
+      
+      allow create: if isAuthenticated() && 
+                     // 員工可以創建自己的出勤記錄
+                     ((request.resource.data.employeeId == request.auth.uid && 
+                       request.resource.data.isManuallyAdded == false) || 
+                      // 管理員可以創建員工的出勤記錄
+                      (isSuperAdmin() || 
+                       (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                       (isStoreManager() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)) || 
+                       (isShiftLeaderOrAbove() && isSameStore(request.resource.data) && isSameTenant(request.resource.data))));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)));
+    }
+    
+    // === 庫存項目(inventoryItems)集合規則 === //
+    match /inventoryItems/{itemId} {
+      // 店長和員工可以讀取自己店鋪的庫存項目
+      // 店長和班長可以管理自己店鋪的庫存項目
+      // 租戶管理員可以管理自己租戶的所有庫存項目
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                      (isStoreManager() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)));
+    }
+    
+    // === 庫存盤點記錄(inventoryCounts)集合規則 === //
+    match /inventoryCounts/{countId} {
+      // 員工可以讀取和創建自己店鋪的盤點記錄
+      // 店長和班長可以管理自己店鋪的盤點記錄
+      // 租戶管理員可以管理自己租戶的所有盤點記錄
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                      (isStaff() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)));
+    }
+    
+    // === 叫貨單(inventoryOrders)集合規則 === //
+    match /inventoryOrders/{orderId} {
+      // 員工可以讀取和創建自己店鋪的叫貨單
+      // 店長和班長可以管理自己店鋪的叫貨單
+      // 租戶管理員可以管理自己租戶的所有叫貨單
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                      (isStaff() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)));
+    }
+    
+    // === 排班(schedules)集合規則 === //
+    match /schedules/{scheduleId} {
+      // 員工可以讀取自己的排班
+      // 店長和班長可以管理自己店鋪的排班
+      // 租戶管理員可以管理自己租戶的所有排班
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStaff() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    resource.data.employeeId == request.auth.uid);
+      
+      allow create: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                      (isStoreManager() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(request.resource.data) && isSameTenant(request.resource.data)));
+      
+      allow update: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                      (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)));
+      
+      allow delete: if isAuthenticated() && 
+                     (isSuperAdmin() || 
+                      (isTenantAdmin() && isSameTenant(resource.data)) || 
+                      (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)));
+    }
+    
+    // === 請假申請(leaves)集合規則 === //
+    match /leaves/{leaveId} {
+      // 員工可以讀取和創建自己的請假申請
+      // 店長和班長可以管理自己店鋪的請假申請
+      // 租戶管理員可以管理自己租戶的所有請假申請
+      
+      allow read: if isAuthenticated() && 
+                   (isSuperAdmin() || 
+                    (isTenantAdmin() && isSameTenant(resource.data)) || 
+                    (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    (isShiftLeaderOrAbove() && isSameStore(resource.data) && isSameTenant(resource.data)) || 
+                    resource.data.employeeId == request.auth.uid);
+      
+      allow create: if isAuthenticated() && 
+                     // 員工可以創建自己的請假申請
+                     ((request.resource.data.employeeId == request.auth.uid) || 
+                      // 管理員可以創建員工的請假申請
+                      (isSuperAdmin() || 
+                       (isTenantAdmin() && isSameTenant(request.resource.data)) || 
+                       (isStoreManager() && isSameStore(request.resource.data) && isSameTenant(request.resource.data))));
+      
+      allow update: if isAuthenticated() && 
+                     // 員工只能更新自己的未批准的請假申請
+                     ((resource.data.employeeId == request.auth.uid && 
+                       resource.data.status == 'pending') || 
+                      // 管理員可以更新請假申請狀態
+                      (isSuperAdmin() || 
+                       (isTenantAdmin() && isSameTenant(resource.data)) || 
+                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data))));
+      
+      allow delete: if isAuthenticated() && 
+                     // 員工只能刪除自己的未批准的請假申請
+                     ((resource.data.employeeId == request.auth.uid && 
+                       resource.data.status == 'pending') || 
+                      // 管理員可以刪除請假申請
+                      (isSuperAdmin() || 
+                       (isTenantAdmin() && isSameTenant(resource.data)) || 
+                       (isStoreManager() && isSameStore(resource.data) && isSameTenant(resource.data))));
+    }
+
+    // === 默認規則 === //
+    // 默認拒絕所有未明確允許的操作
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

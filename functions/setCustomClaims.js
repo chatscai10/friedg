@@ -1,20 +1,15 @@
-const admin = require('firebase-admin');
+const admin = require("firebase-admin");
 
-// !!! 請將 'path/to/your/serviceAccountKey.json' 替換為您的服務帳號金鑰檔案的實際路徑 !!!
-// !!! 切勿將金鑰檔案直接包含在程式碼中或提交到版本控制 !!!
-const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || 'D:/friedg-firebase-adminsdk-fbsvc-aadd5082dd.json';
-
+// 移除硬编码的服务账号密钥路径，使用标准初始化方式
 try {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccountPath)
-  });
-  console.log('Firebase Admin SDK initialized successfully.');
+  admin.initializeApp();
+  console.log("Firebase Admin SDK initialized successfully.");
 } catch (error) {
-  if (error.code !== 'app/duplicate-app') {
-    console.error('Firebase Admin initialization error:', error);
+  if (error.code !== "app/duplicate-app") {
+    console.error("Firebase Admin initialization error:", error);
     process.exit(1);
   } else {
-    console.log('Firebase Admin SDK already initialized.');
+    console.log("Firebase Admin SDK already initialized.");
     // If already initialized, get the existing app instance
     // admin = admin.app(); // No need to reassign if using default app
   }

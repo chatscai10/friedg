@@ -1,0 +1,658 @@
+openapi: 3.0.3
+info:
+  title: 庫存管理 API
+  description: |
+    庫存管理 API 提供了管理庫存品項、監控庫存水平以及記錄庫存調整的功能。
+    此 API 屬於「吃雞排找不早」POS 與後台管理系統的一部分。
+  version: 1.0.0
+  contact:
+    name: 開發團隊
+    email: support@friedg.app
+
+servers:
+  - url: https://api.friedg.app/v1
+    description: 正式環境
+  - url: https://api.staging.friedg.app/v1
+    description: 測試環境
+
+tags:
+  - name: inventory-items
+    description: 庫存品項管理
+  - name: stock-levels
+    description: 庫存水平監控
+  - name: stock-adjustments
+    description: 庫存調整記錄
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "發生錯誤：缺少必要參數"
+
+    SupplierInfo:
+      type: object
+      properties:
+        supplierId:
+          type: string
+          description: 供應商ID
+        supplierName:
+          type: string
+          description: 供應商名稱
+        supplierContactInfo:
+          type: string
+          description: 供應商聯絡資訊
+        defaultOrderQuantity:
+          type: number
+          description: 預設訂購數量
+        leadTime:
+          type: number
+          description: 供貨前置時間 (天)
+
+    InventoryItem:
+      type: object
+      required:
+        - itemId
+        - name
+        - category
+        - unitOfMeasure
+        - isActive
+        - tenantId
+      properties:
+        itemId:
+          type: string
+          description: 品項ID
+        name:
+          type: string
+          description: 品項名稱
+        description:
+          type: string
+          description: 品項描述
+        category:
+          type: string
+          description: 品項分類 (如：原料、包材、餐具)
+        unitOfMeasure:
+          type: string
+          description: 計量單位 (如：公斤、包、箱)
+        supplierInfo:
+          $ref: '#/components/schemas/SupplierInfo'
+        lowStockThreshold:
+          type: number
+          description: 低庫存閾值
+        images:
+          type: array
+          items:
+            type: string
+          description: 品項圖片URL
+        barcode:
+          type: string
+          description: 條碼
+        sku:
+          type: string
+          description: 庫存單位
+        isActive:
+          type: boolean
+          description: 是否啟用
+        costPerUnit:
+          type: number
+          description: 單位成本
+        tenantId:
+          type: string
+          description: 租戶ID
+        createdAt:
+          type: string
+          format: date-time
+          description: 創建時間
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新時間
+        createdBy:
+          type: string
+          description: 創建者ID
+        updatedBy:
+          type: string
+          description: 更新者ID
+
+    CreateInventoryItemRequest:
+      type: object
+      required:
+        - name
+        - category
+        - unitOfMeasure
+      properties:
+        name:
+          type: string
+          description: 品項名稱
+        description:
+          type: string
+          description: 品項描述
+        category:
+          type: string
+          description: 品項分類
+        unitOfMeasure:
+          type: string
+          description: 計量單位
+        supplierInfo:
+          $ref: '#/components/schemas/SupplierInfo'
+        lowStockThreshold:
+          type: number
+          description: 低庫存閾值
+        images:
+          type: array
+          items:
+            type: string
+          description: 品項圖片URL
+        barcode:
+          type: string
+          description: 條碼
+        sku:
+          type: string
+          description: 庫存單位
+        isActive:
+          type: boolean
+          default: true
+          description: 是否啟用
+        costPerUnit:
+          type: number
+          description: 單位成本
+
+    StockLevel:
+      type: object
+      required:
+        - stockLevelId
+        - itemId
+        - storeId
+        - tenantId
+        - quantityOnHand
+        - lastUpdated
+        - lastUpdatedBy
+      properties:
+        stockLevelId:
+          type: string
+          description: 庫存水平ID
+        itemId:
+          type: string
+          description: 品項ID
+        storeId:
+          type: string
+          description: 分店ID
+        tenantId:
+          type: string
+          description: 租戶ID
+        quantityOnHand:
+          type: number
+          description: 現有庫存量
+        lastUpdated:
+          type: string
+          format: date-time
+          description: 最後更新時間
+        lastUpdatedBy:
+          type: string
+          description: 最後更新者ID
+        lastStockCheck:
+          type: string
+          format: date-time
+          description: 最後盤點時間
+        itemDetails:
+          $ref: '#/components/schemas/InventoryItem'
+          description: 品項詳細資訊
+
+    StockAdjustmentType:
+      type: string
+      enum:
+        - receipt
+        - spoilage
+        - count
+        - transfer
+        - other
+      description: |
+        庫存調整類型
+        * receipt - 收貨/進貨
+        * spoilage - 損耗/報廢
+        * count - 盤點差異
+        * transfer - 移撥
+        * other - 其他
+
+    StockAdjustment:
+      type: object
+      required:
+        - adjustmentId
+        - itemId
+        - storeId
+        - tenantId
+        - adjustmentType
+        - quantityChange
+        - timestamp
+        - userId
+      properties:
+        adjustmentId:
+          type: string
+          description: 調整ID
+        itemId:
+          type: string
+          description: 品項ID
+        storeId:
+          type: string
+          description: 分店ID
+        tenantId:
+          type: string
+          description: 租戶ID
+        adjustmentType:
+          $ref: '#/components/schemas/StockAdjustmentType'
+        quantityChange:
+          type: number
+          description: 數量變化 (正數為增加，負數為減少)
+        reason:
+          type: string
+          description: 調整原因
+        notes:
+          type: string
+          description: 備註
+        referenceNumber:
+          type: string
+          description: 參考編號 (如收貨單號、移撥單號)
+        timestamp:
+          type: string
+          format: date-time
+          description: 調整時間
+        userId:
+          type: string
+          description: 操作者ID
+        beforeQuantity:
+          type: number
+          description: 調整前數量
+        afterQuantity:
+          type: number
+          description: 調整後數量
+        transferToStoreId:
+          type: string
+          description: 移撥目的地分店ID (僅移撥類型適用)
+        itemDetails:
+          $ref: '#/components/schemas/InventoryItem'
+          description: 品項詳細資訊
+
+    CreateStockAdjustmentRequest:
+      type: object
+      required:
+        - itemId
+        - storeId
+        - adjustmentType
+        - quantityChange
+      properties:
+        itemId:
+          type: string
+          description: 品項ID
+        storeId:
+          type: string
+          description: 分店ID
+        adjustmentType:
+          $ref: '#/components/schemas/StockAdjustmentType'
+        quantityChange:
+          type: number
+          description: 數量變化
+        reason:
+          type: string
+          description: 調整原因
+        notes:
+          type: string
+          description: 備註
+        referenceNumber:
+          type: string
+          description: 參考編號
+        transferToStoreId:
+          type: string
+          description: 移撥目的地分店ID (僅移撥類型適用)
+
+    InventoryItemsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: 總記錄數
+            page:
+              type: integer
+              description: 當前頁碼
+            pageSize:
+              type: integer
+              description: 每頁記錄數
+            totalPages:
+              type: integer
+              description: 總頁數
+
+    StockLevelsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockLevel'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: 總記錄數
+            page:
+              type: integer
+              description: 當前頁碼
+            pageSize:
+              type: integer
+              description: 每頁記錄數
+            totalPages:
+              type: integer
+              description: 總頁數
+
+    StockAdjustmentsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockAdjustment'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: 總記錄數
+            page:
+              type: integer
+              description: 當前頁碼
+            pageSize:
+              type: integer
+              description: 每頁記錄數
+            totalPages:
+              type: integer
+              description: 總頁數
+
+paths:
+  /inventory/items:
+    post:
+      tags:
+        - inventory-items
+      summary: 新增庫存品項主檔
+      description: 新增一個庫存品項的主檔記錄
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryItemRequest'
+      responses:
+        '201':
+          description: 創建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/InventoryItem'
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未經授權的請求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - inventory-items
+      summary: 查詢庫存品項主檔列表
+      description: 獲取庫存品項主檔列表，支援搜尋和篩選
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: 按分類過濾
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: 按名稱搜尋 (模糊匹配)
+        - name: lowStock
+          in: query
+          schema:
+            type: boolean
+          description: 僅顯示低於閾值的品項
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+          description: 按活動狀態過濾
+        - name: storeId
+          in: query
+          schema:
+            type: string
+          description: 查詢特定分店庫存
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 頁碼 (從1開始)
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: 每頁記錄數量
+      responses:
+        '200':
+          description: 成功獲取庫存品項列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItemsResponse'
+        '401':
+          description: 未經授權的請求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /inventory/stores/{storeId}/stockLevels:
+    get:
+      tags:
+        - stock-levels
+      summary: 查詢指定分店的庫存水平列表
+      description: 獲取特定分店的庫存水平列表，支援按品項搜尋和篩選
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 分店ID
+        - name: itemId
+          in: query
+          schema:
+            type: string
+          description: 按品項ID過濾
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: 按品項分類過濾
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: 按品項名稱搜尋 (模糊匹配)
+        - name: lowStock
+          in: query
+          schema:
+            type: boolean
+          description: 僅顯示低於閾值的品項
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 頁碼 (從1開始)
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: 每頁記錄數量
+      responses:
+        '200':
+          description: 成功獲取庫存水平列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockLevelsResponse'
+        '401':
+          description: 未經授權的請求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 分店不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /inventory/adjustments:
+    post:
+      tags:
+        - stock-adjustments
+      summary: 新增庫存調整記錄
+      description: 新增一筆庫存調整記錄，同時更新對應的庫存水平
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStockAdjustmentRequest'
+      responses:
+        '201':
+          description: 創建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/StockAdjustment'
+                  stockLevel:
+                    $ref: '#/components/schemas/StockLevel'
+                    description: 更新後的庫存水平
+        '400':
+          description: 請求參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未經授權的請求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 找不到對應的品項或分店
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 伺服器錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error' 

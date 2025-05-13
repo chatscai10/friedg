@@ -4,11 +4,14 @@
 
 // 訂單狀態枚舉
 export enum OrderStatus {
-  PENDING = 'pending',     // 待處理
-  PREPARING = 'preparing', // 準備中
-  READY = 'ready',         // 準備完成，待取餐
-  COMPLETED = 'completed', // 已完成
-  CANCELLED = 'cancelled'  // 已取消
+  PENDING = 'pending',       // 待處理（初始狀態，顧客提交訂單後）
+  CONFIRMED = 'confirmed',   // 已確認（店家確認接單）
+  PREPARING = 'preparing',   // 準備中（開始製作食品）
+  READY = 'ready',           // 準備完成（食品已完成製作，待取餐）
+  DELIVERING = 'delivering', // 配送中（適用於外送訂單）
+  COMPLETED = 'completed',   // 已完成（訂單已交付顧客）
+  CANCELLED = 'cancelled',   // 已取消（訂單被取消）
+  REJECTED = 'rejected'      // 已拒單（店家無法處理訂單）
 }
 
 // 支付狀態枚舉
@@ -40,6 +43,21 @@ export interface OrderItemOptionInput {
   additionalPrice?: number; // 額外費用
 }
 
+// 訂單項目選項
+export interface OrderItemOption {
+  optionId: string;      // 選項ID
+  optionName: string;    // 選項名稱
+  value: string;         // 選項值
+  additionalPrice: number; // 額外費用
+}
+
+// 配送資訊
+export interface DeliveryInfo {
+  address: string;        // 送貨地址
+  contactPhone: string;   // 聯系電話
+  notes?: string;         // 備註
+}
+
 // 訂單項目輸入
 export interface OrderItemInput {
   menuItemId: string;             // 菜單項ID
@@ -64,14 +82,7 @@ export interface OrderInput {
   items: OrderItemInput[];        // 訂單項目列表
   discountCode?: string;          // 折扣碼
   taxIncluded?: boolean;          // 是否已包含稅金
-}
-
-// 訂單項目選項
-export interface OrderItemOption {
-  optionId: string;      // 選項ID
-  optionName: string;    // 選項名稱
-  value: string;         // 選項值
-  additionalPrice: number; // 額外費用
+  deliveryInfo?: DeliveryInfo;    // 配送資訊（外送時適用）
 }
 
 // 訂單項目
@@ -85,6 +96,27 @@ export interface OrderItem {
   totalPrice: number;           // 總價
   specialInstructions?: string; // 特殊要求
   options?: OrderItemOption[];  // 選項列表
+}
+
+// 訂單支付記錄
+export interface PaymentRecord {
+  paymentMethod: PaymentMethod;       // 支付方式
+  amount: number;                     // 支付金額
+  transactionId?: string;             // 交易ID
+  paymentStatus: PaymentStatus;       // 支付狀態
+  notes?: string;                     // 支付備註
+  recordedAt: Date;                   // 記錄時間
+  recordedBy: string;                 // 記錄者ID
+}
+
+// 訂單狀態歷史記錄
+export interface OrderStatusHistoryEntry {
+  status: OrderStatus;          // 狀態
+  timestamp: Date;              // 時間戳
+  updatedBy: string;            // 操作者ID
+  updatedByName?: string;       // 操作者姓名
+  updatedByRole?: string;       // 操作者角色
+  note?: string;                // 備註
 }
 
 // 完整訂單
@@ -107,6 +139,18 @@ export interface Order {
   actualPickupTime: Date | null;   // 實際取餐時間
   specialInstructions: string;  // 特殊要求
   
+  // 狀態時間戳
+  confirmedAt?: Date;           // 確認時間
+  preparingAt?: Date;           // 準備開始時間
+  readyAt?: Date;               // 準備完成時間
+  deliveringAt?: Date;          // 配送開始時間
+  completedAt?: Date;           // 完成時間
+  cancelledAt?: Date;           // 取消時間
+  rejectedAt?: Date;            // 拒絕時間
+  
+  // 狀態歷史記錄
+  statusHistory?: OrderStatusHistoryEntry[]; // 狀態變更歷史記錄
+  
   items: OrderItem[];           // 訂單項目
   subtotal: number;             // 小計金額
   taxAmount: number;            // 稅金
@@ -119,10 +163,14 @@ export interface Order {
   paymentStatus: PaymentStatus; // 支付狀態
   paymentMethod: PaymentMethod | null; // 支付方式
   paymentTransactionId: string | null; // 支付交易ID
+  paymentDetails?: PaymentRecord; // 支付詳情
+  
+  deliveryInfo?: DeliveryInfo;  // 配送資訊（外送時適用）
   
   assignedStaffId: string | null;    // 處理訂單的員工ID
   assignedStaffName: string | null;  // 處理訂單的員工姓名
   cancelReason: string | null;       // 取消原因（如適用）
+  rejectReason?: string;             // 拒絕原因（如適用）
   isDeleted: boolean;                // 是否已刪除（軟刪除）
   
   hasReceipt?: boolean;         // 是否已生成收據

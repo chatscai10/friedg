@@ -1,0 +1,156 @@
+**4.22. 支付模組 (Payment Module)**
+*   **目標：** 提供統一的跨平台支付介面，確保交易安全與可追蹤性，支援多種支付方式，減少手動操作錯誤。
+*   **架構與設計：** 支付處理採用多層設計，將支付邏輯與支付提供者實現分離，便於未來擴展。核心元件包括：
+    1. **支付處理API 層：** 負責處理支付請求、驗證與回調，提供統一的介面給前端。
+    2. **支付服務層：** 包含支付邏輯，與資料庫互動並更新訂單狀態。
+    3. **支付提供者適配層：** 封裝不同支付平台的通訊邏輯，目前僅實現 LINE Pay。
+
+*   **支援的支付方式：**
+    1. **LINE Pay：** 行動支付方案，適用於線上訂單。
+    2. **現金：** 傳統支付方式，主要用於實體門市。
+    3. **信用卡：** 預留介面，暫未實現。
+
+*   **支付流程：**
+    1. **發起支付：** 前端發送支付請求，包含訂單 ID 等必要資訊。
+    2. **處理請求：** 後端驗證訂單狀態，建立支付記錄，向支付提供者請求支付 URL。
+    3. **顧客付款：** 顧客被重定向至支付頁面完成付款。
+    4. **支付確認：** 完成後重定向回系統，後端向支付提供者確認交易結果，更新訂單狀態。
+
+*   **安全考量：**
+    1. 所有支付請求必須經過身份驗證。
+    2. 交易狀態更新加入樂觀鎖或事務處理防止衝突。
+    3. 敏感支付資訊使用 HTTPS 加密傳輸，不儲存敏感信用卡資料。
+    4. 建立詳細的支付日誌供稽核，異常交易通知管理員。
+
+*   **數據模型：**
+    1. **payments 集合：** 儲存支付交易記錄，包含訂單關聯、金額、交易 ID、狀態等。
+    2. **orders 集合：** 增加 paymentMethod、paymentStatus、paymentTransactionId 等欄位。
+
+*   **重要 API 端點：**
+
+    **1. 發起 LINE Pay 支付請求**
+    ```
+    POST /api/payments/linepay/request
+    
+    請求：
+    {
+      "orderId": "訂單ID",
+      "language": "zh-TW" (可選，預設中文)
+    }
+    
+    成功回應：
+    {
+      "success": true,
+      "paymentUrl": "https://payment.line.me/...",
+      "transactionId": "LINE Pay交易ID",
+      "orderId": "訂單ID"
+    }
+    
+    失敗回應：
+    {
+      "success": false,
+      "error": "錯誤訊息"
+    }
+    ```
+
+    **2. 確認 LINE Pay 支付**
+    ```
+    POST /api/payments/linepay/confirm
+    
+    請求查詢參數：
+    transactionId=LINE Pay交易ID&orderId=訂單ID
+    
+    成功回應：
+    {
+      "success": true,
+      "paymentStatus": "completed",
+      "transactionId": "LINE Pay交易ID",
+      "orderId": "訂單ID"
+    }
+    
+    失敗回應：
+    {
+      "success": false,
+      "error": "錯誤訊息"
+    }
+    ```
+
+    **3. 退款 LINE Pay 支付**
+    ```
+    POST /api/payments/linepay/refund
+    
+    請求：
+    {
+      "transactionId": "LINE Pay交易ID",
+      "orderId": "訂單ID",
+      "amount": 退款金額 (可選，預設全額退款)
+    }
+    
+    成功回應：
+    {
+      "success": true,
+      "refundTransactionId": "退款交易ID",
+      "amount": 退款金額
+    }
+    
+    失敗回應：
+    {
+      "success": false,
+      "error": "錯誤訊息"
+    }
+    ```
+
+    **4. 查詢訂單支付狀態**
+    ```
+    GET /api/payments/status/:orderId
+    
+    成功回應：
+    {
+      "success": true,
+      "orderId": "訂單ID",
+      "paymentMethod": "linepay/cash/creditcard",
+      "paymentStatus": "pending/processing/completed/failed/cancelled/refunded",
+      "paymentTime": "付款時間(ISO格式)",
+      "amount": 金額,
+      "transactionId": "外部交易ID"
+    }
+    
+    失敗回應：
+    {
+      "success": false,
+      "error": "錯誤訊息"
+    }
+    ```
+
+    **5. 線下現金支付記錄**
+    ```
+    POST /api/payments/cash/record
+    
+    請求：
+    {
+      "orderId": "訂單ID",
+      "amount": 金額,
+      "cashReceived": 實收金額,
+      "cashReturned": 找零金額,
+      "note": "備註" (可選)
+    }
+    
+    成功回應：
+    {
+      "success": true,
+      "paymentId": "內部支付ID",
+      "paymentStatus": "completed"
+    }
+    
+    失敗回應：
+    {
+      "success": false,
+      "error": "錯誤訊息"
+    }
+    ```
+
+*   **未來擴展計劃：**
+    1. 增加其他支付平台，如信用卡處理、街口支付與 Apple Pay。
+    2. 實作預授權與分階段付款功能。
+    3. 加強對帳與退款處理流程。
+    4. 增加支付分析儀表板，幫助租戶分析支付數據。 

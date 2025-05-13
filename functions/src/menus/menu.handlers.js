@@ -8,6 +8,7 @@ const db = admin.firestore(); // Used implicitly by collection references if nee
 
 /**
  * Handler to get the menu for a specific store.
+ * 公開API: 客戶端使用，無需身份驗證
  * @param {import("express").Request} req Express request object.
  * @param {import("express").Response} res Express response object.
  * @returns {Promise<void>} 
@@ -18,74 +19,228 @@ exports.getMenuForStore = async (req, res) => {
 
   try {
     if (!storeId) {
-      return res.status(400).send({ message: "Missing storeId parameter." });
+      return res.status(400).send({ success: false, message: "缺少店鋪ID參數" });
     }
 
-    // 1. Fetch active categories for the store
-    const categoriesQuery = db.collection("menuCategories")
+    // 獲取請求中的分頁和過濾參數
+    const { 
+      page = 1, 
+      limit = 50, 
+      categoryId, 
+      searchTerm,
+      includeOutOfStock = false,
+      tags
+    } = req.query;
+    
+    // 將分頁參數轉換為數字
+    const pageNum = parseInt(page, 10);
+    const limitNum = Math.min(parseInt(limit, 10), 100); // 限制最大查詢數量為100
+    
+    // 驗證分頁參數
+    if (isNaN(pageNum) || isNaN(limitNum) || pageNum < 1 || limitNum < 1) {
+      return res.status(400).send({ 
+        success: false, 
+        message: "無效的分頁參數"
+      });
+    }
+
+    // 計算分頁偏移量
+    const offset = (pageNum - 1) * limitNum;
+
+    // 1. 獲取該店鋪的活動分類
+    let categoriesQuery = db.collection("menuCategories")
       .where("storeId", "==", storeId)
-      .where("isActive", "==", true) // Assuming an "isActive" field
-      .orderBy("displayOrder", "asc"); // Assuming a field for ordering
-    const categoriesSnap = await categoriesQuery.get();
-    const categories = categoriesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-    if (categories.length === 0) {
-      // No active categories found for this store
-      return res.status(200).send({ menu: { categories: [] } }); // Return empty menu structure
-    }
-
-    // 2. Fetch active items for these categories
-    const categoryIds = categories.map((cat) => cat.id);
-    // Note: Firestore "in" query limit is 30 elements per query. Handle pagination or larger sets if needed.
-    const itemsQuery = db.collection("menuItems")
-      .where("categoryId", "in", categoryIds)
       .where("isActive", "==", true)
       .orderBy("displayOrder", "asc");
-    const itemsSnap = await itemsQuery.get();
-    const items = itemsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-    // 3. Fetch active options for these items (Simplified example)
-    const itemIds = items.map((item) => item.id);
-    const options = []; // Use const if not reassigned, but it is reassigned via push
-    if (itemIds.length > 0) {
-      // Split itemIds into chunks of 30 for "in" query limitation
-      const itemChunks = [];
-      for (let i = 0; i < itemIds.length; i += 30) {
-        itemChunks.push(itemIds.slice(i, i + 30));
+    // 如果指定了特定的分類ID，則只查詢該分類
+    const categoryIds = [];
+    let categories = [];
+    
+    if (categoryId) {
+      // 只查詢特定分類
+      const categoryDoc = await db.collection("menuCategories").doc(categoryId).get();
+      if (categoryDoc.exists && categoryDoc.data().isActive && categoryDoc.data().storeId === storeId) {
+        categories = [{ id: categoryDoc.id, ...categoryDoc.data() }];
+        categoryIds.push(categoryId);
       }
+    } else {
+      // 查詢所有活動分類
+      const categoriesSnap = await categoriesQuery.get();
+      categories = categoriesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      categoryIds.push(...categories.map(cat => cat.id));
+    }
 
-      const optionPromises = itemChunks.map((chunk) =>
-        db.collection("menuOptions")
-          .where("itemId", "in", chunk) // Adjust based on your data model (e.g., optionGroupId)
-          .where("isActive", "==", true)
-          .get(), // Removed trailing comma issue by removing comma
+    if (categories.length === 0) {
+      // 未找到活動分類，返回空菜單
+      return res.status(200).send({
+        success: true,
+        message: "未找到菜單分類",
+        data: { 
+          categories: [],
+          pagination: {
+            total: 0,
+            page: pageNum,
+            limit: limitNum,
+            hasMore: false
+          }
+        }
+      });
+    }
+
+    // 2. 構建菜單項目查詢條件
+    // 注意: Firestore 的 "in" 查詢最多支持 30 個元素，超過需分批查詢
+    let itemsQuery;
+    let itemsQueryConditions = [];
+    
+    // 分批處理類別ID (每批最多10個)
+    const categoryBatches = [];
+    for (let i = 0; i < categoryIds.length; i += 10) {
+      categoryBatches.push(categoryIds.slice(i, i + 10));
+    }
+    
+    // 存儲所有項目和選項查詢的Promise
+    const itemQueryPromises = [];
+    
+    // 為每批類別構建並執行查詢
+    for (const batch of categoryBatches) {
+      itemsQuery = db.collection("menuItems")
+        .where("categoryId", "in", batch)
+        .where("isActive", "==", true);
+      
+      // 過濾「缺貨」商品 (當客户端要求只顯示有庫存商品時)
+      if (!includeOutOfStock) {
+        itemsQuery = itemsQuery.where("stockStatus", "!=", "out_of_stock");
+      }
+      
+      itemQueryPromises.push(itemsQuery.orderBy("displayOrder", "asc").get());
+    }
+    
+    // 執行所有菜單項目查詢
+    const itemSnapshots = await Promise.all(itemQueryPromises);
+    
+    // 合併所有查詢結果的項目
+    let allItems = [];
+    itemSnapshots.forEach(snap => {
+      allItems = [...allItems, ...snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))];
+    });
+    
+    // 如果提供了搜索條件，過濾結果
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      allItems = allItems.filter(item => 
+        item.name.toLowerCase().includes(searchLower) || 
+        (item.description && item.description.toLowerCase().includes(searchLower))
       );
-
+    }
+    
+    // 如果提供了標籤過濾，過濾結果
+    if (tags) {
+      const tagList = Array.isArray(tags) ? tags : [tags];
+      allItems = allItems.filter(item => 
+        item.tags && item.tags.some(tag => tagList.includes(tag))
+      );
+    }
+    
+    // 計算結果總數
+    const totalItems = allItems.length;
+    
+    // 應用分頁
+    const paginatedItems = allItems.slice(offset, offset + limitNum);
+    
+    // 獲取這些項目的選項組
+    const itemIds = paginatedItems.map(item => item.id);
+    
+    // 3. 獲取這些項目的選項
+    // 此實現已處理在getMenuForStore函數中
+    const options = []; 
+    if (itemIds.length > 0) {
+      // 分批處理項目ID (每批最多10個)
+      const itemBatches = [];
+      for (let i = 0; i < itemIds.length; i += 10) {
+        itemBatches.push(itemIds.slice(i, i + 10));
+      }
+      
+      const optionPromises = itemBatches.map(batch =>
+        db.collection("menuOptions")
+          .where("itemId", "in", batch)
+          .where("isActive", "==", true)
+          .get()
+      );
+      
       const optionSnapshots = await Promise.all(optionPromises);
-      optionSnapshots.forEach((snap) => {
-        snap.docs.forEach((doc) => {
+      optionSnapshots.forEach(snap => {
+        snap.docs.forEach(doc => {
           options.push({ id: doc.id, ...doc.data() });
         });
       });
-      // TODO: Consider ordering options if needed.
     }
 
-    // 4. Structure the response data
-    const structuredMenu = categories.map((category) => {
-      const categoryItems = items
-        .filter((item) => item.categoryId === category.id)
-        .map((item) => {
-          // Find options related to this item
-          const itemOptions = options.filter((opt) => opt.itemId === item.id); // Adjust if using option groups
-          return { ...item, options: itemOptions }; // Add options array to each item
+    // 4. 構建結構化的菜單數據
+    const structuredMenu = categories.map(category => {
+      const categoryItems = paginatedItems
+        .filter(item => item.categoryId === category.id)
+        .map(item => {
+          // 找到與此項目相關的選項
+          const itemOptions = options.filter(opt => opt.itemId === item.id);
+          
+          // 返回格式化的菜單項目（只包含前端需要的字段）
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            price: item.price,
+            discountPrice: item.discountPrice,
+            imageUrl: item.imageUrl,
+            thumbnailUrl: item.thumbnailUrl,
+            stockStatus: item.stockStatus,
+            stockQuantity: item.stockQuantity,
+            isRecommended: item.isRecommended,
+            isSpecial: item.isSpecial,
+            options: itemOptions
+              .map(opt => ({
+                id: opt.id,
+                name: opt.name,
+                price: opt.price
+              }))
+          };
         });
-      return { ...category, items: categoryItems }; // Add items array to each category
+      
+      // 返回格式化的分類（只包含前端需要的字段）
+      return {
+        id: category.id,
+        name: category.name,
+        displayOrder: category.displayOrder,
+        items: categoryItems
+      };
     });
 
-    res.status(200).send({ menu: structuredMenu }); // Send structured menu
+    // 過濾掉沒有菜單項目的分類（除非明確指定了某個分類）
+    const filteredMenu = categoryId 
+      ? structuredMenu 
+      : structuredMenu.filter(category => category.items.length > 0);
+
+    // 5. 返回結果，包括分頁信息
+    res.status(200).send({
+      success: true,
+      message: "獲取菜單成功",
+      data: {
+        categories: filteredMenu,
+        pagination: {
+          total: totalItems,
+          page: pageNum,
+          limit: limitNum,
+          hasMore: offset + paginatedItems.length < totalItems
+        }
+      }
+    });
   } catch (error) {
-    console.error(`Error fetching menu for store ${storeId}:`, error);
-    res.status(500).send({ message: "Failed to fetch menu.", error: error.message });
+    console.error(`獲取店鋪 ${storeId} 菜單時出錯:`, error);
+    res.status(500).send({ 
+      success: false, 
+      message: "獲取菜單失敗", 
+      error: error.message 
+    });
   }
 };
 

@@ -281,35 +281,58 @@ const OrderList: React.FC = () => {
     try {
       setUpdating(true);
       
-      const updatedOrder = await updateOrderStatus(updatingOrder.id, newStatus);
+      // 在執行非同步操作前保存需要的數據
+      const orderIdToUpdate = updatingOrder.id;
+      const orderNumberToUpdate = updatingOrder.orderNumber;
+      const statusTextToShow = statusTextMap[newStatus];
       
-      // 更新本地數據
-      const updatedOrders = orders.map(order => 
-        order.id === updatingOrder.id ? {
-          ...updatedOrder,
-          createdAt: new Date(updatedOrder.createdAt),
-          updatedAt: new Date(updatedOrder.updatedAt)
-        } : order
-      );
-      
-      setOrders(updatedOrders);
-      setFilteredOrders(updatedOrders);
-      
-      setSnackbar({
-        open: true,
-        message: `訂單 ${updatingOrder.orderNumber} 狀態已更新為 ${statusTextMap[newStatus]}`,
-        severity: 'success'
-      });
-      
+      // 先關閉對話框，避免後續狀態更新時嘗試修改已卸載的組件
       setUpdateStatusOpen(false);
       setUpdatingOrder(null);
+      
+      // 執行訂單狀態更新
+      const updatedOrder = await updateOrderStatus(orderIdToUpdate, newStatus);
+      
+      // 使用函數式更新確保使用最新狀態
+      setOrders(prevOrders => {
+        return prevOrders.map(order => 
+          order.id === orderIdToUpdate ? {
+            ...updatedOrder,
+            createdAt: new Date(updatedOrder.createdAt),
+            updatedAt: new Date(updatedOrder.updatedAt)
+          } : order
+        );
+      });
+      
+      setFilteredOrders(prevFilteredOrders => {
+        return prevFilteredOrders.map(order => 
+          order.id === orderIdToUpdate ? {
+            ...updatedOrder,
+            createdAt: new Date(updatedOrder.createdAt),
+            updatedAt: new Date(updatedOrder.updatedAt)
+          } : order
+        );
+      });
+      
+      // 使用setTimeout延遲顯示成功消息，避免與DOM更新衝突
+      setTimeout(() => {
+        setSnackbar({
+          open: true,
+          message: `訂單 ${orderNumberToUpdate} 狀態已更新為 ${statusTextToShow}`,
+          severity: 'success'
+        });
+      }, 300);
+      
     } catch (error) {
       console.error('更新訂單狀態失敗:', error);
-      setSnackbar({
-        open: true,
-        message: '更新訂單狀態失敗，請重試。',
-        severity: 'error'
-      });
+      // 使用setTimeout延遲顯示錯誤消息
+      setTimeout(() => {
+        setSnackbar({
+          open: true,
+          message: '更新訂單狀態失敗，請重試。',
+          severity: 'error'
+        });
+      }, 300);
     } finally {
       setUpdating(false);
     }

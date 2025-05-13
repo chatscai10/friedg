@@ -1,0 +1,49 @@
+## 系統進度表
+
+### 已完成項目
+1. Firebase模擬器設置 - 已經使用`firebase init emulators`初始化
+2. 測試數據準備 - 已創建JSON文件(menuCategories.json, loyaltyTiers.json, couponTemplates.json)
+3. 本地API服務模擬 - 已實現api_server.cjs提供模擬API響應
+
+### 進行中項目
+1. 前端設置問題 - 目前仍有連接問題(localhost:5173 404錯誤)
+2. 本地開發環境整合 - 需要完成前後端連接
+
+### 待完成項目
+1. 完成參數格式定義 - 根據整合專案報告中第3章的技術標準
+2. 實現核心業務邏輯 - 特別是整合專案報告4.13-4.21章節提到的模組
+3. 安全框架實施 - 完成第5章提到的Firestore安全規則設置
+
+## 參數格式定義關鍵點
+
+根據整合專案報告，以下是關鍵參數格式定義：
+
+1. **版本統一需求**：
+   - Firebase Client SDK統一版本: 建議v9.22.2 Compat
+   - LIFF SDK統一版本: 建議2.21.4(或最新穩定版)
+   - Firebase Admin SDK: 建議v13.x+
+   - Node.js: 統一使用Node.js 20 LTS
+
+2. **數據模型格式要求**:
+   - 所有敏感或租戶特定數據必須包含TenantID或StoreID欄位
+   - 所有數據操作必須強制過濾以確保隔離
+
+3. **參數保存位置**:
+   - 系統配置參數應統一存儲於settings和system_config集合
+   - 參數加載需統一入口，目前存在配置來源衝突
+
+## 開發流程核心重點
+
+根據開發流程順續文件，當前處於"階段0：環境與核心架構準備"，關鍵任務包括：
+
+1. 建立Firebase環境並設定分支策略
+2. 設計核心數據模型和RBAC(基於角色的訪問控制)
+3. 完成API規格框架和原型設計
+
+下一步應該進入"階段1：核心員工管理"，重點任務將是:
+- 實現Employee CRUD API
+- 實現Role & Store CRUD API
+- 開發GPS打卡API
+- 部署Firestore Rules和複合索引
+
+建議優先解決當前的本地開發環境問題，確保Firebase模擬器正常運行並與前端連接，以便開始實現核心業務邏輯。 

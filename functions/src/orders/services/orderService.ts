@@ -8,7 +8,8 @@ import {
   PaymentMethod,
   OrderStatsResult,
   OrderQueryParams,
-  OrderItemOption
+  OrderItemOption,
+  OrderStatusHistoryEntry
 } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
@@ -311,7 +312,9 @@ export async function updateOrderStatus(
   status: OrderStatus, 
   userId: string,
   userRole: string,
-  reason: string = ''
+  reason: string = '',
+  estimatedCompletionTime?: Date,
+  statusNote?: string
 ): Promise<Order | null> {
   return await db.runTransaction(async (transaction) => {
     const orderRef = ordersCollection.doc(orderId);
@@ -328,22 +331,63 @@ export async function updateOrderStatus(
       throw new Error(`不允許從 ${orderData.status} 狀態轉換為 ${status}`);
     }
     
+    const timestamp = admin.firestore.Timestamp.now().toDate();
+    
     // 更新訂單狀態
     const updateData: Partial<Order> = {
       status,
-      updatedAt: admin.firestore.Timestamp.now().toDate()
+      updatedAt: timestamp
     };
     
-    // 如果取消訂單，記錄取消原因
-    if (status === OrderStatus.CANCELLED) {
-      updateData.cancelReason = reason;
+    // 根據不同狀態設置相應的時間戳字段
+    switch(status) {
+      case OrderStatus.CONFIRMED:
+        updateData.confirmedAt = timestamp;
+        break;
+      case OrderStatus.PREPARING:
+        updateData.preparingAt = timestamp;
+        break;
+      case OrderStatus.READY:
+        updateData.readyAt = timestamp;
+        break;
+      case OrderStatus.DELIVERING:
+        updateData.deliveringAt = timestamp;
+        break;
+      case OrderStatus.COMPLETED:
+        updateData.completedAt = timestamp;
+        updateData.actualPickupTime = timestamp; // 保持向後兼容
+        break;
+      case OrderStatus.CANCELLED:
+        updateData.cancelledAt = timestamp;
+        updateData.cancelReason = reason || '無原因';
+        break;
+      case OrderStatus.REJECTED:
+        updateData.rejectedAt = timestamp;
+        updateData.rejectReason = reason || '無原因';
+        break;
     }
     
-    // 如果訂單完成，記錄實際取餐時間
-    if (status === OrderStatus.COMPLETED) {
-      updateData.actualPickupTime = admin.firestore.Timestamp.now().toDate();
+    // 如果提供了預計完成時間，更新它
+    if (estimatedCompletionTime) {
+      updateData.estimatedPickupTime = estimatedCompletionTime;
     }
     
+    // 創建狀態歷史記錄項
+    const historyEntry: OrderStatusHistoryEntry = {
+      status,
+      timestamp,
+      updatedBy: userId,
+      updatedByRole: userRole,
+      note: statusNote || reason || undefined
+    };
+    
+    // 獲取現有的狀態歷史記錄或創建新的數組
+    const statusHistory = orderData.statusHistory || [];
+    
+    // 將新的記錄添加到歷史中
+    updateData.statusHistory = [...statusHistory, historyEntry];
+    
+    // 更新訂單
     transaction.update(orderRef, updateData);
     
     // 記錄狀態變更事件
@@ -351,19 +395,21 @@ export async function updateOrderStatus(
       orderRef.collection('events').doc(),
       {
         eventType: 'status_changed',
-        timestamp: admin.firestore.Timestamp.now(),
+        timestamp,
         userId,
         userRole,
         details: {
           oldStatus: orderData.status,
           newStatus: status,
-          reason: reason || undefined
+          reason: reason || undefined,
+          note: statusNote || undefined,
+          estimatedCompletionTime: estimatedCompletionTime || undefined
         }
       }
     );
     
     // 如果取消訂單，恢復庫存
-    if (status === OrderStatus.CANCELLED) {
+    if (status === OrderStatus.CANCELLED || status === OrderStatus.REJECTED) {
       for (const item of orderData.items) {
         const menuItemRef = db.collection('menuItems').doc(item.menuItemId);
         const menuItemDoc = await transaction.get(menuItemRef);
@@ -584,15 +630,25 @@ function isValidStatusTransition(currentStatus: OrderStatus, newStatus: OrderSta
   // 狀態轉換規則
   const validTransitions: Record<OrderStatus, OrderStatus[]> = {
     [OrderStatus.PENDING]: [
-      OrderStatus.PREPARING, 
+      OrderStatus.CONFIRMED,
+      OrderStatus.REJECTED,
+      OrderStatus.CANCELLED
+    ],
+    [OrderStatus.CONFIRMED]: [
+      OrderStatus.PREPARING,
       OrderStatus.CANCELLED
     ],
     [OrderStatus.PREPARING]: [
-      OrderStatus.READY, 
+      OrderStatus.READY,
       OrderStatus.CANCELLED
     ],
     [OrderStatus.READY]: [
-      OrderStatus.COMPLETED, 
+      OrderStatus.DELIVERING,
+      OrderStatus.COMPLETED,
+      OrderStatus.CANCELLED
+    ],
+    [OrderStatus.DELIVERING]: [
+      OrderStatus.COMPLETED,
       OrderStatus.CANCELLED
     ],
     [OrderStatus.COMPLETED]: [
@@ -600,9 +656,38 @@ function isValidStatusTransition(currentStatus: OrderStatus, newStatus: OrderSta
     ],
     [OrderStatus.CANCELLED]: [
       // 取消狀態不能再變更
+    ],
+    [OrderStatus.REJECTED]: [
+      // 拒單狀態不能再變更
     ]
   };
   
   // 檢查新狀態是否在有效的轉換列表中
   return validTransitions[currentStatus]?.includes(newStatus) || false;
+}
+
+/**
+ * 獲取訂單狀態變更歷史
+ */
+export async function getOrderStatusHistory(
+  tenantId: string,
+  orderId: string
+): Promise<OrderStatusHistoryEntry[]> {
+  // 獲取訂單
+  const orderRef = ordersCollection.doc(orderId);
+  const orderDoc = await orderRef.get();
+  
+  if (!orderDoc.exists) {
+    throw new Error(`訂單不存在: ${orderId}`);
+  }
+  
+  const orderData = orderDoc.data() as Order;
+  
+  // 確保租戶安全性
+  if (orderData.tenantId !== tenantId) {
+    throw new Error('無權訪問此訂單');
+  }
+  
+  // 返回狀態歷史
+  return orderData.statusHistory || [];
 } 

@@ -1,3 +1,4 @@
+import firebase from "firebase/compat/app";
 import {
   // Auth, // Type not explicitly needed here
   signInWithEmailAndPassword,
@@ -6,9 +7,11 @@ import {
   User,
   connectAuthEmulator, // Import emulator connector
   getIdToken,
-  IdTokenResult // Import IdTokenResult
+  IdTokenResult, // Import IdTokenResult
+  signInWithCustomToken
 } from "firebase/auth";
 import { auth } from "../firebaseConfig"; // Import the configured auth instance
+import axios from "axios";
 
 // Helper type for internal flag check (use carefully)
 type AuthWithEmulatorFlag = typeof auth & { _isEmulated?: boolean };
@@ -20,11 +23,10 @@ if (import.meta.env.DEV) {
     // Check if already connected (Firebase throws error if connected multiple times)
     // A simple check like this might not be foolproof in HMR scenarios,
     // but it prevents the most common connection errors during development.
-    if (!(auth as AuthWithEmulatorFlag)._isEmulated) { // Use type assertion
-        console.log("Connecting to Auth Emulator at http://localhost:9199...");
-        connectAuthEmulator(auth, "http://localhost:9199", { disableWarnings: true });
+    if (!auth._hasConnectedEmulator) { // Use Compat version's flag
+        console.log("Connecting to Auth Emulator at http://localhost:9099...");
+        auth.useEmulator("http://localhost:9099");
         console.log("Auth Emulator connected.");
-        (auth as AuthWithEmulatorFlag)._isEmulated = true; // Mark as emulated
     } else {
         console.log("Auth Emulator connection already established.")
     }
@@ -34,78 +36,140 @@ if (import.meta.env.DEV) {
 }
 
 /**
- * Logs in a user with email and password.
- * @param email User's email.
- * @param password User's password.
- * @returns A promise that resolves with the UserCredential on success.
+ * 使用電子郵件和密碼登錄用戶。
+ * @param email 用戶的電子郵件。
+ * @param password 用戶的密碼。
+ * @returns 成功時解析為 User 的 Promise。
  */
-const login = async (email: string, password: string): Promise<User | null> => {
+const login = async (email: string, password: string): Promise<firebase.User | null> => {
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    // Force refresh token after successful login to get latest claims
-    await getIdToken(userCredential.user, true); // <--- Added force refresh
-    console.log("Login successful, token refreshed.");
-    // Optionally fetch and log claims immediately after login
-    const tokenResult = await getIdTokenResult(false); // No need to force refresh again immediately
-    console.log("Claims after login:", tokenResult?.claims);
-    return userCredential.user;
+    const userCredential = await auth.signInWithEmailAndPassword(email, password);
+    // 登錄成功後強制刷新令牌以獲取最新的聲明
+    if (userCredential.user) {
+      await userCredential.user.getIdToken(true);
+      console.log("登錄成功，令牌已刷新。");
+      // 可選在登錄後立即獲取並記錄聲明
+      const tokenResult = await getIdTokenResult(false); // 不需要立即再次強制刷新
+      console.log("登錄後的聲明:", tokenResult?.claims);
+      return userCredential.user;
+    }
+    return null;
   } catch (error) {
-    console.error("Login failed:", error);
-    // Consider throwing a more specific error or returning a standardized error object
-    throw error; // Re-throw the error to be handled by the calling component
+    console.error("登錄失敗:", error);
+    throw error; // 重新拋出錯誤，由調用組件處理
   }
 };
 
 /**
- * Logs out the current user.
- * @returns A promise that resolves when logout is complete.
+ * 登出當前用戶。
+ * @returns 登出完成時解析的 Promise。
  */
 const logout = (): Promise<void> => {
-  return signOut(auth);
+  return auth.signOut();
 };
 
 /**
- * Listens for changes in the user's authentication state.
- * @param callback Function to call when the auth state changes.
- *                 It receives the User object or null.
- * @returns An unsubscribe function to stop listening.
+ * 監聽用戶身份驗證狀態的變化。
+ * @param callback 當身份驗證狀態變化時調用的函數。
+ *                它接收 User 對象或 null。
+ * @returns 取消監聽的函數。
  */
-const onAuthStateChange = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, callback);
+const onAuthStateChange = (callback: (user: firebase.User | null) => void) => {
+  return auth.onAuthStateChanged(callback);
 };
 
 /**
- * Gets the currently signed-in user.
- * @returns The current User object or null.
+ * 獲取當前已登錄的用戶。
+ * @returns 當前 User 對象或 null。
  */
-const getCurrentUser = (): User | null => {
+const getCurrentUser = (): firebase.User | null => {
   return auth.currentUser;
 };
 
 /**
- * Gets the ID token for the currently signed-in user.
- * @param forceRefresh If true, forces a refresh of the token.
- * @returns A promise that resolves with the ID token string, or null if no user is signed in.
+ * 獲取當前用戶的認證Token
+ * @returns 認證Token字符串
  */
-const getAuthToken = async (forceRefresh: boolean = false): Promise<string | null> => {
+export const getAuthToken = async (): Promise<string> => {
+  const currentUser = firebase.auth().currentUser;
+  
+  if (!currentUser) {
+    throw new Error('未登入，請先登入系統');
+  }
+  
+  try {
+    const token = await currentUser.getIdToken(true);
+    return token;
+  } catch (error) {
+    console.error('獲取認證Token失敗:', error);
+    throw new Error('獲取認證Token失敗，請重試或重新登入');
+  }
+};
+
+/**
+ * 檢查用戶是否已登入
+ * @returns 是否已登入
+ */
+export const isAuthenticated = (): boolean => {
+  return !!firebase.auth().currentUser;
+};
+
+/**
+ * 獲取當前登入用戶的ID
+ * @returns 用戶ID
+ */
+export const getCurrentUserId = (): string | null => {
+  const currentUser = firebase.auth().currentUser;
+  return currentUser ? currentUser.uid : null;
+};
+
+/**
+ * 獲取當前已登錄用戶的自定義聲明。
+ * @returns 解析為自定義聲明對象的 Promise，如果未登錄用戶或令牌解析失敗則為 null。
+ */
+const getUserClaims = async (): Promise<Record<string, unknown> | null> => {
+  const user = getCurrentUser();
+  if (user) {
+    try {
+      const idTokenResult = await user.getIdTokenResult(false);
+      return idTokenResult.claims;
+    } catch (error) {
+      console.error("獲取用戶聲明時出錯:", error);
+      // 檢查錯誤是否為具有 'code' 屬性的對象
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'auth/user-token-expired') {
+        console.warn("獲取聲明時用戶令牌已過期，需要刷新/重新登錄。");
+      }
+      return null;
+    }
+  } else {
+    return null;
+  }
+};
+
+/**
+ * 獲取當前用戶的 ID 令牌結果（包括聲明）
+ * @param forceRefresh 如果為 true，強制刷新令牌
+ * @returns 解析為 ID 令牌結果的 Promise
+ */
+const getIdTokenResult = async (forceRefresh: boolean = false): Promise<firebase.auth.IdTokenResult | null> => {
   const user = auth.currentUser;
   if (user) {
     try {
-      // Pass the forceRefresh flag to getIdToken
-      console.log(`Getting auth token (force refresh: ${forceRefresh})`); // Log forceRefresh status
-      const token = await getIdToken(user, forceRefresh);
-      return token;
+      console.log(`獲取 ID 令牌結果 (強制刷新: ${forceRefresh})`);
+      const tokenResult = await user.getIdTokenResult(forceRefresh);
+      console.log("從 getIdTokenResult 獲取的用戶聲明:", tokenResult.claims);
+      return tokenResult;
     } catch (error) {
-      console.error("Error getting auth token:", error);
-      // Handle specific errors like 'auth/user-token-expired' if needed
-      // Type guard for FirebaseError
-      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'auth/user-token-expired') {
-        console.warn("User token expired, attempting refresh...");
+      console.error("獲取 ID 令牌結果時出錯:", error);
+      // FirebaseError 的類型保護
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'auth/user-token-expired') {
+        console.warn("用戶令牌已過期，嘗試為結果刷新...");
         try {
-          const refreshedToken = await getIdToken(user, true); // Attempt refresh on expiry
-          return refreshedToken;
+          const refreshedTokenResult = await user.getIdTokenResult(true);
+          console.log("已刷新的用戶聲明:", refreshedTokenResult.claims);
+          return refreshedTokenResult;
         } catch (refreshError) {
-          console.error("Error refreshing expired token:", refreshError);
+          console.error("為結果刷新過期令牌時出錯:", refreshError);
           return null;
         }
       }
@@ -116,67 +180,101 @@ const getAuthToken = async (forceRefresh: boolean = false): Promise<string | nul
 };
 
 /**
- * Gets the custom claims for the currently signed-in user.
- * This requires parsing the ID token.
- * @param forceRefresh Whether to force refresh the token (defaults to true to ensure latest claims)
- * @returns A promise that resolves with the custom claims object, or null if no user is signed in or token fails to parse.
+ * 獲取當前用戶聲明（可能已刷新）
+ * @returns 用戶聲明或 null
  */
-const getUserClaims = async (): Promise<Record<string, unknown> | null> => {
-    const user = getCurrentUser();
-    if (user) {
-        try {
-            const idTokenResult = await user.getIdTokenResult(false); // Don't force refresh by default here
-            return idTokenResult.claims;
-        } catch (error) {
-            console.error("Error getting user claims:", error);
-            // Type guard for FirebaseError
-            // Check if error is an object with a 'code' property
-            if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'auth/user-token-expired') {
-                 console.warn("User token expired when getting claims, needs refresh/re-login.");
-            }
-            return null;
-        }
-    } else {
-        return null;
-    }
-};
-
-// Get the current user's ID token result (includes claims)
-const getIdTokenResult = async (forceRefresh: boolean = false): Promise<IdTokenResult | null> => {
-    const user = auth.currentUser;
-    if (user) {
-        try {
-            // Pass the forceRefresh flag to getIdTokenResult
-            console.log(`Getting ID token result (force refresh: ${forceRefresh})`); // Log forceRefresh status
-            const tokenResult = await user.getIdTokenResult(forceRefresh);
-            console.log("User Claims from getIdTokenResult:", tokenResult.claims); // Log claims when token result is fetched
-            return tokenResult;
-        } catch (error) {
-            console.error("Error getting ID token result:", error);
-             // Handle specific errors like 'auth/user-token-expired' if needed
-            // Type guard for FirebaseError
-            if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'auth/user-token-expired') {
-              console.warn("User token expired, attempting refresh for result...");
-              try {
-                const refreshedTokenResult = await user.getIdTokenResult(true); // Attempt refresh on expiry
-                console.log("Refreshed User Claims:", refreshedTokenResult.claims);
-                return refreshedTokenResult;
-              } catch (refreshError) {
-                console.error("Error refreshing expired token for result:", refreshError);
-                return null;
-              }
-            }
-            return null;
-        }
-    }
-    return null;
-};
-
-// Get current user claims (potentially refreshed)
 const getCurrentUserClaims = async (): Promise<Record<string, unknown> | null> => {
-    // Always force refresh when explicitly asking for current claims
-    const tokenResult = await getIdTokenResult(true);
-    return tokenResult ? tokenResult.claims : null;
+  // 在明確請求當前聲明時始終強制刷新
+  const tokenResult = await getIdTokenResult(true);
+  return tokenResult ? tokenResult.claims : null;
+};
+
+/**
+ * 獲取LINE登入URL
+ * @param redirectUri 授權後的重定向URI
+ * @param tenantHint 可選的租戶提示
+ * @returns LINE登入URL
+ */
+const getLineLoginUrl = (redirectUri: string, tenantHint?: string): string => {
+  // 生成隨機state參數用於CSRF保護
+  const state = btoa(JSON.stringify({
+    redirect_uri: redirectUri,
+    tenant_hint: tenantHint,
+    timestamp: Date.now()
+  }));
+  
+  // 構建API URL，請求LINE登入
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
+  let url = `${baseUrl}/auth/line/login?redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
+  
+  if (tenantHint) {
+    url += `&tenant_hint=${encodeURIComponent(tenantHint)}`;
+  }
+  
+  return url;
+};
+
+/**
+ * 處理LINE登入回調，使用獲取的tokens交換Firebase自定義token並完成登入
+ * @param accessToken LINE access token
+ * @param idToken LINE ID token
+ * @param tenantHint 可選的租戶提示
+ * @returns 登入的Firebase用戶
+ */
+const handleLineCallback = async (
+  accessToken: string, 
+  idToken: string, 
+  tenantHint?: string
+): Promise<firebase.User | null> => {
+  try {
+    // 發送請求交換Firebase自定義token
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
+    const response = await axios.post(`${baseUrl}/auth/line/token-exchange`, {
+      lineAccessToken: accessToken,
+      lineIdToken: idToken,
+      tenantHint
+    });
+    
+    const { customToken, userId, isNewUser } = response.data;
+    
+    if (!customToken) {
+      throw new Error('未能獲取Firebase自定義token');
+    }
+    
+    // 使用自定義token登入Firebase
+    const userCredential = await auth.signInWithCustomToken(customToken);
+    
+    if (userCredential.user) {
+      // 強制刷新token獲取最新的自定義聲明
+      await userCredential.user.getIdToken(true);
+      console.log(`LINE登入成功${isNewUser ? ' (新用戶)' : ''}，用戶ID: ${userId}`);
+      return userCredential.user;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('LINE登入處理失敗:', error);
+    throw error;
+  }
+};
+
+/**
+ * 使用LINE登入
+ * @param tenantHint 可選的租戶提示
+ * @returns Promise<void>
+ */
+const loginWithLine = (tenantHint?: string): void => {
+  try {
+    // 構建回調URL，應為當前網站的特定路徑用於處理LINE回調
+    const callbackUrl = `${window.location.origin}/line-callback`;
+    
+    // 獲取並導向至LINE登入URL
+    const lineLoginUrl = getLineLoginUrl(callbackUrl, tenantHint);
+    window.location.href = lineLoginUrl;
+  } catch (error) {
+    console.error('LINE登入初始化失敗:', error);
+    throw error;
+  }
 };
 
 export const authService = {
@@ -188,4 +286,8 @@ export const authService = {
   getUserClaims,
   getIdTokenResult,
   getCurrentUserClaims,
+  isAuthenticated,
+  getCurrentUserId,
+  loginWithLine,
+  handleLineCallback
 }; 

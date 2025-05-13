@@ -1,112 +1,124 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, CssBaseline, CircularProgress, Box, Typography } from '@mui/material';
-import { LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import 'dayjs/locale/zh-tw';
-
+import { ThemeProvider, CssBaseline, CircularProgress } from '@mui/material';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import theme from './styles/theme';
-import MainLayout from './layouts/MainLayout';
-import EmployeeList from './components/EmployeeManagement/EmployeeList';
-import EmployeeForm from './components/EmployeeManagement/EmployeeForm';
-import MenuItemList from './components/MenuManagement/MenuItemList';
-import MenuItemForm from './components/MenuManagement/MenuItemForm';
-import OrderList from './components/OrderManagement/OrderList';
+
+// 頁面
 import LoginPage from './pages/LoginPage';
-import RankingExample from './components/examples/RankingExample';
-import CommentBoardExample from './components/examples/CommentBoardExample';
-import { authService } from './services/authService';
-import { User } from 'firebase/auth';
+import DashboardPage from './pages/DashboardPage';
+import UnauthorizedPage from './pages/UnauthorizedPage';
 
-interface ProtectedRouteProps {
-  user: User | null;
-  children: React.ReactElement;
-}
+// 路由保護組件
+import ProtectedRoute from './components/common/ProtectedRoute';
 
-function ProtectedRoute({ user, children }: ProtectedRouteProps): React.ReactElement {
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-}
+// 懶加載頁面，減少初始加載時間
+const UsersPage = React.lazy(() => import('./pages/UsersPage'));
+const RolesPage = React.lazy(() => import('./pages/RolesPage'));
+const RoleFormPage = React.lazy(() => import('./pages/RoleFormPage'));
+const StoresPage = React.lazy(() => import('./pages/StoresPage'));
+const EmployeesPage = React.lazy(() => import('./pages/EmployeesPage'));
+const MenuPage = React.lazy(() => import('./pages/MenuPage'));
+const OrdersPage = React.lazy(() => import('./pages/OrdersPage'));
+const PosPage = React.lazy(() => import('./pages/PosPage'));
+const AttendancePage = React.lazy(() => import('./pages/AttendancePage'));
+const LineCallbackPage = React.lazy(() => import('./pages/LineCallbackPage'));
+
+// 全局加載中組件
+const LoadingComponent = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+    <CircularProgress />
+  </div>
+);
 
 function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
-  // Add state to store claims if needed later
-  // const [userClaims, setUserClaims] = useState<Record<string, unknown> | null>(null); 
-
-  useEffect(() => {
-    // Listen for auth state changes
-    const unsubscribe = authService.onAuthStateChange(async (firebaseUser) => { // Make callback async
-      console.log('Auth state changed:', firebaseUser);
-      setUser(firebaseUser);
-      
-      // If user is logged in, try to get claims
-      if (firebaseUser) {
-        try {
-          // This function forces a token refresh internally
-          const claims = await authService.getCurrentUserClaims(); 
-          console.log('User claims fetched in App.tsx (forced refresh):', claims);
-          // setUserClaims(claims); // Store claims if needed
-        } catch (error) {
-          console.error("Error fetching user claims after auth state change:", error);
-          // Handle error, maybe clear claims or show an error message
-          // setUserClaims(null);
-        }
-      } else {
-        // setUserClaims(null); // Clear claims on logout
-      }
-
-      setLoadingAuth(false); // Auth state determined, stop loading
-    });
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, []);
-
-  if (loadingAuth) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
     <ThemeProvider theme={theme}>
-      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="zh-tw">
-        <CssBaseline />
-        <Router>
+      <CssBaseline />
+      <BrowserRouter>
+        <React.Suspense fallback={<LoadingComponent />}>
           <Routes>
+            {/* 公開路由 - 不需要登入 */}
             <Route path="/login" element={<LoginPage />} />
-
-            <Route
-              path="/*"
+            <Route path="/unauthorized" element={<UnauthorizedPage />} />
+            <Route path="/line-callback" element={<LineCallbackPage />} />
+            
+            {/* 基本受保護路由 - 需要登入但不檢查權限 */}
+            <Route element={<ProtectedRoute />}>
+              {/* 儀表板（默認頁面) */}
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              
+              {/* POS系統頁面 */}
+              <Route path="/pos" element={<PosPage />} />
+            </Route>
+            
+            {/* 管理員路由 - 需要 admin、super_admin 或 tenant_admin 角色 */}
+            <Route 
               element={
-                <ProtectedRoute user={user}>
-                  <MainLayout>
-                    <Routes>
-                      <Route path="/" element={<Navigate to="/orders" replace />} />
-                      <Route path="/employees" element={<EmployeeList />} />
-                      <Route path="/employees/new" element={<EmployeeForm />} />
-                      <Route path="/employees/edit/:id" element={<EmployeeForm isEdit />} />
-                      <Route path="/menu" element={<MenuItemList />} />
-                      <Route path="/menu/new" element={<MenuItemForm />} />
-                      <Route path="/menu/edit/:id" element={<MenuItemForm isEdit />} />
-                      <Route path="/orders" element={<OrderList />} />
-                      <Route path="/ranking-example" element={<RankingExample />} />
-                      <Route path="/comment-board-example" element={<CommentBoardExample />} />
-                      <Route path="*" element={<Typography>頁面不存在 (404)</Typography>} />
-                    </Routes>
-                  </MainLayout>
-                </ProtectedRoute>
+                <ProtectedRoute 
+                  allowedRoles={['admin', 'super_admin', 'tenant_admin']} 
+                />
               }
-            />
+            >
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/roles" element={<RolesPage />} />
+              <Route path="/roles/create" element={<RoleFormPage />} />
+              <Route path="/roles/edit/:roleId" element={<RoleFormPage />} />
+              <Route path="/employees" element={<EmployeesPage />} />
+            </Route>
+            
+            {/* 店鋪管理路由 - 需要管理員或店長角色 */}
+            <Route 
+              element={
+                <ProtectedRoute 
+                  allowedRoles={['admin', 'super_admin', 'tenant_admin', 'store_manager']} 
+                />
+              }
+            >
+              <Route path="/stores" element={<StoresPage />} />
+            </Route>
+            
+            {/* 菜單管理路由 - 需要管理員或店長或具備菜單管理權限 */}
+            <Route 
+              element={
+                <ProtectedRoute 
+                  allowedRoles={['admin', 'super_admin', 'tenant_admin', 'store_manager']}
+                  requiredPermissions={['menu:read']}
+                />
+              }
+            >
+              <Route path="/menu" element={<MenuPage />} />
+            </Route>
+            
+            {/* 訂單管理路由 - 需要管理員或店長或具備訂單管理權限 */}
+            <Route 
+              element={
+                <ProtectedRoute 
+                  allowedRoles={['admin', 'super_admin', 'tenant_admin', 'store_manager']}
+                  requiredPermissions={['orders:read']}
+                />
+              }
+            >
+              <Route path="/orders" element={<OrdersPage />} />
+            </Route>
+
+            {/* 考勤管理路由 - 需要管理員或店長或具備考勤管理權限 */}
+            <Route 
+              element={
+                <ProtectedRoute 
+                  allowedRoles={['admin', 'super_admin', 'tenant_admin', 'store_manager']}
+                  requiredPermissions={['attendance:read']}
+                />
+              }
+            >
+              <Route path="/attendance" element={<AttendancePage />} />
+            </Route>
+            
+            {/* 處理未匹配的路由 */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </Router>
-      </LocalizationProvider>
+        </React.Suspense>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }
