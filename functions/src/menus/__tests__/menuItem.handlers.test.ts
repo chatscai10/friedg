@@ -1,5 +1,5 @@
 /**
- * 測試 menuItem.handlers.js 中�??��?
+ * 測試 menuItem.handlers.js 中的函數
  */
 
 // 模擬 firebase-admin
@@ -13,14 +13,14 @@ const mockDoc = jest.fn().mockReturnValue({
   delete: jest.fn().mockResolvedValue(true)
 });
 
-// 模擬 count() ?��?
+// 模擬 count() 函數
 const mockCount = jest.fn().mockReturnValue({
   get: jest.fn().mockResolvedValue({
     data: () => ({ count: 10 })
   })
 });
 
-// 模擬 Firestore ?�詢?��?
+// 模擬 Firestore 查詢函數
 const mockWhere = jest.fn().mockReturnThis();
 const mockOrderBy = jest.fn().mockReturnThis();
 const mockLimit = jest.fn().mockReturnThis();
@@ -40,13 +40,13 @@ const mockCollection = jest.fn().mockImplementation(() => ({
 
 const mockDb = { collection: mockCollection };
 
-// 模擬 Zod 驗�?
+// 模擬 Zod 驗證
 const mockSafeParse = jest.fn();
 const createMenuItemSchema = {
   safeParse: mockSafeParse
 };
 
-// 必�??��??�被測試模�?之�??��?模擬
+// 必須在被測試模塊之前進行模擬
 jest.mock('firebase-admin', () => ({
   initializeApp: jest.fn(),
   firestore: jest.fn(() => mockDb),
@@ -55,22 +55,22 @@ jest.mock('firebase-admin', () => ({
   }
 }));
 
-// ?�接修改導入後�? admin 對象
+// 直接修改導入後的 admin 對象
 const admin = require('firebase-admin');
-// 添�? FieldValue.serverTimestamp
+// 添加 FieldValue.serverTimestamp
 admin.firestore.FieldValue = {
   serverTimestamp: serverTimestampMock
 };
-// 添�? Timestamp 類�?
+// 添加 Timestamp 類別
 admin.firestore.Timestamp = class Timestamp {
   seconds: number;
   nanoseconds: number;
-  
+
   constructor(seconds: number, nanoseconds: number) {
     this.seconds = seconds;
     this.nanoseconds = nanoseconds;
   }
-  
+
   toDate() {
     return new Date(this.seconds * 1000);
   }
@@ -90,18 +90,18 @@ jest.mock('firebase-functions', () => ({
   }
 }));
 
-// 準�?測試
-// 不直?��??�express?�Request?�Response以避?��?上層變數衝�?
+// 準�?測試
+// 不直?��??�express?�Request?�Response以避?��?上層變數衝�?
 // const { Request, Response } = require('express');
 
 describe('MenuItem Handlers - createMenuItem', () => {
-  // 導入被測試�??��???
+  // 導入被測試�??��???
   let { createMenuItem } = require('../menuItem.handlers');
 
-  // ?��?模�??��??��??�便?�們在測試?�修?�模?�實??
+  // ?��?模�??��??��??�便?�們在測試?�修?�模?�實??
   const handlers = require('../menuItem.handlers');
-  
-  // 測試?��?
+
+  // 測試?��?
   let mockRequest, mockResponse;
   let jsonSpy, statusJsonSpy;
   const testTenantId = 'test-tenant-id';
@@ -110,20 +110,20 @@ describe('MenuItem Handlers - createMenuItem', () => {
   const testCategoryId = 'category-1';
 
   beforeEach(() => {
-    // 清�??�?�模??
+    // 清�??�?�模??
     mockSet.mockClear();
     mockDoc.mockClear();
     mockCollection.mockClear();
     mockGet.mockClear();
     mockSafeParse.mockReset();
-    
-    // 注入模擬?�createMenuItemSchema
+
+    // 注入模擬?�createMenuItemSchema
     handlers.createMenuItemSchema = createMenuItemSchema;
-    
-    // ?�建模擬請�??�響??
+
+    // ?�建模擬請�??�響??
     jsonSpy = jest.fn();
     statusJsonSpy = jest.fn().mockReturnValue({ json: jsonSpy });
-    
+
     mockRequest = {
       user: {
         uid: testUserId,
@@ -132,8 +132,8 @@ describe('MenuItem Handlers - createMenuItem', () => {
         role: 'tenant_admin'
       },
       body: {
-        name: '?�皮?��?',
-        description: '香�?多�??��??��???,
+        name: '脆皮雞腿',
+        description: '香酥多汁，外酥內嫩',
         categoryId: testCategoryId,
         price: 80,
         discountPrice: 70,
@@ -142,22 +142,22 @@ describe('MenuItem Handlers - createMenuItem', () => {
         stockQuantity: 50
       }
     };
-    
+
     mockResponse = {
       status: statusJsonSpy,
       json: jsonSpy
     };
-    
-    // 默�??��?下�?Zod驗�??��?
+
+    // 默�??��?下�?Zod驗�??��?
     mockSafeParse.mockReturnValue({
       success: true,
       data: mockRequest.body
     });
   });
 
-  // 測試案�?1: ?��??�建?�單?��?
-  test('?��??�建?�單?��?並�???01?�??, async () => {
-    // 模擬?��?存在
+  // 測試案例1: 成功創建菜單項目
+  test('成功創建菜單項目並返回201狀態', async () => {
+    // 模擬分類存在
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -165,132 +165,132 @@ describe('MenuItem Handlers - createMenuItem', () => {
         name: 'Main Dishes'
       })
     });
-    
-    // 模擬?�建後�??�目?�詢
+
+    // 模擬創建後的項目查詢
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
         id: 'test-item-uuid-123',
-        name: '?�皮?��?',
+        name: '脆皮雞腿',
         createdAt: { toDate: () => new Date() },
         updatedAt: { toDate: () => new Date() }
       })
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await createMenuItem(mockRequest, mockResponse);
-    
-    // 驗�? Firestore ?��?
+
+    // 驗證 Firestore 調用
     expect(mockCollection).toHaveBeenCalledWith('menuCategories');
     expect(mockDoc).toHaveBeenCalledWith(testCategoryId);
     expect(mockCollection).toHaveBeenCalledWith('menuItems');
     expect(mockDoc).toHaveBeenCalledWith('test-item-uuid-123');
     expect(mockSet).toHaveBeenCalledTimes(1);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(201);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: true,
-      message: '?�單?�目?�建?��?'
+      message: '菜單項目創建成功'
     }));
   });
 
-  // 測試案�?2: ?�戶缺�?租戶ID
-  test('?�用?�缺少�??�ID?��?返�?403?�誤', async () => {
-    // 修改請�?，使?�戶缺�?租戶ID
+  // 測試案例2: 用戶缺少租戶ID
+  test('用戶缺少租戶ID時應返回403錯誤', async () => {
+    // 修改請求，使用戶缺少租戶ID
     mockRequest.user = {
       uid: testUserId,
       role: 'tenant_admin'
-      // ?��?不設�?tenantId
+      // 故意不設置tenantId
     };
-    
-    // ?��?測試
+
+    // 執行測試
     await createMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(403);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: '沒�?權�?：用?�缺少�??�ID'
+      message: '沒有權限：用戶缺少租戶ID'
     }));
-    
-    // 不�?該執行寫?��?�?
+
+    // 不應該執行寫入操作
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  // 測試案�?3: 驗�?失�?
-  test('?�輸?��?證失?��??��???00?�誤', async () => {
-    // 設置 Zod 驗�?失�?
+  // 測試案例3: 驗證失敗
+  test('輸入驗證失敗時應返回500錯誤', async () => {
+    // 設置 Zod 驗證失敗
     mockSafeParse.mockReturnValue({
       success: false,
       error: {
-        errors: [{ message: '?�單?�目?�稱不能?�空' }]
+        errors: [{ message: '菜單項目名稱不能為空' }]
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await createMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(500);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: '伺�??�內?�錯�?
+      message: '伺服器內部錯誤'
     }));
-    
-    // 不�?該執行寫?��?�?
+
+    // 不應該執行寫入操作
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  // 測試案�?4: ?��??��?定�??�單?��?
-  test('?�找不到?��??��??��?類�??��???04?�誤', async () => {
-    // 設置 mockGet 返�?不�??��??��?
+  // 測試案例4: 找不到指定的菜單分類
+  test('找不到指定的菜單分類時應返回404錯誤', async () => {
+    // 設置 mockGet 返回不存在的分類
     mockGet.mockResolvedValueOnce({
       exists: false
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await createMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(404);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: '?��??��??��?類�?存在'
+      message: '指定的菜單分類不存在'
     }));
-    
-    // 不�?該執行寫?��?�?
+
+    // 不應該執行寫入操作
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  // 測試案�?5: ?�試訪�??��?租戶?��??��?�?
-  test('?��?試使?�其他�??��??�單?��??��?返�?403?�誤', async () => {
-    // 設置 mockGet 返�??��?租戶?��?�?
+  // 測試案例5: 嘗試訪問其他租戶的菜單分類
+  test('嘗試使用其他租戶的菜單分類時應返回403錯誤', async () => {
+    // 設置 mockGet 返回其他租戶的分類
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
-        tenantId: 'other-tenant-id', // ?��?租戶
+        tenantId: 'other-tenant-id', // 其他租戶
         name: 'Other Tenant Category'
       })
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await createMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(403);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: '沒�?權�?：無法訪?�其他�??��??�單?��?'
+      message: '沒有權限：無法訪問其他租戶的菜單分類'
     }));
-    
-    // 不�?該執行寫?��?�?
+
+    // 不應該執行寫入操作
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  // 測試案�?6: ?��?庫寫?�錯�?
-  test('?�數?�庫寫入?�誤?��?返�?500?�誤', async () => {
-    // 設置 mockGet 返�??��??��?�?
+  // 測試案例6: 資料庫寫入錯誤
+  test('資料庫寫入錯誤時應返回500錯誤', async () => {
+    // 設置 mockGet 返回存在的分類
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -298,32 +298,32 @@ describe('MenuItem Handlers - createMenuItem', () => {
         name: 'Main Dishes'
       })
     });
-    
-    // 設置 mockSet ?�出?�常
-    const testError = new Error('?��?庫寫?�失??);
+
+    // 設置 mockSet 拋出異常
+    const testError = new Error('資料庫寫入失敗');
     mockSet.mockRejectedValueOnce(testError);
-    
-    // ?��?測試
+
+    // 執行測試
     await createMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(500);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: '伺�??�內?�錯�?
+      message: '伺服器內部錯誤'
     }));
   });
 });
 
 describe('MenuItem Handlers - listMenuItems', () => {
-  // 導入被測試�??��???
+  // 導入被測試的函數
   let { listMenuItems } = require('../menuItem.handlers');
-  
-  // ?�置?�?�模??
+
+  // 設置測試模擬
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // 設置 where, orderBy, limit, startAfter ?��??��?設模??
+
+    // 設置 where, orderBy, limit, startAfter 等查詢模擬
     mockWhere.mockReturnThis();
     mockOrderBy.mockReturnThis();
     mockLimit.mockReturnThis();
@@ -337,43 +337,43 @@ describe('MenuItem Handlers - listMenuItems', () => {
       get: mockGet
     }));
   });
-  
-  // 測試?��?
+
+  // 測試變量
   let mockRequest, mockResponse;
   let jsonSpy, statusJsonSpy;
   const testTenantId = 'test-tenant-id';
   const testStoreId = 'test-store-id';
   const testUserId = 'test-user-123';
   const testCategoryId = 'category-1';
-  
-  // ?�建常�??�測試�??��??�數??
+
+  // 創建常用的測試菜單項目數據
   const createTestMenuItem = (id, overrides = {}) => {
     const timestamp = new admin.firestore.Timestamp(Date.now() / 1000, 0);
-    
+
     return {
       id: id || `item-${Math.random().toString(36).substring(2, 7)}`,
       tenantId: testTenantId,
-      name: `測試?��? ${id}`,
-      description: `測試?��? ${id} ?��?述`,
+      name: `測試項目 ${id}`,
+      description: `測試項目 ${id} 的描述`,
       categoryId: testCategoryId,
-      categoryName: '主�?',
+      categoryName: '主菜',
       price: 50,
       stockStatus: 'in_stock',
       isRecommended: false,
       isSpecial: false,
       isActive: true,
-      tags: ['?��?', '?�薦'],
+      tags: ['熱門', '推薦'],
       createdAt: timestamp,
       updatedAt: timestamp,
       ...overrides
     };
   };
-  
+
   const setupMockRequestResponse = (queryParams = {}) => {
-    // ?�建模擬請�??�響??
+    // 創建模擬請求和響應
     jsonSpy = jest.fn();
     statusJsonSpy = jest.fn().mockReturnValue({ json: jsonSpy });
-    
+
     mockRequest = {
       user: {
         uid: testUserId,
@@ -386,28 +386,28 @@ describe('MenuItem Handlers - listMenuItems', () => {
         ...queryParams
       }
     };
-    
+
     mockResponse = {
       status: statusJsonSpy,
       json: jsonSpy
     };
-    
+
     return { mockRequest, mockResponse };
   };
-  
-  // 測試案�?1: ?��??��??�單?��??�表（無?�濾條件�?
-  test('?��??��??�單?��??�表並�???00?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例1: 成功獲取菜單項目列表（無過濾條件）
+  test('成功獲取菜單項目列表並返回200狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItems = [
       createTestMenuItem('item-1'),
       createTestMenuItem('item-2'),
       createTestMenuItem('item-3')
     ];
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       forEach: (callback) => {
         testItems.forEach((item, index) => {
@@ -418,18 +418,18 @@ describe('MenuItem Handlers - listMenuItems', () => {
         });
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�? Firestore ?��?
+
+    // 驗證 Firestore 調用
     expect(mockCollection).toHaveBeenCalledWith('menuItems');
     expect(mockWhere).toHaveBeenCalledWith('tenantId', '==', testTenantId);
     expect(mockOrderBy).toHaveBeenCalledWith('categoryId', 'asc');
     expect(mockOrderBy).toHaveBeenCalledWith('name', 'asc');
     expect(mockLimit).toHaveBeenCalledWith(20);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(200);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: true,
@@ -446,27 +446,27 @@ describe('MenuItem Handlers - listMenuItems', () => {
         }
       }
     });
-    
-    // 驗�?返�??��??��??�戳已格式�?
+
+    // 驗證返回的時間戳已格式化
     const responseData = jsonSpy.mock.calls[0][0].data.items;
     responseData.forEach(item => {
       expect(typeof item.createdAt).toBe('string');
       expect(typeof item.updatedAt).toBe('string');
     });
   });
-  
-  // 測試案�?2: 租戶?�離
-  test('租戶?�離 - ?��??�當?��??��??��?', async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例2: 租戶隔離
+  test('租戶隔離 - 只返回當前租戶的項目', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��? - 已�??�設 Firestore ?�詢?��??�當?��??��??�目
+
+    // 創建測試數據 - 已經設置 Firestore 查詢返回當前租戶的項目
     const testItems = [
       createTestMenuItem('item-1', { tenantId: testTenantId }),
       createTestMenuItem('item-2', { tenantId: testTenantId })
     ];
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       forEach: (callback) => {
         testItems.forEach((item) => {
@@ -477,34 +477,34 @@ describe('MenuItem Handlers - listMenuItems', () => {
         });
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�? Firestore ?��? - 檢查?�否?�用了�??��???
+
+    // 驗證 Firestore 調用 - 檢查是否使用了租戶過濾
     expect(mockWhere).toHaveBeenCalledWith('tenantId', '==', testTenantId);
-    
-    // 驗�??��? - ?�只?�含?��?租戶?��???
+
+    // 驗證響應 - 應只包含當前租戶的項目
     const responseData = jsonSpy.mock.calls[0][0].data.items;
     expect(responseData.length).toBe(2);
     responseData.forEach(item => {
       expect(item.tenantId).toBe(testTenantId);
     });
   });
-  
-  // 測試案�?3: ?��??�輯 (limit)
-  test('?��??�輯 - ?��? limit ?�數返�?�?��?�數??, async () => {
-    // ?�置每�?10??
+
+  // 測試案例3: 分頁邏輯 (limit)
+  test('分頁邏輯 - 使用 limit 參數返回指定數量', async () => {
+    // 設置每頁10項
     const { mockRequest, mockResponse } = setupMockRequestResponse({
       limit: 10
     });
-    
-    // ?�建 10 ?�測試�???
-    const testItems = Array.from({ length: 10 }, (_, i) => 
+
+    // 創建 10 個測試項目
+    const testItems = Array.from({ length: 10 }, (_, i) =>
       createTestMenuItem(`item-${i+1}`)
     );
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       forEach: (callback) => {
         testItems.forEach((item) => {
@@ -515,38 +515,38 @@ describe('MenuItem Handlers - listMenuItems', () => {
         });
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??��??�數
+
+    // 驗證分頁參數
     expect(mockLimit).toHaveBeenCalledWith(10);
-    
-    // 驗�??��?
+
+    // 驗證響應
     const responseData = jsonSpy.mock.calls[0][0].data;
     expect(responseData.items.length).toBe(10);
     expect(responseData.pagination).toEqual({
       pageSize: 10,
-      hasMore: true,  // ?�為返�?了�?好�???limit ?��??�數
+      hasMore: true,  // 因為返回了剛好等於 limit 的數量
       lastVisible: expect.any(Object)
     });
   });
-  
-  // 測試案�?4: ?��?類ID?�濾
-  test('?�濾條件 - ?��? categoryId ?�濾', async () => {
-    // ?�置?��?類ID?�濾
+
+  // 測試案例4: 分類ID過濾
+  test('過濾條件 - 使用 categoryId 過濾', async () => {
+    // 設置分類ID過濾
     const specificCategoryId = 'specific-category-id';
     const { mockRequest, mockResponse } = setupMockRequestResponse({
       categoryId: specificCategoryId
     });
-    
-    // ?�建測試?��?（都屬於?��??��?�?
+
+    // 創建測試數據（都屬於同一分類）
     const testItems = [
       createTestMenuItem('item-1', { categoryId: specificCategoryId }),
       createTestMenuItem('item-2', { categoryId: specificCategoryId })
     ];
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       forEach: (callback) => {
         testItems.forEach((item) => {
@@ -557,34 +557,34 @@ describe('MenuItem Handlers - listMenuItems', () => {
         });
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??�濾條件
+
+    // 驗證過濾條件
     expect(mockWhere).toHaveBeenCalledWith('categoryId', '==', specificCategoryId);
-    
-    // 驗�?返�??�數?�都屬於?��??��?
+
+    // 驗證返回的數據都屬於同一分類
     const responseData = jsonSpy.mock.calls[0][0].data.items;
     responseData.forEach(item => {
       expect(item.categoryId).toBe(specificCategoryId);
     });
   });
-  
-  // 測試案�?5: ?��??��??��?�?
-  test('?�濾條件 - ?��? isActive ?�濾', async () => {
-    // ?�置?�顯示�??��??��?
+
+  // 測試案例5: 活動狀態過濾
+  test('過濾條件 - 使用 isActive 過濾', async () => {
+    // 設置只顯示活動狀態項目
     const { mockRequest, mockResponse } = setupMockRequestResponse({
-      isActive: 'true' // ?�詢?�數?��?符串
+      isActive: 'true' // 查詢參數是字符串
     });
-    
-    // ?�建測試?��?（都?��??��??��?
+
+    // 創建測試數據（都是活動狀態）
     const testItems = [
       createTestMenuItem('item-1', { isActive: true }),
       createTestMenuItem('item-2', { isActive: true })
     ];
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       forEach: (callback) => {
         testItems.forEach((item) => {
@@ -595,34 +595,34 @@ describe('MenuItem Handlers - listMenuItems', () => {
         });
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??�濾條件 - 字符�?'true' ?��??�為布爾??true
+
+    // 驗證過濾條件 - 字符串'true' 應轉為布爾值true
     expect(mockWhere).toHaveBeenCalledWith('isActive', '==', true);
-    
-    // 驗�?返�??�數?�都?��??��???
+
+    // 驗證返回的數據都是活動狀態
     const responseData = jsonSpy.mock.calls[0][0].data.items;
     responseData.forEach(item => {
       expect(item.isActive).toBe(true);
     });
   });
-  
-  // 測試案�?6: ?�庫存�??��?�?
-  test('?�濾條件 - ?��? stockStatus ?�濾', async () => {
-    // ?�置?�顯示特定庫存�??��??��?
+
+  // 測試案例6: 庫存狀態過濾
+  test('過濾條件 - 使用 stockStatus 過濾', async () => {
+    // 設置只顯示特定庫存狀態的項目
     const { mockRequest, mockResponse } = setupMockRequestResponse({
       stockStatus: 'low_stock'
     });
-    
-    // ?�建測試?��?（都?�相?�庫存�??��?
+
+    // 創建測試數據（都是相同庫存狀態）
     const testItems = [
       createTestMenuItem('item-1', { stockStatus: 'low_stock' }),
       createTestMenuItem('item-2', { stockStatus: 'low_stock' })
     ];
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       forEach: (callback) => {
         testItems.forEach((item) => {
@@ -633,49 +633,49 @@ describe('MenuItem Handlers - listMenuItems', () => {
         });
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??�濾條件
+
+    // 驗證過濾條件
     expect(mockWhere).toHaveBeenCalledWith('stockStatus', '==', 'low_stock');
-    
-    // 驗�?返�??�數?�都?�特定庫存�???
+
+    // 驗證返回的數據都是特定庫存狀態
     const responseData = jsonSpy.mock.calls[0][0].data.items;
     responseData.forEach(item => {
       expect(item.stockStatus).toBe('low_stock');
     });
   });
-  
-  // 測試案�?7: 游�??��?
-  test('游�??��? - 使用 lastItemId ??lastCategoryId ?�數', async () => {
-    // 設置游�??��??�數
+
+  // 測試案例7: 游標分頁
+  test('游標分頁 - 使用 lastItemId 和 lastCategoryId 參數', async () => {
+    // 設置游標分頁參數
     const lastItemId = 'last-item-id';
     const lastCategoryId = 'last-category-id';
     const { mockRequest, mockResponse } = setupMockRequestResponse({
       lastItemId,
       lastCategoryId
     });
-    
-    // ?�建測試?��? - 模擬?�後�??��???
-    const lastItem = createTestMenuItem(lastItemId, { 
+
+    // 創建測試數據 - 模擬上一頁最後一個項目
+    const lastItem = createTestMenuItem(lastItemId, {
       categoryId: lastCategoryId,
       name: 'Last Item Name'
     });
-    
-    // ?�建下�??��??�目
+
+    // 創建下一頁項目
     const nextPageItems = [
       createTestMenuItem('next-item-1'),
       createTestMenuItem('next-item-2')
     ];
-    
-    // 模擬?��?上�??��?後�??��??��??��?
+
+    // 模擬獲取上一頁最後一個項目的查詢
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => lastItem
     });
-    
-    // 模擬下�??�查詢�???
+
+    // 模擬下一頁查詢結果
     mockGet.mockResolvedValueOnce({
       forEach: (callback) => {
         nextPageItems.forEach((item) => {
@@ -686,37 +686,37 @@ describe('MenuItem Handlers - listMenuItems', () => {
         });
       }
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??�否�?��?��?了�?一?��?後�??��???
+
+    // 驗證是否正確獲取了上一頁最後一個項目
     expect(mockDoc).toHaveBeenCalledWith(lastItemId);
-    
-    // 驗�??�否�?��設置�?startAfter
+
+    // 驗證是否正確設置了startAfter
     expect(mockStartAfter).toHaveBeenCalledWith(lastCategoryId, lastItem.name);
-    
-    // 驗�?返�??�是下�??��??��?
+
+    // 驗證返回的是下一頁數據
     const responseData = jsonSpy.mock.calls[0][0].data.items;
     expect(responseData.length).toBe(2);
     expect(responseData[0].id).toBe('next-item-1');
     expect(responseData[1].id).toBe('next-item-2');
   });
-  
-  // 測試案�?8: 空�?表�?�?
-  test('返�?空�?�?- ?�查詢�??�為空�?', async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例8: 空列表結果
+  test('返回空列表 - 當查詢結果為空時', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // 模擬 Firestore ?�詢結�? - 空�?�?
+
+    // 模擬 Firestore 查詢結果 - 空結果
     mockGet.mockResolvedValueOnce({
-      forEach: () => {} // 空函?��?不調?��?�?
+      forEach: () => {} // 空函數，不調用回調
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(200);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: true,
@@ -730,115 +730,115 @@ describe('MenuItem Handlers - listMenuItems', () => {
       }
     });
   });
-  
-  // 測試案�?9: ?��??�庫存�??��?
-  test('?�誤?��? - ?��??�庫存�??�值�???00?�誤', async () => {
-    // 準�?測試請�??�響??- 使用?��??�庫存�??��?
+
+  // 測試案例9: 無效庫存狀態值
+  test('錯誤處理 - 無效庫存狀態值返回400錯誤', async () => {
+    // 準備測試請求和響應 - 使用無效的庫存狀態值
     const { mockRequest, mockResponse } = setupMockRequestResponse({
       stockStatus: 'invalid_status'
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(400);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: expect.stringContaining('?��??�庫存�??��?)
+      message: expect.stringContaining('無效的庫存狀態值')
     }));
   });
-  
-  // 測試案�?10: ?�戶缺�?租戶ID
-  test('?�誤?��? - ?�用?�缺少�??�ID?��?返�?500?�誤', async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例10: 用戶缺少租戶ID
+  test('錯誤處理 - 用戶缺少租戶ID時應返回500錯誤', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // 修改請�?，使?�戶缺�?租戶ID
+
+    // 修改請求，使用戶缺少租戶ID
     mockRequest.user = {
       uid: testUserId,
       role: 'tenant_admin'
-      // ?��?不設�?tenantId
+      // 故意不設置tenantId
     };
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??��? - 注�?：當?�實?�是??500 ?�誤中�??�這種?��?，未?�確?��?
+
+    // 驗證響應 - 注意：當前實現是在500 錯誤中處理這種情況，未明確區分
     expect(statusJsonSpy).toHaveBeenCalledWith(500);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: '伺�??�內?�錯�?
+      message: '伺服器內部錯誤'
     }));
   });
-  
-  // 測試案�?11: Firestore ?�詢失�?
-  test('?�誤?��? - ??Firestore ?�詢失�??��?返�?500?�誤', async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例11: Firestore 查詢失敗
+  test('錯誤處理 - 當 Firestore 查詢失敗時應返回500錯誤', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // 模擬 Firestore ?�詢?�出?�常
-    const testError = new Error('?��?庫查詢失??);
+
+    // 模擬 Firestore 查詢拋出異常
+    const testError = new Error('資料庫查詢失敗');
     mockGet.mockRejectedValueOnce(testError);
-    
-    // ?��?測試
+
+    // 執行測試
     await listMenuItems(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(500);
     expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
-      message: '伺�??�內?�錯�?,
-      error: '?��?庫查詢失??
+      message: '伺服器內部錯誤',
+      error: '資料庫查詢失敗'
     }));
   });
 });
 
 describe('MenuItem Handlers - getMenuItemById', () => {
-  // 導入被測試�??��???
+  // 導入被測試的函數
   let { getMenuItemById } = require('../menuItem.handlers');
-  
-  // ?�置?�?�模??
+
+  // 設置測試模擬
   beforeEach(() => {
     jest.clearAllMocks();
   });
-  
-  // 測試?��?
+
+  // 測試變量
   let mockRequest, mockResponse;
   let jsonSpy, statusJsonSpy;
   const testTenantId = 'test-tenant-id';
   const testStoreId = 'test-store-id';
   const testUserId = 'test-user-123';
   const testItemId = 'test-item-id';
-  
-  // ?�建測試?�單?��??��?
+
+  // 創建測試菜單項目數據
   const createTestMenuItem = (overrides = {}) => {
     const timestamp = new admin.firestore.Timestamp(Date.now() / 1000, 0);
-    
+
     return {
       id: testItemId,
       tenantId: testTenantId,
-      name: '測試?��?',
-      description: '測試?��??��?�?,
+      name: '測試項目',
+      description: '測試項目的描述',
       categoryId: 'category-1',
-      categoryName: '主�?',
+      categoryName: '主菜',
       price: 50,
       stockStatus: 'in_stock',
       isRecommended: false,
       isSpecial: false,
       isActive: true,
-      tags: ['?��?', '?�薦'],
+      tags: ['熱門', '推薦'],
       createdAt: timestamp,
       updatedAt: timestamp,
       ...overrides
     };
   };
-  
+
   const setupMockRequestResponse = (params = {}) => {
-    // ?�建模擬請�??�響??
+    // 創建模擬請求和響應
     jsonSpy = jest.fn();
     statusJsonSpy = jest.fn().mockReturnValue({ json: jsonSpy });
-    
+
     mockRequest = {
       user: {
         uid: testUserId,
@@ -851,150 +851,150 @@ describe('MenuItem Handlers - getMenuItemById', () => {
         ...params
       }
     };
-    
+
     mockResponse = {
       status: statusJsonSpy,
       json: jsonSpy
     };
-    
+
     return { mockRequest, mockResponse };
   };
-  
-  // 測試案�?1: ?��??��??�單?��?
-  test('?��??��??�單?��?並�???00?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例1: 成功獲取菜單項目
+  test('成功獲取菜單項目並返回200狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await getMenuItemById(mockRequest, mockResponse);
-    
-    // 驗�? Firestore ?��?
+
+    // 驗證 Firestore 調用
     expect(mockCollection).toHaveBeenCalledWith('menuItems');
     expect(mockDoc).toHaveBeenCalledWith(testItemId);
     expect(mockGet).toHaveBeenCalled();
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(200);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: true,
       data: expect.objectContaining({
         id: testItemId,
-        name: '測試?��?',
+        name: '測試項目',
         tenantId: testTenantId
       })
     });
-    
-    // 驗�??��??�格式�?
+
+    // 驗證時間戳格式化
     const responseData = jsonSpy.mock.calls[0][0].data;
     expect(typeof responseData.createdAt).toBe('string');
     expect(typeof responseData.updatedAt).toBe('string');
   });
-  
-  // 測試案�?2: ?��??��?定�??�單?��?
-  test('?��??��?定�??�單?��??��???04?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例2: 找不到指定的菜單項目
+  test('找不到指定的菜單項目時應返回404狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // 模擬 Firestore ?�詢結�? - 不�??��??��?
+
+    // 模擬 Firestore 查詢結果 - 不存在的項目
     mockGet.mockResolvedValueOnce({
       exists: false
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await getMenuItemById(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(404);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '?��??��?定�??�單?�目'
+      message: '找不到指定的菜單項目'
     });
   });
-  
-  // 測試案�?3: 租戶?�離 - ?�試訪�??��?租戶?��??��???
-  test('租戶?�離: 訪�??��?租戶?��??��??��?返�?403?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例3: 租戶隔離 - 嘗試訪問其他租戶的菜單項目
+  test('租戶隔離: 訪問其他租戶的菜單項目時應返回403狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��? - 屬於?��?租戶
+
+    // 創建測試數據 - 屬於其他租戶
     const otherTenantItem = createTestMenuItem({
       tenantId: 'other-tenant-id'
     });
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => otherTenantItem
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await getMenuItemById(mockRequest, mockResponse);
-    
-    // 驗�?租戶?�離檢查
+
+    // 驗證租戶隔離檢查
     expect(statusJsonSpy).toHaveBeenCalledWith(403);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '沒�?權�?：無法訪?�其他�??��??�單?�目'
+      message: '沒有權限：無法訪問其他租戶的菜單項目'
     });
   });
-  
-  // 測試案�?4: 請�?缺�?必�??��???ID
-  test('缺�?必�??��??�ID?��???00?�??, async () => {
-    // 準�?測試請�??�響?��?但�??��? itemId
+
+  // 測試案例4: 請求缺少必要的項目ID
+  test('缺少必要的項目ID時應返回400狀態', async () => {
+    // 準備測試請求和響應，但不提供 itemId
     const { mockRequest, mockResponse } = setupMockRequestResponse({ itemId: undefined });
-    
-    // ?��?測試
+
+    // 執行測試
     await getMenuItemById(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(400);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '缺�?必�??��??��??�ID?�數'
+      message: '缺少必要的菜單項目ID參數'
     });
   });
-  
-  // 測試案�?5: Firestore ?�詢失�?
-  test('Firestore ?�詢失�??��???00?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例5: Firestore 查詢失敗
+  test('Firestore 查詢失敗時應返回500狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // 模擬 Firestore ?�詢失�?
-    const testError = new Error('?��?庫查詢失??);
+
+    // 模擬 Firestore 查詢失敗
+    const testError = new Error('資料庫查詢失敗');
     mockGet.mockRejectedValueOnce(testError);
-    
-    // ?��?測試
+
+    // 執行測試
     await getMenuItemById(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(500);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '伺�??�內?�錯�?,
-      error: '?��?庫查詢失??
+      message: '伺服器內部錯誤',
+      error: '資料庫查詢失敗'
     });
   });
 });
 
 describe('MenuItem Handlers - updateMenuItem', () => {
-  // 導入被測試�??��???
+  // 導入被測試的函數
   let { updateMenuItem } = require('../menuItem.handlers');
-  
-  // ?�置?�?�模??
+
+  // 設置測試模擬
   beforeEach(() => {
     jest.clearAllMocks();
   });
-  
-  // 測試?��?
+
+  // 測試變量
   let mockRequest, mockResponse;
   let jsonSpy, statusJsonSpy;
   const testTenantId = 'test-tenant-id';
@@ -1003,35 +1003,35 @@ describe('MenuItem Handlers - updateMenuItem', () => {
   const testItemId = 'test-item-id';
   const testCategoryId = 'category-1';
   const testNewCategoryId = 'category-2';
-  
-  // ?�建測試?�單?��??��?
+
+  // 創建測試菜單項目數據
   const createTestMenuItem = (overrides = {}) => {
     const timestamp = new admin.firestore.Timestamp(Date.now() / 1000, 0);
-    
+
     return {
       id: testItemId,
       tenantId: testTenantId,
-      name: '測試?��?',
-      description: '測試?��??��?�?,
+      name: '測試項目',
+      description: '測試項目的描述',
       categoryId: testCategoryId,
-      categoryName: '主�?',
+      categoryName: '主菜',
       price: 50,
       stockStatus: 'in_stock',
       isRecommended: false,
       isSpecial: false,
       isActive: true,
-      tags: ['?��?', '?�薦'],
+      tags: ['熱門', '推薦'],
       createdAt: timestamp,
       updatedAt: timestamp,
       ...overrides
     };
   };
-  
+
   const setupMockRequestResponse = (itemId = testItemId, updateData = {}) => {
-    // ?�建模擬請�??�響??
+    // 創建模擬請求和響應
     jsonSpy = jest.fn();
     statusJsonSpy = jest.fn().mockReturnValue({ json: jsonSpy });
-    
+
     mockRequest = {
       user: {
         uid: testUserId,
@@ -1042,161 +1042,161 @@ describe('MenuItem Handlers - updateMenuItem', () => {
       params: { itemId },
       body: updateData
     };
-    
+
     mockResponse = {
       status: statusJsonSpy,
       json: jsonSpy
     };
-    
+
     return { mockRequest, mockResponse };
   };
-  
-  // 測試案�?1: ?��??�新?��?欄�?
-  test('?��??�新?��?欄�?並�???00?�??, async () => {
-    // 準�?測試請�??�響??- ?�更?��?稱�??�格
+
+  // 測試案例1: 成功更新多個欄位
+  test('成功更新多個欄位並返回200狀態', async () => {
+    // 準備測試請求和響應 - 更改名稱和價格
     const updateData = {
-      name: '?�新?��??��?�?,
+      name: '更新後的名稱',
       price: 60
     };
     const { mockRequest, mockResponse } = setupMockRequestResponse(testItemId, updateData);
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�? - ?��??��??��?
+
+    // 模擬 Firestore 查詢結果 - 項目存在
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // 模擬?�新?��?
+
+    // 模擬更新操作
     const mockUpdate = jest.fn().mockResolvedValue(true);
     mockDoc.mockReturnValue({
       get: mockGet,
       update: mockUpdate
     });
-    
-    // 模擬?��??�新後�??��?
+
+    // 模擬項目更新後的數據
     const updatedItem = {
       ...testItem,
       ...updateData,
-      updatedAt: new admin.firestore.Timestamp(Date.now() / 1000 + 100, 0) // ?�設?�新?��?比創建�??��?
+      updatedAt: new admin.firestore.Timestamp(Date.now() / 1000 + 100, 0) // 假設更新時間比創建時間晚
     };
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => updatedItem
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await updateMenuItem(mockRequest, mockResponse);
-    
-    // 驗�? Firestore ?��?
+
+    // 驗證 Firestore 調用
     expect(mockCollection).toHaveBeenCalledWith('menuItems');
     expect(mockDoc).toHaveBeenCalledWith(testItemId);
     expect(mockGet).toHaveBeenCalled();
     expect(mockUpdate).toHaveBeenCalled();
-    
-    // 驗�??�新?��?
+
+    // 驗證更新數據
     const updateArg = mockUpdate.mock.calls[0][0];
-    expect(updateArg).toHaveProperty('name', '?�新?��??��?�?);
+    expect(updateArg).toHaveProperty('name', '更新後的名稱');
     expect(updateArg).toHaveProperty('price', 60);
     expect(updateArg).toHaveProperty('updatedAt');
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(200);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: true,
-      message: '?�單?��??�新?��?',
+      message: '菜單項目更新成功',
       data: expect.objectContaining({
         id: testItemId,
-        name: '?�新?��??��?�?,
+        name: '更新後的名稱',
         price: 60
       })
     });
-    
-    // 驗�??��??�格式�?
+
+    // 驗證時間戳格式化
     const responseData = jsonSpy.mock.calls[0][0].data;
     expect(typeof responseData.createdAt).toBe('string');
     expect(typeof responseData.updatedAt).toBe('string');
   });
-  
-  // 測試案�?2: ?��??��?定�??�單?��?
-  test('?��??��?定�??�單?��??��???04?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例2: 找不到指定的菜單項目
+  test('找不到指定的菜單項目時應返回404狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // 模擬 Firestore ?�詢結�? - 不�??��??��?
+
+    // 模擬 Firestore 查詢結果 - 不存在的項目
     mockGet.mockResolvedValueOnce({
       exists: false
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await updateMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(404);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '?��??��?定�??�單?��?'
+      message: '找不到指定的菜單項目'
     });
   });
-  
-  // 測試案�?3: 租戶?�離 - ?�試?�新?��?租戶?��??��???
-  test('租戶?�離: ?�新?��?租戶?��??��??��?返�?403?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例3: 租戶隔離 - 嘗試更新其他租戶的菜單項目
+  test('租戶隔離: 更新其他租戶的菜單項目時應返回403狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��? - 屬於?��?租戶
+
+    // 創建測試數據 - 屬於其他租戶
     const otherTenantItem = createTestMenuItem({
       tenantId: 'other-tenant-id'
     });
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => otherTenantItem
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await updateMenuItem(mockRequest, mockResponse);
-    
-    // 驗�?租戶?�離檢查
+
+    // 驗證租戶隔離檢查
     expect(statusJsonSpy).toHaveBeenCalledWith(403);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '沒�?權�?：無法更?�其他�??��??�單?��?'
+      message: '沒有權限：無法更新其他租戶的菜單項目'
     });
   });
-  
-  // 測試案�?4: ?�新CategoryID - ?��?
-  test('?��??�新?��?ID並�?步更?��?類�?�?, async () => {
-    // 準�?測試?��? - ?�新?��?ID
+
+  // 測試案例4: 更新CategoryID - 成功
+  test('成功更新分類ID並同步更新分類名稱', async () => {
+    // 準備測試數據 - 更新分類ID
     const updateData = {
       categoryId: testNewCategoryId
     };
     const { mockRequest, mockResponse } = setupMockRequestResponse(testItemId, updateData);
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�? - ?��??��??��?
+
+    // 模擬 Firestore 查詢結果 - 項目存在
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // 模擬?��??��?�?
+
+    // 模擬新分類數據
     const newCategory = {
       id: testNewCategoryId,
       tenantId: testTenantId,
-      name: '?��?類�?�?
+      name: '新分類名稱'
     };
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => newCategory
     });
-    
-    // 模擬?�新?��?
+
+    // 模擬更新操作
     const mockUpdate = jest.fn().mockResolvedValue(true);
     mockDoc.mockReturnValueOnce({
       get: mockGet,
@@ -1207,195 +1207,195 @@ describe('MenuItem Handlers - updateMenuItem', () => {
       get: mockGet,
       update: mockUpdate
     });
-    
-    // 模擬?��??�新後�??��?
+
+    // 模擬項目更新後的數據
     const updatedItem = {
       ...testItem,
       categoryId: testNewCategoryId,
-      categoryName: '?��?類�?�?,
+      categoryName: '新分類名稱',
       updatedAt: new admin.firestore.Timestamp(Date.now() / 1000 + 100, 0)
     };
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => updatedItem
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await updateMenuItem(mockRequest, mockResponse);
-    
-    // 驗�? Firestore ?��?
+
+    // 驗證 Firestore 調用
     expect(mockCollection).toHaveBeenCalledWith('menuItems');
     expect(mockCollection).toHaveBeenCalledWith('menuCategories');
     expect(mockDoc).toHaveBeenCalledWith(testItemId);
     expect(mockDoc).toHaveBeenCalledWith(testNewCategoryId);
-    
-    // 驗�??�新?��??�含categoryName
+
+    // 驗證更新數據包含categoryName
     const updateArg = mockUpdate.mock.calls[0][0];
     expect(updateArg).toHaveProperty('categoryId', testNewCategoryId);
-    expect(updateArg).toHaveProperty('categoryName', '?��?類�?�?);
-    
-    // 驗�??��?
+    expect(updateArg).toHaveProperty('categoryName', '新分類名稱');
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(200);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: true,
-      message: '?�單?��??�新?��?',
+      message: '菜單項目更新成功',
       data: expect.objectContaining({
         categoryId: testNewCategoryId,
-        categoryName: '?��?類�?�?
+        categoryName: '新分類名稱'
       })
     });
   });
-  
-  // 測試案�?5: ?�新CategoryID - ?��??�新?��?
-  test('?�新?��?ID?�找不到?��?類�???04?�??, async () => {
-    // 準�?測試?��? - ?��??��?類ID
+
+  // 測試案例5: 更新CategoryID - 找不到新分類
+  test('更新分類ID時找不到新分類應返回404狀態', async () => {
+    // 準備測試數據 - 不存在的分類ID
     const updateData = {
       categoryId: 'non-existent-category'
     };
     const { mockRequest, mockResponse } = setupMockRequestResponse(testItemId, updateData);
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�? - ?��??��??��?
+
+    // 模擬 Firestore 查詢結果 - 項目存在
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // 模擬?��??��?�?- 不�???
+
+    // 模擬新分類數據 - 不存在
     mockGet.mockResolvedValueOnce({
       exists: false
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await updateMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(404);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '?��??�新?�單?��?不�???
+      message: '指定更新的菜單分類不存在'
     });
   });
-  
-  // 測試案�?6: ?�新CategoryID - ?��?租戶?��?�?
-  test('?�新?��?ID?�使?�其他�??��??��?返�?403?�??, async () => {
-    // 準�?測試?��? - ?��?租戶?��?類ID
+
+  // 測試案例6: 更新CategoryID - 其他租戶分類
+  test('更新分類ID時使用其他租戶分類應返回403狀態', async () => {
+    // 準備測試數據 - 其他租戶的分類ID
     const updateData = {
       categoryId: 'other-tenant-category'
     };
     const { mockRequest, mockResponse } = setupMockRequestResponse(testItemId, updateData);
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�? - ?��??��??��?
+
+    // 模擬 Firestore 查詢結果 - 項目存在
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // 模擬?��??��?�?- 屬於?��?租戶
+
+    // 模擬新分類數據 - 屬於其他租戶
     const otherTenantCategory = {
       id: 'other-tenant-category',
       tenantId: 'other-tenant-id',
-      name: '?��?租戶?��?�?
+      name: '其他租戶分類'
     };
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => otherTenantCategory
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await updateMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(403);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '沒�?權�?：無法使?�其他�??��??�單?��?'
+      message: '沒有權限：無法使用其他租戶的菜單分類'
     });
   });
-  
-  // 測試案�?7: Firestore ?�新失�?
-  test('Firestore ?�新失�??��???00?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例7: Firestore 更新失敗
+  test('Firestore 更新失敗時應返回500狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    //
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�? - ?��?存在
+
+    // 模擬 Firestore 查詢結果 - 項目存在
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // 模擬?�新?��?失�?
-    const mockUpdate = jest.fn().mockRejectedValue(new Error('?��?庫更?�失??));
+
+    // 模擬更新操作失敗
+    const mockUpdate = jest.fn().mockRejectedValue(new Error('資料庫更新失敗'));
     mockDoc.mockReturnValue({
       get: mockGet,
       update: mockUpdate
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await updateMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(500);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '伺�??�內?�錯�?,
-      error: '?��?庫更?�失??
+      message: '伺服器內部錯誤',
+      error: '資料庫更新失敗'
     });
   });
 });
 
 describe('MenuItem Handlers - deleteMenuItem', () => {
-  // 導入被測試�??��???
+  // 導入被測試的函數
   let { deleteMenuItem } = require('../menuItem.handlers');
-  
-  // ?�置?�?�模??
+
+  // 設置測試模擬
   beforeEach(() => {
     jest.clearAllMocks();
   });
-  
-  // 測試?��?
+
+  // 測試變量
   let mockRequest, mockResponse;
   let jsonSpy, statusJsonSpy;
   const testTenantId = 'test-tenant-id';
   const testUserId = 'test-user-123';
   const testItemId = 'test-item-id';
-  
-  // ?�建測試?�單?��??��?
+
+  // 創建測試菜單項目數據
   const createTestMenuItem = (overrides = {}) => {
     const timestamp = new admin.firestore.Timestamp(Date.now() / 1000, 0);
-    
+
     return {
       id: testItemId,
       tenantId: testTenantId,
-      name: '測試?��?',
-      description: '測試?��??��?�?,
+      name: '測試項目',
+      description: '測試項目的描述',
       categoryId: 'category-1',
-      categoryName: '主�?',
+      categoryName: '主菜',
       price: 50,
       stockStatus: 'in_stock',
       isRecommended: false,
       isSpecial: false,
       isActive: true,
-      tags: ['?��?', '?�薦'],
+      tags: ['熱門', '推薦'],
       createdAt: timestamp,
       updatedAt: timestamp,
       ...overrides
     };
   };
-  
+
   const setupMockRequestResponse = (itemId = testItemId) => {
-    // ?�建模擬請�??�響??
+    // 創建模擬請求和響應
     jsonSpy = jest.fn();
     statusJsonSpy = jest.fn().mockReturnValue({ json: jsonSpy });
-    
+
     mockRequest = {
       user: {
         uid: testUserId,
@@ -1404,151 +1404,151 @@ describe('MenuItem Handlers - deleteMenuItem', () => {
       },
       params: { itemId }
     };
-    
+
     mockResponse = {
       status: statusJsonSpy,
       json: jsonSpy
     };
-    
+
     return { mockRequest, mockResponse };
   };
-  
-  // 測試案�?1: ?��??�除?�單?��?
-  test('?��??�除?�單?��?並�???00?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例1: 成功刪除菜單項目
+  test('成功刪除菜單項目並返回200狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // 模擬?�除?��?
+
+    // 模擬刪除操作
     const mockDelete = jest.fn().mockResolvedValue(true);
     mockDoc.mockReturnValue({
       get: mockGet,
       delete: mockDelete
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await deleteMenuItem(mockRequest, mockResponse);
-    
-    // 驗�? Firestore ?��?
+
+    // 驗證 Firestore 調用
     expect(mockCollection).toHaveBeenCalledWith('menuItems');
     expect(mockDoc).toHaveBeenCalledWith(testItemId);
     expect(mockGet).toHaveBeenCalled();
     expect(mockDelete).toHaveBeenCalled();
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(200);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: true,
-      message: '?�單?�目 test-item-id 已�??�刪??
+      message: '菜單項目 test-item-id 已成功刪除'
     });
   });
-  
-  // 測試案�?2: ?��??��?定�??�單?��?
-  test('?��??��?定�??�單?��??��???04?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例2: 找不到指定的菜單項目
+  test('找不到指定的菜單項目時應返回404狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // 模擬 Firestore ?�詢結�? - 不�??��??��?
+
+    // 模擬 Firestore 查詢結果 - 不存在的項目
     mockGet.mockResolvedValueOnce({
       exists: false
     });
-    
-    // 模擬?�除?��? (不�?該被調用)
+
+    // 模擬刪除操作 (不應該被調用)
     const mockDelete = jest.fn();
     mockDoc.mockReturnValue({
       get: mockGet,
       delete: mockDelete
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await deleteMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(404);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '?��??��?定�??�單?��?'
+      message: '找不到指定的菜單項目'
     });
-    
-    // 驗�? delete ?��??�被調用
+
+    // 驗證 delete 方法未被調用
     expect(mockDelete).not.toHaveBeenCalled();
   });
-  
-  // 測試案�?3: 租戶?�離 - ?�試?�除?��?租戶?��??��???
-  test('租戶?�離: ?�除?��?租戶?��??��??��?返�?403?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例3: 租戶隔離 - 嘗試刪除其他租戶的菜單項目
+  test('租戶隔離: 刪除其他租戶的菜單項目時應返回403狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��? - 屬於?��?租戶
+
+    // 創建測試數據 - 屬於其他租戶
     const otherTenantItem = createTestMenuItem({
       tenantId: 'other-tenant-id'
     });
-    
-    // 模擬 Firestore ?�詢結�?
+
+    // 模擬 Firestore 查詢結果
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => otherTenantItem
     });
-    
-    // 模擬?�除?��? (不�?該被調用)
+
+    // 模擬刪除操作 (不應該被調用)
     const mockDelete = jest.fn();
     mockDoc.mockReturnValue({
       get: mockGet,
       delete: mockDelete
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await deleteMenuItem(mockRequest, mockResponse);
-    
-    // 驗�?租戶?�離檢查
+
+    // 驗證租戶隔離檢查
     expect(statusJsonSpy).toHaveBeenCalledWith(403);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '沒�?權�?：無法刪?�其他�??��??�單?��?'
+      message: '沒有權限：無法刪除其他租戶的菜單項目'
     });
-    
-    // 驗�? delete ?��??�被調用
+
+    // 驗證 delete 方法未被調用
     expect(mockDelete).not.toHaveBeenCalled();
   });
-  
-  // 測試案�?4: Firestore ?�除失�?
-  test('Firestore ?�除失�??��???00?�??, async () => {
-    // 準�?測試請�??�響??
+
+  // 測試案例4: Firestore 刪除失敗
+  test('Firestore 刪除失敗時應返回500狀態', async () => {
+    // 準備測試請求和響應
     const { mockRequest, mockResponse } = setupMockRequestResponse();
-    
-    // ?�建測試?��?
+
+    // 創建測試數據
     const testItem = createTestMenuItem();
-    
-    // 模擬 Firestore ?�詢結�? - ?��?存在
+
+    // 模擬 Firestore 查詢結果 - 項目存在
     mockGet.mockResolvedValueOnce({
       exists: true,
       data: () => testItem
     });
-    
-    // 模擬?�除?��?失�?
-    const mockDelete = jest.fn().mockRejectedValue(new Error('?��?庫刪?�失??));
+
+    // 模擬刪除操作失敗
+    const mockDelete = jest.fn().mockRejectedValue(new Error('資料庫刪除失敗'));
     mockDoc.mockReturnValue({
       get: mockGet,
       delete: mockDelete
     });
-    
-    // ?��?測試
+
+    // 執行測試
     await deleteMenuItem(mockRequest, mockResponse);
-    
-    // 驗�??��?
+
+    // 驗證響應
     expect(statusJsonSpy).toHaveBeenCalledWith(500);
     expect(jsonSpy).toHaveBeenCalledWith({
       success: false,
-      message: '伺�??�內?�錯�?,
-      error: '?��?庫刪?�失??
+      message: '伺服器內部錯誤',
+      error: '資料庫刪除失敗'
     });
   });
-}); 
+});

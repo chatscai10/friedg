@@ -44,18 +44,33 @@ export const OrderTypeEnum = z.enum([
 export const OrderItemSchema = z.object({
   itemId: z.string().min(1, "商品ID不能為空"),
   name: z.string().min(1, "商品名稱不能為空"),
-  price: safeFloat.min(0, "價格不能為負數"),
-  quantity: safeInteger.min(1, "數量必須大於0"),
+  price: z.preprocess(
+    (arg) => (typeof arg === 'string' ? parseFloat(arg) : arg),
+    z.number().min(0, "價格不能為負數").refine((n) => !isNaN(n), { message: "價格必須是有效的數字" })
+  ),
+  quantity: z.preprocess(
+    (arg) => (typeof arg === 'string' ? parseInt(arg, 10) : arg),
+    z.number().int().min(1, "數量必須大於0").refine((n) => !isNaN(n), { message: "數量必須是有效的整數" })
+  ),
   options: z.array(
     z.object({
       name: z.string(),
       value: z.string(),
-      price: safeFloat.optional()
+      price: z.preprocess(
+        (arg) => (arg === undefined || arg === null ? undefined : (typeof arg === 'string' ? parseFloat(arg) : arg)),
+        z.number().min(0, "選項價格不能為負數").optional().refine((n) => n === undefined || !isNaN(n), { message: "選項價格必須是有效的數字或為空" })
+      )
     })
   ).optional(),
   notes: z.string().optional(),
-  discount: safeFloat.optional(),
-  subtotal: safeFloat.optional() // 系統計算，非必填
+  discount: z.preprocess(
+    (arg) => (arg === undefined || arg === null ? undefined : (typeof arg === 'string' ? parseFloat(arg) : arg)),
+    z.number().min(0, "折扣不能為負數").optional().refine((n) => n === undefined || !isNaN(n), { message: "折扣必須是有效的數字或為空" })
+  ),
+  subtotal: z.preprocess(
+    (arg) => (arg === undefined || arg === null ? undefined : (typeof arg === 'string' ? parseFloat(arg) : arg)),
+    z.number().min(0, "小計不能為負數").optional().refine((n) => n === undefined || !isNaN(n), { message: "小計必須是有效的數字或為空" })
+  )
 });
 
 /**
@@ -97,7 +112,10 @@ export const UpdateOrderStatusSchema = z.object({
 export const RecordOrderPaymentSchema = z.object({
   orderId: z.string().min(1, "訂單ID不能為空"),
   paymentMethod: z.string().min(1, "支付方式不能為空"),
-  amount: safeFloat.min(0, "支付金額必須大於0"),
+  amount: z.preprocess(
+    (arg) => (typeof arg === 'string' ? parseFloat(arg) : arg),
+    z.number().min(0, "支付金額必須大於0").refine((n) => !isNaN(n), { message: "支付金額必須是有效的數字" })
+  ),
   transactionId: z.string().optional(),
   paymentDetails: z.record(z.any()).optional()
 });

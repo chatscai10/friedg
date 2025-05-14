@@ -16,7 +16,7 @@ import {
   getOrderStatisticsByPeriod,
   getOrdersByStore,
   generateOrderReceiptById
-} from './services/order.service';
+} from './services/orderService';
 import { OrderStatus } from './types';
 import { validateData } from '../libs/validation/schema';
 import {

@@ -4,10 +4,11 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'; // Added Fi
 import { logger } from 'firebase-functions';
 // Assuming express app is initialized and exported from a central place if using a more complex router setup
 // For a single function file, we can define a simple express app or directly use onRequest
-import * as express from 'express';
-import * as cors from 'cors';
+import express from 'express';
+import cors from 'cors';
 import { authenticateRequest, authorizeRoles } from '../middleware/auth.middleware'; // Import the auth and role middleware
 import { deductStock } from '../inventory/inventory.v2'; // Import deductStock
+import { onRequest, HttpsOptions } from "firebase-functions/v2/https";
 
 // Initialize Firebase Admin SDK (idempotent)
 if (admin.getApps().length === 0) {
@@ -121,7 +122,7 @@ app.get('/:orderId', authenticateRequest, async (req: express.Request, res: expr
 });
 
 // --- New GET route for listing recent orders (for POS/admin) --- (listRecentOrdersV2 logic)
-app.get('/recent', authenticateRequest, authorizeRoles('admin', 'employee'), async (req: express.Request, res: express.Response) => {
+app.get('/recent', authenticateRequest, authorizeRoles(['tenant_admin', 'staff']), async (req: express.Request, res: express.Response) => {
     logger.info('Attempting to list recent orders by authorized user', { uid: (req as any).user?.uid, role: (req as any).user?.role });
     // const firebaseUser = (req as any).user; // Already handled by middlewares
 
@@ -243,7 +244,7 @@ app.post('/', authenticateRequest, async (req: express.Request, res: express.Res
 // --- New PUT route for updating order status (for POS/admin) ---
 const ALLOWED_ORDER_STATUSES = ["pending", "confirmed", "preparing", "ready_for_pickup", "completed", "cancelled", "paid", "payment_failed"];
 
-app.put('/admin/:orderId/status', authenticateRequest, authorizeRoles('admin', 'employee'), async (req: express.Request, res: express.Response) => {
+app.put('/admin/:orderId/status', authenticateRequest, authorizeRoles(['tenant_admin', 'staff']), async (req: express.Request, res: express.Response) => {
     logger.info('Attempting to update order status by authorized user', { uid: (req as any).user?.uid, role: (req as any).user?.role, params: req.params, body: req.body });
     const firebaseUser = (req as any).user;
     const { orderId } = req.params;

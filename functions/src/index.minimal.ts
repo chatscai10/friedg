@@ -6,8 +6,8 @@ console.log('Firebase Admin SDK initialized with default settings.');
 
 // 其他導入
 import * as functions from 'firebase-functions';
-import * as express from 'express';
-import * as cors from 'cors';
+import express from 'express';
+import cors from 'cors';
 
 // 為模擬器環境設置對應的連接
 if (process.env.FUNCTIONS_EMULATOR === 'true') {
@@ -25,7 +25,7 @@ const logRequest = (req: express.Request, res: express.Response, next: express.N
     console.log('請求體:', JSON.stringify(req.body, null, 2));
   }
   console.log('=================================');
-  
+
   // 記錄響應
   const originalSend = res.send;
   res.send = function(body) {
@@ -43,7 +43,7 @@ const logRequest = (req: express.Request, res: express.Response, next: express.N
     console.log('=================================');
     return originalSend.call(this, body);
   };
-  
+
   next();
 };
 
@@ -98,7 +98,7 @@ app.get('/test', (req, res) => {
   console.log('請求原始URL:', req.originalUrl);
   console.log('請求參數:', req.params);
   console.log('請求查詢:', req.query);
-  
+
   res.status(200).json({
     status: 'success',
     message: 'API連接測試成功 - /test',
@@ -121,7 +121,7 @@ app.all('/test*', (req, res) => {
   console.log('請求URL:', req.url);
   console.log('請求路徑:', req.path);
   console.log('請求原始URL:', req.originalUrl);
-  
+
   res.status(200).json({
     status: 'success',
     message: '通配測試端點成功 - ' + req.path,
@@ -158,7 +158,7 @@ app.use('*', (req, res) => {
   console.log(`請求查詢:`, req.query);
   console.log(`請求頭:`, req.headers);
   console.log(`======================`);
-  
+
   res.status(404).json({
     status: 'error',
     message: '找不到請求的資源',
@@ -171,9 +171,9 @@ export const api = functions.https.onRequest(app);
 
 // 簡化版API導出 - 用於測試
 export const testApi = functions.https.onRequest((req, res) => {
-  res.status(200).json({ 
-    status: 'success', 
+  res.status(200).json({
+    status: 'success',
     message: 'Test API is running',
     timestamp: new Date().toISOString()
   });
-}); 
+});

@@ -8,7 +8,9 @@ import {
   safeInteger, 
   safeFloat,
   emailSchema,
-  uuidSchema
+  uuidSchema,
+  dateOnlyString, 
+  isoDateString
 } from '../../libs/validation/schema';
 
 /**
@@ -103,8 +105,14 @@ export const PaymentMethodConfigSchema = z.object({
   method: PaymentMethodEnum,
   enabled: z.boolean().default(true),
   displayName: z.string().optional(),
-  processingFee: safeFloat.min(0).optional(), // 處理費百分比
-  fixedFee: safeFloat.min(0).optional(), // 固定處理費
+  processingFee: z.preprocess(
+    (arg) => (arg === undefined || arg === null ? undefined : (typeof arg === 'string' ? parseFloat(arg) : arg)),
+    z.number().min(0, "處理費不能為負數").optional().refine((n) => n === undefined || !isNaN(n), { message: "處理費必須是有效的數字或為空" })
+  ), // 處理費百分比
+  fixedFee: z.preprocess(
+    (arg) => (arg === undefined || arg === null ? undefined : (typeof arg === 'string' ? parseFloat(arg) : arg)),
+    z.number().min(0, "固定處理費不能為負數").optional().refine((n) => n === undefined || !isNaN(n), { message: "固定處理費必須是有效的數字或為空" })
+  ), // 固定處理費
   notes: z.string().optional(),
   position: safeInteger.optional(), // 顯示順序
   credentials: z.record(z.any()).optional() // 針對不同支付方式的配置
@@ -138,4 +146,20 @@ export const ReceiptSettingsSchema = z.object({
   includeTax: z.boolean().default(true), // 是否含稅
   taxRate: safeFloat.optional().default(0.05), // 稅率
   autoSend: z.boolean().default(false) // 是否自動發送電子收據
+});
+
+/**
+ * 支付交易 Schema
+ */
+export const PaymentTransactionSchema = z.object({
+  // ... other fields ...
+  processingFee: z.preprocess(
+    (arg) => (arg === undefined || arg === null ? undefined : (typeof arg === 'string' ? parseFloat(arg) : arg)),
+    z.number().min(0, "處理費不能為負數").optional().refine((n) => n === undefined || !isNaN(n), { message: "處理費必須是有效的數字或為空" })
+  ), // 處理費百分比
+  fixedFee: z.preprocess(
+    (arg) => (arg === undefined || arg === null ? undefined : (typeof arg === 'string' ? parseFloat(arg) : arg)),
+    z.number().min(0, "固定處理費不能為負數").optional().refine((n) => n === undefined || !isNaN(n), { message: "固定處理費必須是有效的數字或為空" })
+  ), // 固定處理費
+  // ... other fields ...
 }); 

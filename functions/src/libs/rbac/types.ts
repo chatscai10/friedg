@@ -4,25 +4,25 @@
  */
 
 // 操作類型
-export type ActionType = 
-  'create' | 'read' | 'update' | 'delete' | 
-  'approve' | 'reject' | 'cancel' | 'complete' | 
+export type ActionType =
+  'create' | 'read' | 'update' | 'delete' |
+  'approve' | 'reject' | 'cancel' | 'complete' |
   'print' | 'export' | 'discount' | 'refund';
 
 // 資源類型
-export type ResourceType = 
-  'tenants' | 'stores' | 'users' | 'employees' | 
-  'menuItems' | 'menuCategories' | 'menuOptions' | 
-  'orders' | 'orderItems' | 'inventoryItems' | 
-  'inventoryCounts' | 'inventoryOrders' | 'schedules' | 
+export type ResourceType =
+  'tenants' | 'stores' | 'users' | 'employees' |
+  'menuItems' | 'menuCategories' | 'menuOptions' |
+  'orders' | 'orderItems' | 'inventoryItems' |
+  'inventoryCounts' | 'inventoryOrders' | 'schedules' |
   'attendances' | 'leaves' | 'payrolls' | 'bonusTasks' | 'bonusRecords' |
   'ratings' | 'announcements' | 'knowledgeBase' | 'votes' | 'auditLogs' |
-  'systemConfigs' | 'adSlots' | 'adContents' | 'referralCodes' | 'referralUsages' | 
-  'pickupNumbers';
+  'systemConfigs' | 'adSlots' | 'adContents' | 'referralCodes' | 'referralUsages' |
+  'pickupNumbers' | 'equity' | 'financial';
 
 // 角色類型
-export type RoleType = 
-  'super_admin' | 'tenant_admin' | 'store_manager' | 
+export type RoleType =
+  'super_admin' | 'tenant_admin' | 'store_manager' |
   'shift_leader' | 'senior_staff' | 'staff' | 'trainee' | 'customer';
 
 // 角色等級
@@ -133,4 +133,4 @@ export interface CallableContext {
 // HTTP Request 類型
 export interface Request {
   [key: string]: any;
-} 
+}

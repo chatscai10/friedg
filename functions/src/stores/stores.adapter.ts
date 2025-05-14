@@ -1,17 +1,17 @@
 /**
  * Store API 適配層
- * 
+ *
  * 此文件實現內部模型與API規範模型之間的轉換邏輯
  * 用於解決API規範與實際實現之間的結構和欄位命名差異
  */
 
-import { 
-  Store, 
-  CreateStoreRequest, 
-  UpdateStoreRequest, 
-  UpdateStoreStatusRequest, 
-  GPSFenceRequest, 
-  PrinterConfigRequest 
+import {
+  Store,
+  CreateStoreRequest,
+  UpdateStoreRequest,
+  UpdateStoreStatusRequest,
+  GPSFenceRequest,
+  PrinterConfigRequest
 } from './stores.types';
 
 /**
@@ -155,11 +155,11 @@ export function mapInternalStatusToApi(isActive: boolean, isDeleted?: boolean): 
   if (isDeleted) {
     return 'permanently_closed';
   }
-  
+
   if (isActive) {
     return 'active';
   }
-  
+
   return 'inactive';
 }
 
@@ -168,22 +168,18 @@ export function mapInternalStatusToApi(isActive: boolean, isDeleted?: boolean): 
  */
 export function fromApiCreateRequest(apiRequest: ApiCreateStoreRequest): CreateStoreRequest {
   const statusProps = mapApiStatusToInternal(apiRequest.status);
-  
+
   return {
-    storeName: apiRequest.name,
+    name: apiRequest.name,
     storeCode: apiRequest.storeCode,
     tenantId: apiRequest.tenantId,
-    isActive: statusProps.isActive,
-    address: apiRequest.address?.street || '',
-    // 聯絡信息平鋪
-    email: apiRequest.contactInfo?.email || '',
-    phoneNumber: apiRequest.contactInfo?.phone || '',
-    contactPerson: apiRequest.contactInfo?.contactPerson || '',
-    // 其他欄位可根據需要處理...
-    geolocation: apiRequest.location ? {
-      latitude: apiRequest.location.latitude,
-      longitude: apiRequest.location.longitude,
-      address: apiRequest.address?.street
+    status: apiRequest.status,
+    address: apiRequest.address,
+    location: apiRequest.location,
+    contactInfo: apiRequest.contactInfo ? {
+      email: apiRequest.contactInfo.email,
+      phone: apiRequest.contactInfo.phone,
+      managerId: apiRequest.contactInfo.contactPerson
     } : undefined,
     settings: {}
   };
@@ -194,40 +190,41 @@ export function fromApiCreateRequest(apiRequest: ApiCreateStoreRequest): CreateS
  */
 export function fromApiUpdateRequest(apiRequest: ApiUpdateStoreRequest): UpdateStoreRequest {
   const result: UpdateStoreRequest = {};
-  
+
   if (apiRequest.name !== undefined) {
-    result.storeName = apiRequest.name;
+    result.name = apiRequest.name;
   }
-  
+
   if (apiRequest.storeCode !== undefined) {
     result.storeCode = apiRequest.storeCode;
   }
-  
+
   if (apiRequest.status !== undefined) {
-    const statusProps = mapApiStatusToInternal(apiRequest.status);
-    result.isActive = statusProps.isActive;
+    result.status = apiRequest.status;
   }
-  
+
   if (apiRequest.address !== undefined) {
-    result.address = apiRequest.address.street || '';
+    result.address = apiRequest.address;
   }
-  
+
   if (apiRequest.contactInfo !== undefined) {
+    result.contactInfo = {};
+
     if (apiRequest.contactInfo.email !== undefined) {
-      result.email = apiRequest.contactInfo.email;
+      result.contactInfo.email = apiRequest.contactInfo.email;
     }
-    
+
     if (apiRequest.contactInfo.phone !== undefined) {
-      result.phoneNumber = apiRequest.contactInfo.phone;
+      result.contactInfo.phone = apiRequest.contactInfo.phone;
     }
-    
+
     if (apiRequest.contactInfo.contactPerson !== undefined) {
-      result.contactPerson = apiRequest.contactInfo.contactPerson;
+      result.contactInfo.managerId = apiRequest.contactInfo.contactPerson;
     }
   }
-  
+
   // 其他欄位可根據需要轉換...
-  
+
   return result;
 }
 
@@ -247,22 +244,17 @@ export function fromApiStatusUpdateRequest(apiRequest: ApiUpdateStoreStatusReque
 export function toApiStore(internalStore: Store): ApiStore {
   return {
     id: internalStore.storeId,
-    name: internalStore.storeName,
+    name: internalStore.name,
     storeCode: internalStore.storeCode,
-    status: mapInternalStatusToApi(internalStore.isActive, internalStore.isDeleted),
+    status: internalStore.status || 'active',
     tenantId: internalStore.tenantId,
-    address: {
-      street: internalStore.address
-    },
-    location: internalStore.geolocation ? {
-      latitude: internalStore.geolocation.latitude,
-      longitude: internalStore.geolocation.longitude
+    address: internalStore.address,
+    location: internalStore.location,
+    contactInfo: internalStore.contactInfo ? {
+      email: internalStore.contactInfo.email,
+      phone: internalStore.contactInfo.phone,
+      contactPerson: internalStore.contactInfo.managerId
     } : undefined,
-    contactInfo: {
-      email: internalStore.email,
-      phone: internalStore.phoneNumber,
-      contactPerson: internalStore.contactPerson
-    },
     gpsFence: internalStore.gpsFence ? {
       enabled: internalStore.gpsFence.enabled,
       radius: internalStore.gpsFence.radius,
@@ -271,18 +263,13 @@ export function toApiStore(internalStore: Store): ApiStore {
         longitude: internalStore.gpsFence.center.longitude
       }
     } : undefined,
-    printerSettings: internalStore.printerConfig ? {
-      enabled: internalStore.printerConfig.receiptPrinter?.enabled || false,
-      // 可根據需要轉換其他欄位
-    } : undefined,
-    createdAt: internalStore.createdAt instanceof Date ? 
-      internalStore.createdAt.toISOString() : 
-      typeof internalStore.createdAt === 'string' ? 
-        internalStore.createdAt : undefined,
-    updatedAt: internalStore.updatedAt instanceof Date ? 
-      internalStore.updatedAt.toISOString() : 
-      typeof internalStore.updatedAt === 'string' ? 
-        internalStore.updatedAt : undefined
+    printerSettings: internalStore.printerSettings,
+    createdAt: typeof internalStore.createdAt === 'string' ?
+      internalStore.createdAt :
+      undefined,
+    updatedAt: typeof internalStore.updatedAt === 'string' ?
+      internalStore.updatedAt :
+      undefined
   };
 }
 
@@ -291,4 +278,4 @@ export function toApiStore(internalStore: Store): ApiStore {
  */
 export function toApiStores(internalStores: Store[]): ApiStore[] {
   return internalStores.map(toApiStore);
-} 
+}

@@ -1,38 +1,36 @@
 import * as functions from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
-import * as express from 'express';
-import * as cors from 'cors';
+import express from 'express'; // Corrected import
+import cors from 'cors';
 import { authenticateRequest } from '../middleware/auth.middleware'; // Assuming this path is correct
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'; // Added FieldValue
 import * as admin from "firebase-admin"; // Required for Firestore
 import axios from "axios"; // For calling LINE Pay API
 import * as crypto from "crypto"; // For generating signature
+import { UserInfo } from '../libs/rbac/types'; // Added UserInfo import
 
-// Helper function to get LINE Pay config from environment variables
-// (Copied from later in the file for use in verifyLineSignature, ensure it exists or adapt)
-function getLinePayConfig() {
-  const channelId = process.env.LINE_PAY_CHANNEL_ID;
-  const channelSecret = process.env.LINE_PAY_CHANNEL_SECRET;
-  const apiUrl = process.env.LINE_PAY_API_URL; // e.g., https://sandbox-api-pay.line.me
-  const customerPwaBaseUrl = process.env.CUSTOMER_PWA_BASE_URL; // For redirect URLs
-  const cloudFunctionBaseUrl = process.env.CLOUD_FUNCTION_BASE_URL; // For callback URLs
+const paymentsApiV2 = express(); // Define paymentsApiV2
 
-  if (!channelId || !channelSecret || !apiUrl || !customerPwaBaseUrl || !cloudFunctionBaseUrl) {
-    logger.error("LINE Pay configuration environment variables are not fully set.");
-    return null;
-  }
-  return { channelId, channelSecret, apiUrl, customerPwaBaseUrl, cloudFunctionBaseUrl };
+// Apply global middleware to paymentsApiV2 if needed
+paymentsApiV2.use(cors({ origin: true }));
+paymentsApiV2.use(express.json());
+
+// Ensure Firebase Admin SDK is initialized (idempotent)
+if (admin.apps.length === 0) {
+  admin.initializeApp();
 }
+const db = getFirestore();
 
-const appRequest = express();
-appRequest.use(cors({ origin: true }));
-appRequest.use(express.json());
 
-// Endpoint for requesting a LINE Pay payment (customer-initiated)
-appRequest.post('/', authenticateRequest, async (req, res) => {
+// --- Endpoint for requesting a LINE Pay payment (customer-initiated) ---
+// const appRequest = express(); // No longer needed, use paymentsApiV2
+// appRequest.use(cors({ origin: true })); // Applied globally or to specific routes on paymentsApiV2
+// appRequest.use(express.json()); // Applied globally or to specific routes on paymentsApiV2
+
+paymentsApiV2.post('/request_v2_legacy', authenticateRequest, async (req, res) => { // Renamed path for clarity
     const { orderId, amount } = req.body;
     const userId = (req as any).user?.uid;
-    logger.info('LINE Pay payment request received', { userId, orderId, amount });
+    logger.info('LINE Pay payment request received (v2 legacy)', { userId, orderId, amount });
 
     // In a real scenario, you would:
     // 1. Validate the orderId and amount against your database.
@@ -48,24 +46,29 @@ appRequest.post('/', authenticateRequest, async (req, res) => {
     });
 });
 
-export const requestLinePayPaymentV2 = functions.onRequest(appRequest);
+// export const requestLinePayPaymentV2 = functions.onRequest(appRequest); // Will be part of the main export
 
 // --- Endpoint for LINE Pay to confirm a payment (server-to-server callback) ---
-const appConfirm = express();
-appConfirm.use(cors({ origin: true }));
+// const appConfirm = express(); // No longer needed, use paymentsApiV2
+// appConfirm.use(cors({ origin: true })); // Applied globally or to specific routes on paymentsApiV2
 
 // Middleware to capture raw body for signature verification
 // This MUST come BEFORE express.json() if express.json() is used for the same routes.
-appConfirm.use(express.raw({
+// This specific middleware should be applied to the specific route that needs it.
+const rawBodyCapture = express.raw({
     type: 'application/json',
-    verify: (req: any, res, buf, encoding) => {
+    verify: (req: any, res, buf, encoding?: string) => {
         if (buf && buf.length) {
-            req.rawBody = buf.toString(encoding || 'utf8');
+            let finalEncoding: BufferEncoding = 'utf8'; // Default to utf8
+            if (encoding && Buffer.isEncoding(encoding)) {
+                finalEncoding = encoding as BufferEncoding; // If encoding is valid, use it
+            }
+            req.rawBody = buf.toString(finalEncoding);
         } else {
             req.rawBody = ""; // Handle empty body case
         }
     }
-}));
+});
 
 // Middleware for LINE Pay Signature Verification
 const verifyLineSignature = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -76,7 +79,7 @@ const verifyLineSignature = (req: express.Request, res: express.Response, next: 
     }
     const channelSecret = linePayConfig.channelSecret;
     const signatureHeader = req.headers['x-line-signature'] as string;
-    const requestBody = (req as any).rawBody; // Use the raw body captured by express.raw()
+    const requestBody = (req as any).rawBody;
 
     if (!signatureHeader) {
         logger.warn("LINE Pay callback missing X-LINE-Signature header.");
@@ -85,8 +88,6 @@ const verifyLineSignature = (req: express.Request, res: express.Response, next: 
 
     if (typeof requestBody !== 'string' || requestBody.length === 0) {
         logger.warn("LINE Pay callback raw body is empty or not a string for signature verification.");
-        // LINE Pay should always send a body. If it's empty, the signature won't match.
-        // Or, if an error occurred in express.raw(), req.rawBody might not be set.
         return res.status(400).send("Invalid request body for signature calculation.");
     }
 
@@ -98,7 +99,8 @@ const verifyLineSignature = (req: express.Request, res: express.Response, next: 
 
         if (signatureHeader === generatedSignature) {
             logger.info("LINE Pay callback signature verified successfully.");
-            next(); // Signature matches, proceed to the handler
+            next();
+            return; // Added return after next()
         } else {
             logger.error("LINE Pay callback signature mismatch.", { received: signatureHeader, generated: generatedSignature, requestBodyLength: requestBody.length });
             return res.status(401).send("Invalid signature.");
@@ -107,118 +109,94 @@ const verifyLineSignature = (req: express.Request, res: express.Response, next: 
         logger.error("Error during LINE Pay signature verification:", error);
         return res.status(500).send("Error verifying signature.");
     }
+    // Fallback in case logic is ever refactored and a path is missed, though current paths are covered.
+    // logger.warn("verifyLineSignature reached end without explicit action.");
+    // return res.status(500).send("Internal server error in signature verification flow."); 
 };
 
-// This must come AFTER express.raw and verifyLineSignature, so req.body is populated.
-appConfirm.use(express.json()); 
-
-// Ensure Firebase Admin SDK is initialized (idempotent)
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-const db = getFirestore();
+// appConfirm.use(express.json()); // Applied globally or to specific routes on paymentsApiV2
 
 // Apply signature verification middleware BEFORE the route handler
-appConfirm.post('/', verifyLineSignature, async (req, res) => {
+paymentsApiV2.post('/confirm_v2_legacy', rawBodyCapture, verifyLineSignature, async (req, res) => { // Renamed path, applied rawBodyCapture
     const callbackBody = req.body; // Now req.body is the parsed JSON object
-    logger.info('LINE Pay confirmation callback received (after signature check)', { body: callbackBody });
+    logger.info('LINE Pay confirmation callback received (v2 legacy, after signature check)', { body: callbackBody });
 
-    // Mocked transaction details from LINE Pay (these would be in callbackBody)
-    // const linePayTransactionId = callbackBody.transactionId; // Example: "202101011234567890"
-    // const linePayReturnCode = callbackBody.returnCode;     // Example: "0000" for success
-    // const linePayOrderId = callbackBody.orderId;           // This is the orderId *you* sent to LINE Pay
-
-    // ---- MOCKING a successful payment for conceptual implementation ----
-    // In a real scenario, you'd parse `callbackBody` from LINE Pay.
-    // For this mock, we will assume the request body contains enough info, or we hardcode.
-    // Let's assume `callbackBody` has `originalOrderId` (your system's order ID) and `status` ('SUCCESS' or 'FAILURE')
-    
-    const { originalOrderId, transactionId: linePayTransactionId, paymentStatus } = callbackBody as {
-        originalOrderId: string; // Your internal order ID you might have mapped or expect back
-        transactionId: string;   // LINE Pay's transaction ID
-        paymentStatus: 'SUCCESS' | 'FAILURE'; // Simplified status from LINE Pay
+    // ... (rest of the confirm logic from appConfirm.post('/', verifyLineSignature, async (req, res) => { ... }))
+    // This section needs to be copied here from the old appConfirm handler
+    const { originalOrderId, transactionId: linePayTransactionIdFromCallback, paymentStatus } = callbackBody as {
+        originalOrderId: string;
+        transactionId: string;
+        paymentStatus: 'SUCCESS' | 'FAILURE';
     };
 
-    if (!originalOrderId || !linePayTransactionId || !paymentStatus) {
-        logger.error('LINE Pay Confirm: Invalid callback body. Missing originalOrderId, transactionId, or paymentStatus.', callbackBody);
-        // Even if the payload is bad for our processing, LINE Pay might still expect a 200 OK.
-        // Respond with a generic success to LINE Pay to acknowledge receipt, but log error internally.
-        return res.status(200).json({
-            "returnCode": "0000", // Or a specific error code if LINE Pay defines one for "malformed callback data from merchant"
+    if (!originalOrderId || !linePayTransactionIdFromCallback || !paymentStatus) {
+        logger.error('LINE Pay Confirm (v2 legacy): Invalid callback body.', callbackBody);
+        res.status(200).json({
+            "returnCode": "0000",
             "returnMessage": "Callback received, but processing error on merchant side due to invalid payload."
         });
+        return; // Added return
     }
-
     try {
         const orderRef = db.collection('orders').doc(originalOrderId);
         const orderDoc = await orderRef.get();
-
         if (!orderDoc.exists) {
-            logger.error(`LINE Pay Confirm: Order ${originalOrderId} not found in Firestore.`);
-            // Again, acknowledge to LINE Pay, but log the error.
-            return res.status(200).json({
+            logger.error(`LINE Pay Confirm (v2 legacy): Order ${originalOrderId} not found.`);
+            res.status(200).json({
                 "returnCode": "0000",
                 "returnMessage": "Callback acknowledged. Order not found on merchant side."
             });
+            return; // Added return
         }
-
         const orderData = orderDoc.data();
-        let newStatus = orderData?.status; // Keep current status if no change
+        let newStatus = orderData?.status;
         let updatePayload: any = {
             updatedAt: FieldValue.serverTimestamp(),
             linePayTransactionInfo: {
-                transactionId: linePayTransactionId,
+                transactionId: linePayTransactionIdFromCallback,
                 confirmedAt: FieldValue.serverTimestamp(),
-                rawCallback: callbackBody // Store the raw callback for auditing
+                rawCallback: callbackBody
             }
         };
-
         if (paymentStatus === 'SUCCESS') {
-            newStatus = 'paid'; // Or 'payment_confirmed', 'processing_payment', etc.
+            newStatus = 'paid';
             updatePayload.status = newStatus;
             updatePayload.paymentDetails = {
                 method: 'linepay',
-                transactionId: linePayTransactionId,
+                transactionId: linePayTransactionIdFromCallback,
                 status: 'paid',
                 paidAt: FieldValue.serverTimestamp()
             };
-            logger.info(`LINE Pay Confirm: Payment for order ${originalOrderId} successful. Status updated to ${newStatus}.`);
-            // TODO: (Optional) Trigger notifications to customer/admin here
-
-        } else { // paymentStatus === 'FAILURE' or other non-success codes
+            logger.info(`LINE Pay Confirm (v2 legacy): Payment for order ${originalOrderId} successful. Status updated to ${newStatus}.`);
+        } else {
             newStatus = 'payment_failed';
             updatePayload.status = newStatus;
             updatePayload.paymentDetails = {
                 method: 'linepay',
-                transactionId: linePayTransactionId,
+                transactionId: linePayTransactionIdFromCallback,
                 status: 'failed',
                 failedAt: FieldValue.serverTimestamp(),
-                failureReason: callbackBody.returnMessage || 'Unknown failure reason from LINE Pay' // if available
+                failureReason: (callbackBody as any).returnMessage || 'Unknown failure reason from LINE Pay'
             };
-            logger.warn(`LINE Pay Confirm: Payment for order ${originalOrderId} failed or was not successful. Status updated to ${newStatus}.`);
+            logger.warn(`LINE Pay Confirm (v2 legacy): Payment for order ${originalOrderId} failed. Status updated to ${newStatus}.`);
         }
-
         await orderRef.update(updatePayload);
-
-        // Respond to LINE Pay with the required success format
         res.status(200).json({
             "returnCode": "0000",
             "returnMessage": "Success"
         });
-
+        return; // Added return
     } catch (error) {
-        logger.error(`LINE Pay Confirm: Error processing callback for order ${originalOrderId}:`, error);
-        // In case of internal server error, still try to send a success to LINE Pay if possible,
-        // as they might retry if they don't get a 200-level response.
-        // The exact behavior depends on LINE Pay's callback retry policy.
+        logger.error(`LINE Pay Confirm (v2 legacy): Error processing callback for order ${originalOrderId}:`, error);
         res.status(200).json({
-            "returnCode": "0000", // Consider if a different code is appropriate for internal errors
+            "returnCode": "0000",
             "returnMessage": "Internal server error during callback processing."
         });
+        return; // Added return
     }
 });
 
-export const confirmLinePayPaymentV2 = functions.onRequest(appConfirm);
+// export const confirmLinePayPaymentV2 = functions.onRequest(appConfirm); // Will be part of the main export
 
 // Interface for the request body to requestLinePayPaymentV2
 interface LinePayRequestBody {
@@ -230,7 +208,14 @@ interface LinePayRequestBody {
 // ... authorizeRoles might be needed if not all authenticated users can request payment ...
 
 paymentsApiV2.post("/line/request", authenticateRequest, async (req, res) => {
-  const { uid } = req.user;
+  const userInfo = req.user as UserInfo | undefined; // Explicitly type req.user
+
+  if (!userInfo || !userInfo.uid) { // Guard against undefined user or uid
+    logger.error("User info or UID missing in /line/request after authentication", { user: req.user });
+    return res.status(401).json({ success: false, message: "Authentication failed or user UID not found." });
+  }
+  const { uid } = userInfo; // Now uid is safely extracted
+
   const { originalSystemOrderId, amount, items, productName } = req.body as {
     originalSystemOrderId: string;
     amount: number;
@@ -633,19 +618,23 @@ paymentsApiV2.get("/line/user_redirect_after_payment", (req, res) => {
 });
 
 
-export { paymentsApiV2 };
+// At the end of the file, instead of `export { paymentsApiV2 };`
+// We will export the main express app as a single Cloud Function
+// export { paymentsApiV2 }; // This was causing an error because paymentsApiV2 was not defined earlier.
+// Now it is, but we should export it as a cloud function.
+
+export const linePayGateway = functions.onRequest(paymentsApiV2);
 
 // --- Environment Variable Helper ---
 function getLinePayConfig() {
-  const config = functions.config().linepay; // Preferred method
-  const channelId = config?.channel_id || process.env.LINE_PAY_CHANNEL_ID;
-  const channelSecret = config?.channel_secret_key || process.env.LINE_PAY_CHANNEL_SECRET_KEY;
-  const apiUrl = config?.api_url || process.env.LINE_PAY_API_URL || "https://sandbox-api-pay.line.me"; // Default to sandbox
-  const cloudFunctionBaseUrl = config?.cloud_function_base_url || process.env.CLOUD_FUNCTION_BASE_URL;
-  const customerPwaBaseUrl = config?.customer_pwa_base_url || process.env.CUSTOMER_PWA_BASE_URL;
+  const channelId = process.env.LINE_PAY_CHANNEL_ID;
+  const channelSecret = process.env.LINE_PAY_CHANNEL_SECRET;
+  const apiUrl = process.env.LINE_PAY_API_URL; // e.g., https://sandbox-api-pay.line.me
+  const cloudFunctionBaseUrl = process.env.CLOUD_FUNCTION_BASE_URL;
+  const customerPwaBaseUrl = process.env.CUSTOMER_PWA_BASE_URL;
 
   if (!channelId || !channelSecret || !apiUrl || !cloudFunctionBaseUrl || !customerPwaBaseUrl) {
-    logger.error("LINE Pay configuration is missing from environment variables or Firebase Functions config.", {
+    logger.error("LINE Pay configuration is missing from environment variables.", {
       channelId_exists: !!channelId,
       channelSecret_exists: !!channelSecret,
       apiUrl_exists: !!apiUrl,

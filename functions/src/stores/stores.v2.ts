@@ -1,9 +1,12 @@
-import { https, setGlobalOptions, HttpsOptions } from "firebase-functions/v2/https";
-import * as express from 'express';
+import { onRequest, HttpsOptions } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+import express from 'express'; // Changed
+import { Request, Response, NextFunction } from 'express';
+// const express = expressModule; // Removed
 import * as admin from "firebase-admin/app"; // Import admin from firebase-admin/app for initializeApp
 import { getFirestore, Firestore } from "firebase-admin/firestore";
 import * as Yup from 'yup'; // Import Yup
-import { authenticateRequest } from '../../middleware/auth.middleware'; // Import the actual auth middleware
+import { authenticateRequest } from '../middleware/auth.middleware'; // Import the actual auth middleware
 // import { getAuth } from "firebase-admin/auth"; // Keep for actual auth
 
 // Ensure Firebase Admin SDK is initialized only once
@@ -42,7 +45,7 @@ const globalOpts: HttpsOptions = {
     // minInstances: 0,
     // cors: true, // Enable CORS if functions are called directly, not through Hosting rewrites that handle CORS
 };
-// setGlobalOptions(globalOpts);
+setGlobalOptions({ region: "asia-east1" });
 
 // Placeholder Middleware (as per previous design) - THIS WILL BE REMOVED OR REPLACED
 // const authenticateRequest = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -50,7 +53,7 @@ const globalOpts: HttpsOptions = {
 //    next();
 // };
 
-const authorizeTenant = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const authorizeTenant = async (req: Request, res: Response, next: NextFunction) => {
     console.log("authorizeTenant middleware called (v2 placeholder) - Path:", req.path);
     // For createStoreV2: User must have permission to create a store (e.g. 'admin' role for their tenantId).
     // For getStoreV2: User must have permission to view the store (e.g. belongs to the same tenantId or is a superadmin).
@@ -62,12 +65,12 @@ const authorizeTenant = async (req: express.Request, res: express.Response, next
     next();
 };
 
-export const liststoresv2 = https.onRequest(async (request, response) => {
-    const app = express();
-    app.use(authenticateRequest); // Apply REAL authentication middleware
-    app.use(authorizeTenant);   
+export const liststoresv2 = onRequest(async (request, response) => {
+    const expressApp = express();
+    expressApp.use(authenticateRequest); // Apply REAL authentication middleware
+    expressApp.use(authorizeTenant);
 
-    app.get('*', async (req, res) => { 
+    expressApp.get('*', async (req, res) => {
         console.log("liststoresv2 app.get('*') handler reached. Original URL:", request.originalUrl);
         // Check if user is populated by middleware
         const authenticatedUser = (req as any).user;
@@ -104,22 +107,22 @@ export const liststoresv2 = https.onRequest(async (request, response) => {
     });
 
     // Forward the main function request/response to the Express app
-    app(request, response);
+    expressApp(request, response);
 });
 
 // Placeholder for createStoreV2 (as per your design doc)
-export const createstorev2 = https.onRequest(async (request, response) => {
+export const createstorev2 = onRequest(async (request, response) => {
     if (request.method !== 'POST') {
         response.status(405).send('Method Not Allowed');
         return;
     }
-    const app = express();
-    app.use(express.json()); 
-    app.use(authenticateRequest); // Apply REAL authentication middleware
+    const expressApp = express();
+    expressApp.use(express.json());
+    expressApp.use(authenticateRequest); // Apply REAL authentication middleware
     // authorizeTenant might be tricky here if tenantId is part of the body and not from user context yet for creation
     // Let's assume tenantId comes from authenticated user or a superadmin sets it.
 
-    app.post('*', async (req, res) => {
+    expressApp.post('*', async (req, res) => {
         console.log("createstorev2 app.post('*') handler reached.");
         try {
             // const authenticatedUser = (req as any).user;
@@ -133,7 +136,7 @@ export const createstorev2 = https.onRequest(async (request, response) => {
             const storeData = req.body;
             // Validate input
             await storeSchema.validate(storeData, { abortEarly: false });
-            
+
             // const tenantId = authenticatedUser.tenant_id; // Use tenantId from authenticated user
             const dataToSave = {
                 ...storeData,
@@ -152,15 +155,15 @@ export const createstorev2 = https.onRequest(async (request, response) => {
             res.status(500).json({ error: "Internal server error while creating store.", details: (error as Error).message });
         }
     });
-    app(request,response);
+    expressApp(request,response);
 });
 
-export const getstorev2 = https.onRequest(async (request, response) => {
-    const app = express();
-    app.use(authenticateRequest); // Apply REAL authentication middleware
-    app.use(authorizeTenant);   
+export const getstorev2 = onRequest(async (request, response) => {
+    const expressApp = express();
+    expressApp.use(authenticateRequest); // Apply REAL authentication middleware
+    expressApp.use(authorizeTenant);
 
-    app.get('/:storeId', async (req, res) => { // Changed to use router param
+    expressApp.get('/:storeId', async (req, res) => { // Changed to use router param
         console.log("getstorev2 app.get handler. Params:", req.params);
         try {
             const { storeId } = req.params;
@@ -173,23 +176,23 @@ export const getstorev2 = https.onRequest(async (request, response) => {
             if (!storeDoc.exists) {
                 return res.status(404).json({ error: "Store not found." });
             }
-            
+
             res.status(200).json({ data: { id: storeDoc.id, ...storeDoc.data() } });
         } catch (error) {
             console.error("Error in getstorev2:", error);
             res.status(500).json({ error: "Internal server error while fetching store.", details: (error as Error).message });
         }
     });
-    app(request,response);
+    expressApp(request,response);
 });
 
-export const updatestorev2 = https.onRequest(async (request, response) => {
-    const app = express();
-    app.use(express.json());
-    app.use(authenticateRequest); // Apply REAL authentication middleware
-    app.use(authorizeTenant);   
+export const updatestorev2 = onRequest(async (request, response) => {
+    const expressApp = express();
+    expressApp.use(express.json());
+    expressApp.use(authenticateRequest); // Apply REAL authentication middleware
+    expressApp.use(authorizeTenant);
 
-    app.put('/:storeId', async (req, res) => { // Changed to use router param
+    expressApp.put('/:storeId', async (req, res) => { // Changed to use router param
         console.log("updatestorev2 app.put handler. Params:", req.params, "Body:", req.body);
         try {
             const { storeId } = req.params;
@@ -206,7 +209,7 @@ export const updatestorev2 = https.onRequest(async (request, response) => {
             if (!storeDoc.exists) {
                 return res.status(404).json({ error: "Store not found to update." });
             }
-            
+
             // Tenant check would happen in authorizeTenant middleware
             // const authenticatedUser = (req as any).user;
             // if (storeDoc.data()?.tenantId !== authenticatedUser.tenant_id && !authenticatedUser.roles?.includes('superadmin')) {
@@ -217,7 +220,7 @@ export const updatestorev2 = https.onRequest(async (request, response) => {
                 ...storeDataToUpdate,
                 updatedAt: new Date().toISOString(),
             };
-            
+
             await storeRef.update(updatePayload);
             const updatedDoc = await storeRef.get();
 
@@ -230,15 +233,15 @@ export const updatestorev2 = https.onRequest(async (request, response) => {
             res.status(500).json({ error: "Internal server error while updating store.", details: (error as Error).message });
         }
     });
-    app(request,response);
+    expressApp(request,response);
 });
 
-export const deletestorev2 = https.onRequest(async (request, response) => {
-    const app = express();
-    app.use(authenticateRequest); // Apply REAL authentication middleware
-    app.use(authorizeTenant);   
+export const deletestorev2 = onRequest(async (request, response) => {
+    const expressApp = express();
+    expressApp.use(authenticateRequest); // Apply REAL authentication middleware
+    expressApp.use(authorizeTenant);
 
-    app.delete('/:storeId', async (req, res) => { // Changed to use router param
+    expressApp.delete('/:storeId', async (req, res) => { // Changed to use router param
         console.log("deletestorev2 app.delete handler. Params:", req.params);
         try {
             const { storeId } = req.params;
@@ -266,10 +269,10 @@ export const deletestorev2 = https.onRequest(async (request, response) => {
             res.status(500).json({ error: "Internal server error while deleting store.", details: (error as Error).message });
         }
     });
-    app(request,response);
+    expressApp(request,response);
 });
 
-// ... (Other store functions like updateStoreV2, deleteStoreV2 would follow a similar pattern) 
+// ... (Other store functions like updateStoreV2, deleteStoreV2 would follow a similar pattern)
 
 // Express app for stores (assuming it's defined elsewhere or below)
 // export const storesApiV2 = onRequest(globalOpts, storesApp); // Example if it were Gen 2
@@ -277,4 +280,4 @@ export const deletestorev2 = https.onRequest(async (request, response) => {
 // exports.storesApiV2 = functions.https.onRequest(storesApp);
 
 // IMPORTANT: This is a simplified representation.
-// The actual export and app definition needs to be checked in index.ts and this file. 
+// The actual export and app definition needs to be checked in index.ts and this file.

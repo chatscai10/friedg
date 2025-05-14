@@ -3,34 +3,43 @@
     "module": "commonjs",
     "target": "es2020",
     "outDir": "lib",
-    "rootDir": "./",
+    "rootDirs": [
+      "./src",
+      "./test"
+    ],
     "sourceMap": true,
-    "strict": false,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitReturns": false,
+    "noImplicitReturns": true,
     "noUnusedLocals": false,
+    "allowSyntheticDefaultImports": true,
     "allowJs": true,
     "noImplicitAny": false,
     "ignoreDeprecations": "5.0",
     "noEmitOnError": false,
-    "baseUrl": ".",
+    "baseUrl": "./",
     "paths": {
-      "@src/*": ["src/*"]
-    }
+      "@/*": ["src/*"]
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ]
   },
   "compileOnSave": true,
   "include": [
-    "src/**/*.ts",
-    "src/**/*.js",
-    "test/**/*.ts"
+    "src",
+    "test"
   ],
   "exclude": [
     "node_modules",
-    "src/**/__tests__/**",
+    "lib",
+    "test/**/*",
     "src/**/*.test.ts",
-    "src/**/*.spec.ts",
-    "src/**/*.tests.ts"
+    "src/admin/userManagement.v2.test.ts",
+    "src/auth/line.handlers.test.ts",
+    "src/auth/line.service.test.ts"
   ]
 }

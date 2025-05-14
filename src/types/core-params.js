@@ -6,10 +6,7 @@
  * 所有使用這些參數的代碼都應該引用此文件中的定義
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_POSITIONS = void 0;
-exports.convertArrayToBusinessHours = convertArrayToBusinessHours;
-exports.convertBusinessHoursToArray = convertBusinessHoursToArray;
-exports.createScheduleMonth = createScheduleMonth;
+exports.createScheduleMonth = exports.convertBusinessHoursToArray = exports.convertArrayToBusinessHours = exports.DEFAULT_POSITIONS = void 0;
 /**
  * 標準職位列表
  */
@@ -45,10 +42,9 @@ function convertArrayToBusinessHours(dailyHoursArray) {
         sunday: []
     };
     dailyHoursArray.forEach(day => {
-        var _a;
         const dayKey = daysMap[day.day];
         if (day.isOpen && day.openTime && day.closeTime) {
-            (_a = result[dayKey]) === null || _a === void 0 ? void 0 : _a.push({
+            result[dayKey]?.push({
                 start: day.openTime,
                 end: day.closeTime
             });
@@ -56,6 +52,7 @@ function convertArrayToBusinessHours(dailyHoursArray) {
     });
     return result;
 }
+exports.convertArrayToBusinessHours = convertArrayToBusinessHours;
 /**
  * 工具函數：物件格式營業時間轉換為陣列格式
  * @param businessHours 物件格式的營業時間
@@ -99,6 +96,7 @@ function convertBusinessHoursToArray(businessHours) {
     });
     return result;
 }
+exports.convertBusinessHoursToArray = convertBusinessHoursToArray;
 /**
  * 工具函數：創建排班月份物件
  * @param year 年份
@@ -121,4 +119,5 @@ function createScheduleMonth(year, month) {
         endDate: formatDate(endDate)
     };
 }
+exports.createScheduleMonth = createScheduleMonth;
 //# sourceMappingURL=core-params.js.map

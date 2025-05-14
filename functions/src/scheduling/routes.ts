@@ -3,47 +3,52 @@
  */
 
 import { Router } from 'express';
-import { 
-  getSchedules, 
-  getScheduleById, 
-  createSchedule, 
-  updateSchedule, 
-  deleteSchedule, 
+import {
+  getSchedules,
+  getScheduleById,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
   publishSchedules,
   generateSchedules,
   confirmSchedule
 } from './handlers';
-import { 
-  withAuthentication, 
-  withTenantIsolation, 
-  withStoreIsolation, 
-  withRole 
-} from '../middleware/auth.middleware';
+import {
+  authenticateRequest,
+  enforceTenantIsolation,
+  enforceStoreIsolation,
+  authorizeRoles
+} from '../middleware/express-auth.middleware';
 
 const router = Router();
 
 // 獲取排班列表 - store_staff可查看，但僅自己的排班
-router.get('/', withAuthentication(withTenantIsolation(getSchedules)));
+router.get('/', authenticateRequest, enforceTenantIsolation, getSchedules);
 
 // 獲取單個排班詳情 - store_staff可查看自己的排班
-router.get('/:scheduleId', withAuthentication(withTenantIsolation(getScheduleById)));
+router.get('/:scheduleId', authenticateRequest, enforceTenantIsolation, getScheduleById);
 
 // 創建排班 - 僅店長以上權限可創建
-router.post('/', withAuthentication(withTenantIsolation(withStoreIsolation(withRole('store_manager', createSchedule)))));
+router.post('/', authenticateRequest, enforceTenantIsolation, enforceStoreIsolation,
+  authorizeRoles(['store_manager', 'tenant_admin', 'super_admin']), createSchedule);
 
 // 更新排班 - 僅店長以上權限可更新
-router.put('/:scheduleId', withAuthentication(withTenantIsolation(withStoreIsolation(withRole('store_manager', updateSchedule)))));
+router.put('/:scheduleId', authenticateRequest, enforceTenantIsolation, enforceStoreIsolation,
+  authorizeRoles(['store_manager', 'tenant_admin', 'super_admin']), updateSchedule);
 
 // 刪除排班 - 僅店長以上權限可刪除
-router.delete('/:scheduleId', withAuthentication(withTenantIsolation(withStoreIsolation(withRole('store_manager', deleteSchedule)))));
+router.delete('/:scheduleId', authenticateRequest, enforceTenantIsolation, enforceStoreIsolation,
+  authorizeRoles(['store_manager', 'tenant_admin', 'super_admin']), deleteSchedule);
 
 // 批量發布排班 - 僅店長以上權限可發布
-router.post('/publish', withAuthentication(withTenantIsolation(withStoreIsolation(withRole('store_manager', publishSchedules)))));
+router.post('/publish', authenticateRequest, enforceTenantIsolation, enforceStoreIsolation,
+  authorizeRoles(['store_manager', 'tenant_admin', 'super_admin']), publishSchedules);
 
 // 自動排班生成 - 僅店長以上權限可生成
-router.post('/generate', withAuthentication(withTenantIsolation(withStoreIsolation(withRole('store_manager', generateSchedules)))));
+router.post('/generate', authenticateRequest, enforceTenantIsolation, enforceStoreIsolation,
+  authorizeRoles(['store_manager', 'tenant_admin', 'super_admin']), generateSchedules);
 
 // 員工確認排班 - 一般員工可確認自己的排班
-router.post('/:scheduleId/confirm', withAuthentication(withTenantIsolation(confirmSchedule)));
+router.post('/:scheduleId/confirm', authenticateRequest, enforceTenantIsolation, confirmSchedule);
 
-export default router; 
+export default router;

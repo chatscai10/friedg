@@ -1,8 +1,9 @@
-import * as functions from 'firebase-functions/v2/https';
+import * as functionsV2 from 'firebase-functions/v2/https';
+import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions';
 import * as yup from "yup";
-import { authenticateRequest, authorizeRoles } from "../middleware/auth.middleware"; // Assuming middleware is in this path
+import { authenticateRequest, authorizeRoles } from "../middleware/auth.middleware";
 import express = require("express"); // Import express
 
 // Ensure Firebase Admin SDK is initialized
@@ -27,16 +28,16 @@ const setUserRoleSchema = yup.object({
     .required("Role is required."),
 });
 
-export const setUserRoleV2 = functions.onCall(
+export const setUserRoleV2 = functionsV2.onCall(
   { region: 'asia-east1', timeoutSeconds: 60, memory: '256MiB' }, // Standard options
-  async (request: functions.CallableRequest<SetUserRoleData>) => {
+  async (request: functionsV2.CallableRequest<SetUserRoleData>) => {
     logger.info('setUserRoleV2 called with data:', request.data);
     logger.info('Caller auth context:', request.auth);
 
     // Authentication Check: Ensure the user is authenticated.
     if (!request.auth) {
       logger.error('Authentication failed: User is not authenticated.');
-      throw new functions.HttpsError(
+      throw new functionsV2.HttpsError(
         'unauthenticated',
         'The function must be called while authenticated.'
       );
@@ -49,7 +50,7 @@ export const setUserRoleV2 = functions.onCall(
         'Authorization failed: User is not an admin.',
         { uid: request.auth.uid, role: request.auth.token.role }
       );
-      throw new functions.HttpsError(
+      throw new functionsV2.HttpsError(
         'permission-denied',
         'You must be an admin to set user roles.'
       );
@@ -60,7 +61,7 @@ export const setUserRoleV2 = functions.onCall(
       await setUserRoleSchema.validate(request.data);
     } catch (error: any) {
       logger.error('Validation error:', error.errors);
-      throw new functions.HttpsError(
+      throw new functionsV2.HttpsError(
         'invalid-argument',
         'Validation failed: ' + error.errors.join(', ')
       );
@@ -80,7 +81,7 @@ export const setUserRoleV2 = functions.onCall(
       };
     } catch (error) {
       logger.error(`Error setting custom claims for user ${userId}:`, error);
-      throw new functions.HttpsError(
+      throw new functionsV2.HttpsError(
         'internal',
         'An internal error occurred while setting user role.'
       );
@@ -93,7 +94,7 @@ const listUsersApp = express();
 
 // Middleware for authentication and authorization
 listUsersApp.use(authenticateRequest); // Ensures req.user is populated
-listUsersApp.use(authorizeRoles("admin")); // Ensures only admins can access
+listUsersApp.use(authorizeRoles(["super_admin", "tenant_admin"])); // Ensures only admins can access
 
 listUsersApp.get("/", async (req, res) => {
   const maxResults = parseInt(req.query.maxResults as string) || 100; // Max 1000 by Firebase
@@ -103,7 +104,7 @@ listUsersApp.get("/", async (req, res) => {
     const listUsersResult = await admin
       .auth()
       .listUsers(maxResults, pageToken);
-    
+
     const users = listUsersResult.users.map((userRecord) => {
       return {
         uid: userRecord.uid,
@@ -136,4 +137,7 @@ listUsersApp.get("/", async (req, res) => {
   }
 });
 
-export const listUsersApiV2 = functions.https.onRequest(listUsersApp); 
+export const listUsersApiV2 = functionsV2.onRequest(
+  { region: 'asia-east1', timeoutSeconds: 60, memory: '256MiB' },
+  listUsersApp
+);
