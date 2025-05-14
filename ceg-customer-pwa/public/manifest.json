@@ -1,0 +1,21 @@
+{
+  "short_name": "吃雞排",
+  "name": "吃雞排找不早 - 快速點餐",
+  "description": "隨時隨地輕鬆點購您最愛的雞排與美食！",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#FFD700",
+  "background_color": "#FFFFFF"
+} 

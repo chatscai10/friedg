@@ -1,0 +1,401 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 通用函數
+    
+    // 檢查用戶是否已認證
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 檢查用戶是否為特定角色
+    function hasRole(role) {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+    
+    // 檢查用戶是否為管理員
+    function isAdmin() {
+      return hasRole('admin') || hasRole('super_admin');
+    }
+    
+    // 檢查用戶是否為租戶管理員
+    function isTenantAdmin() {
+      return hasRole('tenant_admin');
+    }
+    
+    // 檢查用戶是否為店長
+    function isStoreManager() {
+      return hasRole('store_manager');
+    }
+    
+    // 檢查用戶是否為員工
+    function isEmployee() {
+      return hasRole('employee');
+    }
+    
+    // 檢查用戶是否為顧客
+    function isCustomer() {
+      return hasRole('customer');
+    }
+    
+    // 檢查用戶是否為文檔擁有者
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // 檢查用戶是否屬於特定租戶
+    function belongsToTenant(tenantId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId;
+    }
+    
+    // 檢查用戶是否屬於特定店鋪
+    function belongsToStore(storeId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeId == storeId;
+    }
+    
+    // 檢查用戶是否為租戶管理員或店長
+    function isTenantAdminOrStoreManager() {
+      return isTenantAdmin() || isStoreManager();
+    }
+    
+    // 檢查用戶是否為管理員或租戶管理員
+    function isAdminOrTenantAdmin() {
+      return isAdmin() || isTenantAdmin();
+    }
+    
+    // 檢查用戶是否為管理員、租戶管理員或店長
+    function isAdminOrTenantAdminOrStoreManager() {
+      return isAdmin() || isTenantAdmin() || isStoreManager();
+    }
+    
+    // 檢查用戶是否有權限訪問租戶數據
+    function canAccessTenant(tenantId) {
+      return isAdmin() || (isTenantAdmin() && belongsToTenant(tenantId));
+    }
+    
+    // 檢查用戶是否有權限訪問店鋪數據
+    function canAccessStore(storeId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let storeDoc = get(/databases/$(database)/documents/stores/$(storeId)).data;
+      
+      return isAdmin() || 
+             (isTenantAdmin() && belongsToTenant(storeDoc.tenantId)) || 
+             (isStoreManager() && userDoc.storeId == storeId) || 
+             (isEmployee() && userDoc.storeId == storeId);
+    }
+    
+    // 檢查數據是否未修改
+    function isUnchanged(field) {
+      return request.resource.data[field] == resource.data[field];
+    }
+    
+    // 檢查字段是否存在於請求中
+    function fieldExists(field) {
+      return field in request.resource.data;
+    }
+    
+    // 檢查請求是否只修改了特定字段
+    function onlyChangesFields(allowedFields) {
+      let changedFields = request.resource.data.diff(resource.data).affectedKeys();
+      return changedFields.hasOnly(allowedFields);
+    }
+    
+    // 檢查請求是否包含必要字段
+    function hasRequiredFields(requiredFields) {
+      return request.resource.data.keys().hasAll(requiredFields);
+    }
+    
+    // 檢查請求是否來自同一租戶
+    function isSameTenant() {
+      return request.resource.data.tenantId == resource.data.tenantId;
+    }
+    
+    // 檢查請求是否來自同一店鋪
+    function isSameStore() {
+      return request.resource.data.storeId == resource.data.storeId;
+    }
+    
+    // 用戶集合規則
+    match /users/{userId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isOwner(userId) || 
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                    (isStoreManager() && belongsToStore(resource.data.storeId))
+                  );
+      
+      // 創建規則
+      allow create: if isAdmin() || 
+                     (isAuthenticated() && isOwner(userId) && !('role' in request.resource.data));
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      // 管理員可以更新任何用戶
+                      isAdmin() ||
+                      // 租戶管理員可以更新自己租戶的用戶，但不能更改租戶ID
+                      (isTenantAdmin() && 
+                       belongsToTenant(resource.data.tenantId) && 
+                       isSameTenant() && 
+                       (resource.data.role != 'admin' && resource.data.role != 'super_admin' && resource.data.role != 'tenant_admin')) ||
+                      // 店長可以更新自己店鋪的員工，但不能更改租戶ID和店鋪ID
+                      (isStoreManager() && 
+                       belongsToStore(resource.data.storeId) && 
+                       isSameTenant() && 
+                       isSameStore() && 
+                       (resource.data.role == 'employee')) ||
+                      // 用戶可以更新自己的非敏感信息
+                      (isOwner(userId) && 
+                       onlyChangesFields(['displayName', 'photoURL', 'phoneNumber', 'address', 'preferences', 'updatedAt']) && 
+                       isUnchanged('role') && 
+                       isUnchanged('tenantId') && 
+                       isUnchanged('storeId'))
+                    );
+      
+      // 刪除規則
+      allow delete: if isAdmin() || (isTenantAdmin() && belongsToTenant(resource.data.tenantId));
+    }
+    
+    // 租戶集合規則
+    match /tenants/{tenantId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    belongsToTenant(tenantId)
+                  );
+      
+      // 創建規則
+      allow create: if isAdmin();
+      
+      // 更新規則
+      allow update: if isAdmin() || (isTenantAdmin() && belongsToTenant(tenantId));
+      
+      // 刪除規則
+      allow delete: if isAdmin();
+    }
+    
+    // 店鋪集合規則
+    match /stores/{storeId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                    belongsToStore(storeId)
+                  );
+      
+      // 創建規則
+      allow create: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(request.resource.data.tenantId))
+                    );
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId) && isSameTenant()) || 
+                      (isStoreManager() && belongsToStore(storeId) && isSameTenant())
+                    );
+      
+      // 刪除規則
+      allow delete: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId))
+                    );
+    }
+    
+    // 產品集合規則
+    match /products/{productId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                    (isStoreManager() && belongsToStore(resource.data.storeId)) || 
+                    (isEmployee() && belongsToStore(resource.data.storeId))
+                  );
+      
+      // 創建規則
+      allow create: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(request.resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(request.resource.data.storeId))
+                    );
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId) && isSameTenant()) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId) && isSameTenant() && isSameStore())
+                    );
+      
+      // 刪除規則
+      allow delete: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId))
+                    );
+    }
+    
+    // 訂單集合規則
+    match /orders/{orderId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                    (isStoreManager() && belongsToStore(resource.data.storeId)) || 
+                    (isEmployee() && belongsToStore(resource.data.storeId)) || 
+                    (isCustomer() && resource.data.customerId == request.auth.uid)
+                  );
+      
+      // 創建規則
+      allow create: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(request.resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(request.resource.data.storeId)) || 
+                      (isEmployee() && belongsToStore(request.resource.data.storeId)) || 
+                      (isCustomer() && request.resource.data.customerId == request.auth.uid)
+                    ) && 
+                    hasRequiredFields(['tenantId', 'storeId', 'items', 'totalAmount', 'status']);
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId) && isSameTenant()) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId) && isSameTenant() && isSameStore() && onlyChangesFields(['status', 'updatedAt', 'notes'])) || 
+                      (isEmployee() && belongsToStore(resource.data.storeId) && isSameTenant() && isSameStore() && onlyChangesFields(['status', 'updatedAt', 'notes'])) || 
+                      (isCustomer() && resource.data.customerId == request.auth.uid && resource.data.status == 'pending' && onlyChangesFields(['notes', 'updatedAt']))
+                    );
+      
+      // 刪除規則
+      allow delete: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId) && resource.data.status == 'pending')
+                    );
+    }
+    
+    // 庫存集合規則
+    match /inventory/{itemId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                    (isStoreManager() && belongsToStore(resource.data.storeId)) || 
+                    (isEmployee() && belongsToStore(resource.data.storeId))
+                  );
+      
+      // 創建規則
+      allow create: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(request.resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(request.resource.data.storeId))
+                    );
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId) && isSameTenant()) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId) && isSameTenant() && isSameStore()) || 
+                      (isEmployee() && belongsToStore(resource.data.storeId) && isSameTenant() && isSameStore() && onlyChangesFields(['quantity', 'updatedAt', 'lastCheckedBy']))
+                    );
+      
+      // 刪除規則
+      allow delete: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId))
+                    );
+    }
+    
+    // 考勤記錄集合規則
+    match /attendanceRecords/{recordId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                    (isStoreManager() && belongsToStore(resource.data.storeId)) || 
+                    (isEmployee() && resource.data.employeeId == request.auth.uid)
+                  );
+      
+      // 創建規則
+      allow create: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(request.resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(request.resource.data.storeId)) || 
+                      (isEmployee() && request.resource.data.employeeId == request.auth.uid)
+                    );
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId) && isSameTenant()) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId) && isSameTenant() && isSameStore()) || 
+                      (isEmployee() && resource.data.employeeId == request.auth.uid && onlyChangesFields(['clockOutTime', 'updatedAt', 'notes']))
+                    );
+      
+      // 刪除規則
+      allow delete: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                      (isStoreManager() && belongsToStore(resource.data.storeId))
+                    );
+    }
+    
+    // 系統配置集合規則
+    match /systemConfig/{configId} {
+      // 讀取規則
+      allow read: if isAuthenticated();
+      
+      // 創建和更新規則
+      allow write: if isAdmin();
+    }
+    
+    // 可疑活動集合規則
+    match /suspiciousActivities/{activityId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId))
+                  );
+      
+      // 創建規則
+      allow create: if isAdmin();
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId) && onlyChangesFields(['status', 'notes', 'resolvedBy', 'resolvedAt']))
+                    );
+      
+      // 刪除規則
+      allow delete: if isAdmin();
+    }
+    
+    // 警報通知集合規則
+    match /alertNotifications/{notificationId} {
+      // 讀取規則
+      allow read: if isAuthenticated() && (
+                    isAdmin() || 
+                    (isTenantAdmin() && belongsToTenant(resource.data.tenantId)) || 
+                    (resource.data.userId == request.auth.uid)
+                  );
+      
+      // 創建規則
+      allow create: if isAdmin();
+      
+      // 更新規則
+      allow update: if isAuthenticated() && (
+                      isAdmin() || 
+                      (isTenantAdmin() && belongsToTenant(resource.data.tenantId) && onlyChangesFields(['read', 'readBy', 'readAt'])) || 
+                      (resource.data.userId == request.auth.uid && onlyChangesFields(['read', 'readAt']))
+                    );
+      
+      // 刪除規則
+      allow delete: if isAdmin();
+    }
+    
+    // 默認規則：拒絕所有未明確允許的操作
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -13,19 +13,31 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "hosting": {
+    "public": "web-admin/dist",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log"
+    ]
+  },
   "emulators": {
     "auth": {
-      "port": 7099
+      "port": 9099
     },
     "functions": {
-      "port": 5002
+      "port": 5001
     },
     "firestore": {
-      "port": 8090
+      "port": 8080
+    },
+    "hosting": {
+      "port": 5002
     },
     "ui": {
       "enabled": true,
-      "port": 6001
+      "port": 4000
     },
     "singleProjectMode": true
   }
