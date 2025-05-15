@@ -219,13 +219,10 @@ export const createMenuItem = async (req: CustomRequest, res: Response): Promise
     const categoryName = categoryData.name;
     
     // 6. 構建完整的MenuItem對象
-    const itemData: Omit<MenuItem, 'createdAt' | 'updatedAt'> & { 
-      createdAt: admin.firestore.FieldValue;
-      updatedAt: admin.firestore.FieldValue;
-    } = {
-      id: itemId,
+    const itemData = {
+      itemId,
       tenantId: user.tenantId,
-      storeId: user.storeId, // 如果用戶有storeId，則記錄，否則為undefined
+      storeId: validatedData.storeId,
       name: validatedData.name,
       description: validatedData.description || '',
       categoryId: validatedData.categoryId,
@@ -235,8 +232,6 @@ export const createMenuItem = async (req: CustomRequest, res: Response): Promise
       costPrice: validatedData.costPrice,
       imageUrl: validatedData.imageUrl || '',
       thumbnailUrl: validatedData.thumbnailUrl || '',
-      stockStatus: validatedData.stockStatus,
-      stockQuantity: validatedData.stockQuantity,
       unit: validatedData.unit || '',
       preparationTime: validatedData.preparationTime,
       displayOrder: validatedData.displayOrder || 0,
@@ -249,6 +244,11 @@ export const createMenuItem = async (req: CustomRequest, res: Response): Promise
       createdBy: user.uid,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      stock: {
+        current: validatedData.stock?.current !== undefined ? Number(validatedData.stock.current) : 0,
+        manageStock: validatedData.stock?.manageStock !== undefined ? Boolean(validatedData.stock.manageStock) : true, 
+        lowStockThreshold: validatedData.stock?.lowStockThreshold !== undefined ? Number(validatedData.stock.lowStockThreshold) : 0
+      }
     };
     
     logger.info('準備創建菜單品項', { 
@@ -750,26 +750,65 @@ export const updateMenuItem = async (req: CustomRequest, res: Response): Promise
     }
     
     // 9. 構建更新數據
-    // 從 updateData 中提取實際更新欄位，避免類型衝突
-    const updateObject: Record<string, any> = { ...updateData };
+    const updatePayload: Record<string, any> = {};
+    const { stock, ...otherUpdateData } = updateData; // Destructure stock from other fields
+
+    // Iterate over otherUpdateData (non-stock fields)
+    for (const key in otherUpdateData) {
+      if (Object.prototype.hasOwnProperty.call(otherUpdateData, key)) {
+        const value = (otherUpdateData as any)[key];
+        if (value === undefined) continue;
+
+        if (key === 'categoryId' && value !== itemData.categoryId) {
+          updatePayload[key] = value;
+        } else if (key !== 'categoryId') { // Avoid double-adding categoryId if handled above
+          updatePayload[key] = value;
+        }
+      }
+    }
+
+    // Handle nested stock object updates
+    if (stock) {
+      if (stock.current !== undefined) {
+        updatePayload['stock.current'] = Number(stock.current);
+        // If current stock is updated and manageStock is not explicitly in the stock payload,
+        // default manageStock to true, unless it was already false on the document and not being changed.
+        const existingManageStock = (itemData as any).stock?.manageStock;
+        if (stock.manageStock === undefined && existingManageStock !== false) {
+             updatePayload['stock.manageStock'] = true;
+        }
+      }
+      if (stock.manageStock !== undefined) {
+        updatePayload['stock.manageStock'] = Boolean(stock.manageStock);
+      }
+      if (stock.lowStockThreshold !== undefined) {
+        updatePayload['stock.lowStockThreshold'] = Number(stock.lowStockThreshold);
+      }
+      // stockStatus from req.body.stock.stockStatus (if it were allowed by schema) would be ignored here too.
+    }
 
     // 添加更新時間戳
-    updateObject.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    updatePayload.updatedAt = admin.firestore.FieldValue.serverTimestamp();
 
     // 如果分類ID更新了，也更新分類名稱冗餘字段
     if (updateData.categoryId && updateData.categoryId !== itemData.categoryId) {
-      updateObject.categoryName = categoryName;
+      updatePayload.categoryName = categoryName; 
     }
-    
+
     logger.info('準備更新菜單品項', { 
       itemId,
-      updateFields: Object.keys(updateObject)
+      updateFields: Object.keys(updatePayload)
     });
     
     // 10. 更新數據庫
-    await itemRef.update(updateObject);
-    
-    logger.info('菜單品項更新成功', { itemId });
+    // Ensure there is something to update besides just updatedAt
+    const fieldsToUpdateCount = Object.keys(updatePayload).filter(k => k !== 'updatedAt').length;
+    if (fieldsToUpdateCount > 0) { 
+        await itemRef.update(updatePayload);
+        logger.info('菜單品項更新成功', { itemId });
+    } else {
+        logger.info('沒有需要更新的菜單品項字段', {itemId });
+    }
     
     // 11. 獲取更新後的完整文檔
     const updatedDoc = await itemRef.get();

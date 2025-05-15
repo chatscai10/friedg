@@ -1,3 +1,7 @@
+// This file is deprecated. All inventory services have been moved to the services/ subdirectory 
+// and are exported via services/index.ts.
+// Please update imports to point to './services' or specific service files within that directory.
+
 /**
  * 庫存管理服務層
  * 
@@ -385,89 +389,121 @@ export class InventoryItemService {
  */
 export class StockLevelService {
   /**
-   * 獲取或更新庫存水平
+   * [REFACTORED] Upserts stock level directly in the 'menuItems' collection
+   * and logs a stock adjustment.
+   * Assumes itemId is the document ID in 'menuItems'.
+   * Assumes menuItems documents contain: storeId, tenantId, stock: { current, lowStockThreshold }, manageStock (boolean)
    */
-  async upsertStockLevel(
+  async upsertStockLevel_REFACTORED(
     itemId: string, 
     storeId: string, 
     tenantId: string, 
-    quantity: number, 
+    quantity: number, // Absolute new quantity
     lowStockThreshold?: number,
-    userId?: string
+    userId?: string,
+    reason: string = 'Manual stock level set' // Reason for the stock adjustment entry
   ) {
-    // 檢查品項是否存在
-    const itemQuery = await db.collection('inventoryItems')
-      .where('itemId', '==', itemId)
-      .where('tenantId', '==', tenantId)
-      .limit(1)
-      .get();
-    
-    if (itemQuery.empty) {
-      throw new Error(`找不到 ID 為 ${itemId} 的庫存品項`);
-    }
-    
-    const itemData = itemQuery.docs[0].data() as InventoryItem;
-    const defaultThreshold = itemData.lowStockThreshold || 0;
-    
-    // 查找現有庫存水平
-    const stockLevelQuery = await db.collection('stockLevels')
-      .where('itemId', '==', itemId)
-      .where('storeId', '==', storeId)
-      .where('tenantId', '==', tenantId)
-      .limit(1)
-      .get();
-    
+    const menuItemRef = db.collection('menuItems').doc(itemId);
     const now = admin.firestore.Timestamp.now();
-    
-    // 更新或創建
-    if (!stockLevelQuery.empty) {
-      const stockLevelDoc = stockLevelQuery.docs[0];
-      const stockLevelData = stockLevelDoc.data() as StockLevel;
-      
-      await stockLevelDoc.ref.update({
-        quantity,
-        lowStockThreshold: lowStockThreshold !== undefined ? lowStockThreshold : stockLevelData.lowStockThreshold,
-        lastUpdated: now.toDate(),
-        lastUpdatedBy: userId || 'system'
-      });
-      
-      const updatedDoc = await stockLevelDoc.ref.get();
-      const updatedLevel = updatedDoc.data() as StockLevel;
-      
-      // 更新緩存
-      const cacheKey = `stocklevel_${tenantId}_${storeId}_${itemId}`;
-      stockLevelCache.set(cacheKey, updatedLevel);
-      
-      // 清除相關列表緩存
-      listCache.invalidateByPrefix(`stocklevels_${tenantId}`);
-      
-      return updatedLevel;
-    } else {
-      // 創建新庫存水平
-      const stockLevelId = db.collection('stockLevels').doc().id;
-      
-      const newStockLevel: StockLevel = {
-        stockLevelId,
-        itemId,
-        storeId,
-        tenantId,
-        quantity,
-        lowStockThreshold: lowStockThreshold !== undefined ? lowStockThreshold : defaultThreshold,
-        lastUpdated: now.toDate(),
-        lastUpdatedBy: userId || 'system'
+
+    return db.runTransaction(async transaction => {
+      const menuItemDoc = await transaction.get(menuItemRef);
+
+      if (!menuItemDoc.exists) {
+        // This implies the menuItem document (identified by itemId) itself doesn't exist.
+        // If the expectation is that this operation can create a stock record for an item
+        // in a store where it wasn't previously listed/stocked, then the approach
+        // of just updating a 'menuItems' doc might be insufficient without more context
+        // on how items are first introduced to a store's menu.
+        // For now, an error is thrown if the base menuItem (docId = itemId) doesn't exist.
+        logger.error(`[upsertStockLevel_REFACTORED] MenuItem with ID ${itemId} not found.`);
+        throw new Error(`[RefactoredUpsert] Menu item with ID ${itemId} not found.`);
+      }
+
+      const menuItemData = menuItemDoc.data() as { 
+        storeId?: string; 
+        tenantId?: string; 
+        stock?: { current?: number; lowStockThreshold?: number; manageStock?: boolean }; 
+        manageStock?: boolean; 
+        updatedAt?: admin.firestore.Timestamp;
+        // other fields from MenuItemOnFirestore interface
       };
+
+      // VALIDATIONS
+      if (menuItemData.storeId !== storeId) {
+        logger.error(`[upsertStockLevel_REFACTORED] MenuItem ${itemId} storeId mismatch. Expected: ${storeId}, Actual: ${menuItemData.storeId}`);
+        throw new Error(`[RefactoredUpsert] Menu item ${itemId} is associated with store ${menuItemData.storeId}, not target store ${storeId}.`);
+      }
+      if (menuItemData.tenantId !== tenantId) {
+        logger.error(`[upsertStockLevel_REFACTORED] MenuItem ${itemId} tenantId mismatch. Expected: ${tenantId}, Actual: ${menuItemData.tenantId}`);
+        throw new Error(`[RefactoredUpsert] Menu item ${itemId} tenant mismatch. Expected ${tenantId}, got ${menuItemData.tenantId}.`);
+      }
+      // END VALIDATIONS
+
+      const oldQuantity = menuItemData.stock?.current || 0;
+      const quantityAdjusted = quantity - oldQuantity;
+
+      const updatePayload: any = {
+        'updatedAt': now,
+      };
+
+      // Determine path for stock fields (direct vs nested)
+      // Prefer nested 'stock.field' if 'stock' object exists, otherwise update direct fields if they exist.
+      // This is a temporary measure due to uncertainty of actual structure for manageStock/lowStockThreshold.
+      // Ideal state: All stock related fields (current, lowStockThreshold, manageStock) are under the 'stock' object.
+      let stockObjectExists = typeof menuItemData.stock === 'object' && menuItemData.stock !== null;
+
+      updatePayload[stockObjectExists ? 'stock.current' : 'stockQuantity'] = quantity; // Assuming 'stockQuantity' if not nested
+      updatePayload[stockObjectExists ? 'stock.manageStock' : 'manageStock'] = true; // Ensure stock is managed
+
+      if (lowStockThreshold !== undefined) {
+        updatePayload[stockObjectExists ? 'stock.lowStockThreshold' : 'lowStockThreshold'] = lowStockThreshold;
+      } else if (stockObjectExists && menuItemData.stock?.lowStockThreshold === undefined) {
+        // If not provided and nested stock obj exists but has no threshold, maybe clear it or set a default?
+        // For now, only sets if explicitly provided. Defaulting logic from inventoryItems would be complex here.
+      }
+      // If not stockObjectExists and menuItemData.lowStockThreshold is undefined, it won't be set unless provided.
+
+      transaction.update(menuItemRef, updatePayload);
+      logger.info(`[upsertStockLevel_REFACTORED] Stock for menuItem ${itemId} in store ${storeId} updated in payload. New quantity: ${quantity}`);
+
+      // Create a StockAdjustment record
+      // This assumes stockAdjustmentService is available in the same scope or passed/imported
+      // And that it has a method like createAdjustmentRecordInTransaction_REFACTORED
+      if (stockAdjustmentService && typeof stockAdjustmentService.createAdjustmentRecordInTransaction_REFACTORED === 'function') {
+        await stockAdjustmentService.createAdjustmentRecordInTransaction_REFACTORED(transaction, {
+          itemId,
+          storeId,
+          tenantId,
+          adjustmentType: StockAdjustmentType.STOCK_COUNT, // Or a more specific type like 'MANUAL_LEVEL_SET'
+          quantityAdjusted: quantityAdjusted, 
+          beforeQuantity: oldQuantity,
+          afterQuantity: quantity,
+          reason: reason,
+          adjustmentDate: now.toDate(),
+          operatorId: userId || 'system_refactor_upsert'
+        });
+        logger.info(`[upsertStockLevel_REFACTORED] Stock adjustment record created for menuItem ${itemId}, store ${storeId}.`);
+      } else {
+        logger.warn(`[upsertStockLevel_REFACTORED] stockAdjustmentService.createAdjustmentRecordInTransaction_REFACTORED is not available. Adjustment record NOT created.`);
+      }
       
-      await db.collection('stockLevels').doc(stockLevelId).set(newStockLevel);
-      
-      // 更新緩存
-      const cacheKey = `stocklevel_${tenantId}_${storeId}_${itemId}`;
-      stockLevelCache.set(cacheKey, newStockLevel);
-      
-      // 清除相關列表緩存
-      listCache.invalidateByPrefix(`stocklevels_${tenantId}`);
-      
-      return newStockLevel;
-    }
+      // The onMenuItemWrite trigger should automatically update 'stockStatus' based on 'stock.current'.
+
+      // Return data consistent with what might be expected by callers of the original method
+      // Note: 'stockLevelId' is no longer applicable from the old 'stockLevels' collection.
+      return {
+        itemId: itemId,
+        storeId: storeId,
+        tenantId: tenantId,
+        quantity: quantity,
+        lowStockThreshold: updatePayload[stockObjectExists ? 'stock.lowStockThreshold' : 'lowStockThreshold'] !== undefined 
+                           ? updatePayload[stockObjectExists ? 'stock.lowStockThreshold' : 'lowStockThreshold'] 
+                           : (stockObjectExists ? menuItemData.stock?.lowStockThreshold : menuItemData.lowStockThreshold),
+        lastUpdated: now.toDate(),
+        lastUpdatedBy: userId || 'system_refactor_upsert'
+      };
+    });
   }
   
   /**
@@ -846,546 +882,209 @@ export class StockLevelService {
  */
 export class StockAdjustmentService {
   /**
-   * 創建庫存調整
+   * [REFACTORED] Creates a stock adjustment record and updates the stock level
+   * directly in the 'menuItems' collection within a single transaction.
+   * Assumes itemId is the document ID in 'menuItems'. This ID should be for the item in the *source* store.
+   * Assumes menuItems documents contain: storeId, tenantId, stock: { current }, manageStock (boolean), and potentially a global `productId`.
    */
-  async createAdjustment(
+  async createAdjustment_REFACTORED(
     tenantId: string,
-    itemId: string,
-    storeId: string,
+    itemId: string, // Document ID of the menuItem in the source store
+    storeId: string, // Source store for the adjustment
     adjustmentType: StockAdjustmentType,
-    quantityAdjusted: number,
+    quantityAdjusted: number, // Positive for increase (RECEIPT, POSITIVE_ADJ), negative for decrease (ISSUE, WASTAGE, NEGATIVE_ADJ, TRANSFER_OUT)
     userId: string,
     options: {
       reason?: string;
       adjustmentDate?: Date;
-      transferToStoreId?: string;
+      transferToStoreId?: string; // Required if adjustmentType is TRANSFER. This is the ID of the destination store.
+      isInitialStock?: boolean; // Flag for initial stock setup
+      productId?: string; // Global product identifier, used for transfers if targetItemId not given.
     } = {}
   ) {
-    // 檢查品項是否存在
-    const itemQuery = await db.collection('inventoryItems')
-      .where('itemId', '==', itemId)
-      .where('tenantId', '==', tenantId)
-      .limit(1)
-      .get();
-    
-    if (itemQuery.empty) {
-      throw new Error(`找不到 ID 為 ${itemId} 的庫存品項`);
-    }
-    
-    // 開始事務
+    const sourceMenuItemRef = db.collection('menuItems').doc(itemId); // Ref to source item's document
+    const now = admin.firestore.Timestamp.now();
+    const adjustmentDate = options.adjustmentDate || now.toDate();
+
     return db.runTransaction(async transaction => {
-      // 獲取庫存水平
-      const stockLevelQuery = await transaction.get(
-        db.collection('stockLevels')
-          .where('itemId', '==', itemId)
-          .where('storeId', '==', storeId)
-          .where('tenantId', '==', tenantId)
-          .limit(1)
-      );
-      
-      const now = admin.firestore.Timestamp.now();
-      const adjustmentDate = options.adjustmentDate || now.toDate();
-      
-      let currentQuantity = 0;
-      let stockLevelRef;
-      let stockLevelId;
-      let lowStockThreshold = 0;
-      
-      // 處理現有庫存水平
-      if (!stockLevelQuery.empty) {
-        const stockLevelDoc = stockLevelQuery.docs[0];
-        stockLevelRef = stockLevelDoc.ref;
-        const stockLevelData = stockLevelDoc.data() as StockLevel;
-        stockLevelId = stockLevelData.stockLevelId;
-        currentQuantity = stockLevelData.quantity;
-        lowStockThreshold = stockLevelData.lowStockThreshold;
+      const sourceMenuItemDoc = await transaction.get(sourceMenuItemRef);
+
+      if (!sourceMenuItemDoc.exists) {
+        logger.error(`[createAdjustment_REFACTORED] Source MenuItem with ID ${itemId} not found.`);
+        throw new Error(`[RefactoredAdjustment] Source Menu item with ID ${itemId} not found.`);
+      }
+      const sourceMenuItemData = sourceMenuItemDoc.data() as { 
+        storeId?: string; 
+        tenantId?: string; 
+        productId?: string; // Global product ID
+        stock?: { current?: number; manageStock?: boolean; lowStockThreshold?: number }; 
+        manageStock?: boolean; 
+        name?: string; 
+      };
+
+      // Validate source item belongs to the specified source storeId and tenantId
+      if (sourceMenuItemData.storeId !== storeId) {
+        logger.error(`[createAdjustment_REFACTORED] Source MenuItem ${itemId} storeId mismatch. Expected source store: ${storeId}, Actual item store: ${sourceMenuItemData.storeId}`);
+        throw new Error(`[RefactoredAdjustment] Source Menu item ${itemId} is associated with store ${sourceMenuItemData.storeId}, not target source store ${storeId}.`);
+      }
+      if (sourceMenuItemData.tenantId !== tenantId) {
+        logger.error(`[createAdjustment_REFACTORED] Source MenuItem ${itemId} tenantId mismatch. Expected: ${tenantId}, Actual: ${sourceMenuItemData.tenantId}`);
+        throw new Error(`[RefactoredAdjustment] Source Menu item ${itemId} tenant mismatch. Expected ${tenantId}, got ${sourceMenuItemData.tenantId}.`);
+      }
+
+      const sourceCurrentQuantity = sourceMenuItemData.stock?.current || 0;
+      let actualQuantityAdjusted = quantityAdjusted; // This is the delta for the source
+      let sourceNewQuantity;
+
+      if (options.isInitialStock) {
+        // quantityAdjusted is the target stock level for initial stock.
+        sourceNewQuantity = quantityAdjusted; 
+        actualQuantityAdjusted = sourceNewQuantity - sourceCurrentQuantity; // Calculate the delta for the log
       } else {
-        // 創建新庫存水平
-        stockLevelId = db.collection('stockLevels').doc().id;
-        stockLevelRef = db.collection('stockLevels').doc(stockLevelId);
-        
-        // 從品項獲取閾值
-        const itemData = itemQuery.docs[0].data() as InventoryItem;
-        lowStockThreshold = itemData.lowStockThreshold || 0;
+        sourceNewQuantity = sourceCurrentQuantity + quantityAdjusted; // quantityAdjusted is already the delta
       }
       
-      // 計算新數量
-      const newQuantity = currentQuantity + quantityAdjusted;
-      
-      // 確保不為負數
-      if (newQuantity < 0) {
-        throw new Error('調整後庫存數量不能為負數');
+      if (sourceNewQuantity < 0) {
+        throw new Error(`Adjusted quantity (${sourceNewQuantity}) for item '${sourceMenuItemData.name || itemId}' (source) cannot be negative.`);
       }
+
+      const sourceStockObjectExists = typeof sourceMenuItemData.stock === 'object' && sourceMenuItemData.stock !== null;
+      const sourceManageStockPath = sourceStockObjectExists ? 'stock.manageStock' : 'manageStock';
       
-      // 建立調整記錄
-      const adjustmentId = db.collection('stockAdjustments').doc().id;
-      const newAdjustment: StockAdjustment = {
-        adjustmentId,
-        itemId,
-        storeId,
+      const sourceMenuItemUpdatePayload: any = {
+        'stock.current': sourceNewQuantity,
+        'updatedAt': now,
+        [sourceManageStockPath]: true,
+      };
+      transaction.update(sourceMenuItemRef, sourceMenuItemUpdatePayload);
+      logger.info(`[createAdjustment_REFACTORED] Stock for source menuItem ${itemId} in store ${storeId} updated from ${sourceCurrentQuantity} to ${sourceNewQuantity}.`);
+
+      const sourceAdjustment = await this.createAdjustmentRecordInTransaction_REFACTORED(transaction, {
+        itemId: itemId, // Doc ID of source item
+        storeId, 
         tenantId,
         adjustmentType,
-        quantityAdjusted,
+        quantityAdjusted: actualQuantityAdjusted, 
+        beforeQuantity: sourceCurrentQuantity,
+        afterQuantity: sourceNewQuantity,
         reason: options.reason,
         adjustmentDate,
         operatorId: userId,
-        beforeQuantity: currentQuantity,
-        afterQuantity: newQuantity,
-        transferToStoreId: options.transferToStoreId
-      };
-      
-      // 寫入調整記錄
-      const adjustmentRef = db.collection('stockAdjustments').doc(adjustmentId);
-      transaction.set(adjustmentRef, newAdjustment);
-      
-      // 更新庫存水平
-      const updatedStockLevel: StockLevel = {
-        stockLevelId,
-        itemId,
-        storeId,
-        tenantId,
-        quantity: newQuantity,
-        lowStockThreshold,
-        lastUpdated: now.toDate(),
-        lastUpdatedBy: userId
-      };
-      
-      transaction.set(stockLevelRef, updatedStockLevel, { merge: true });
-      
-      // 清除緩存
-      const stockLevelCacheKey = `stocklevel_${tenantId}_${storeId}_${itemId}`;
-      stockLevelCache.delete(stockLevelCacheKey);
-      
-      // 處理移撥情況
-      if (adjustmentType === StockAdjustmentType.TRANSFER && options.transferToStoreId) {
-        // 獲取目標庫存水平
-        const targetStockLevelQuery = await transaction.get(
-          db.collection('stockLevels')
-            .where('itemId', '==', itemId)
-            .where('storeId', '==', options.transferToStoreId)
-            .where('tenantId', '==', tenantId)
-            .limit(1)
-        );
-        
-        let targetQuantity = 0;
-        let targetStockLevelRef;
-        let targetStockLevelId;
-        let targetLowStockThreshold = lowStockThreshold;
-        
-        // 處理目標庫存水平
-        if (!targetStockLevelQuery.empty) {
-          const targetStockLevelDoc = targetStockLevelQuery.docs[0];
-          targetStockLevelRef = targetStockLevelDoc.ref;
-          const targetStockLevelData = targetStockLevelDoc.data() as StockLevel;
-          targetStockLevelId = targetStockLevelData.stockLevelId;
-          targetQuantity = targetStockLevelData.quantity;
-          targetLowStockThreshold = targetStockLevelData.lowStockThreshold;
-        } else {
-          // 創建新目標庫存水平
-          targetStockLevelId = db.collection('stockLevels').doc().id;
-          targetStockLevelRef = db.collection('stockLevels').doc(targetStockLevelId);
+        transferToStoreId: adjustmentType === StockAdjustmentType.TRANSFER ? options.transferToStoreId : undefined,
+      });
+      logger.info(`[createAdjustment_REFACTORED] Source stock adjustment record ${sourceAdjustment.adjustmentId} created for item ${itemId}, store ${storeId}.`);
+
+      let targetAdjustmentResponse: StockAdjustment | undefined = undefined;
+
+      if (adjustmentType === StockAdjustmentType.TRANSFER) {
+        if (!options.transferToStoreId || options.transferToStoreId === storeId) {
+          logger.error(`[createAdjustment_REFACTORED] Invalid transferToStoreId for TRANSFER: ${options.transferToStoreId}.`);
+          throw new Error('Inventory transfer destination store ID is invalid or same as source store.');
         }
-        
-        // 計算目標新數量
-        const targetNewQuantity = targetQuantity + Math.abs(quantityAdjusted);
-        
-        // 更新目標庫存水平
-        const targetUpdatedStockLevel: StockLevel = {
-          stockLevelId: targetStockLevelId,
-          itemId,
-          storeId: options.transferToStoreId,
-          tenantId,
-          quantity: targetNewQuantity,
-          lowStockThreshold: targetLowStockThreshold,
-          lastUpdated: now.toDate(),
-          lastUpdatedBy: userId
+        const targetStoreId = options.transferToStoreId;
+        const globalProductId = options.productId || sourceMenuItemData.productId || itemId; // Determine the global product ID
+
+        // Find the target menu item document using the globalProductId and targetStoreId
+        const targetItemQuery = db.collection('menuItems')
+                                  .where('productId', '==', globalProductId) 
+                                  .where('storeId', '==', targetStoreId)
+                                  .where('tenantId', '==', tenantId)
+                                  .limit(1);
+        const targetMenuItemSnapshot = await transaction.get(targetItemQuery);
+
+        if (targetMenuItemSnapshot.empty) {
+          logger.error(`[createAdjustment_REFACTORED] Target menu item for product ID ${globalProductId} in store ${targetStoreId} not found for TRANSFER.`);
+          throw new Error(`Transfer failed: Product '${sourceMenuItemData.name || globalProductId}' not found in destination store ${targetStoreId}.`);
+        }
+        const targetMenuItemRef = targetMenuItemSnapshot.docs[0].ref;
+        const targetMenuItemDocId = targetMenuItemRef.id; // Actual document ID of the target item
+        const targetMenuItemData = targetMenuItemSnapshot.docs[0].data() as {
+            stock?: { current?: number; manageStock?: boolean };
+            manageStock?: boolean; 
+            name?: string;
         };
-        
-        transaction.set(targetStockLevelRef, targetUpdatedStockLevel, { merge: true });
-        
-        // 清除目標庫存水平緩存
-        const targetStockLevelCacheKey = `stocklevel_${tenantId}_${options.transferToStoreId}_${itemId}`;
-        stockLevelCache.delete(targetStockLevelCacheKey);
-        
-        // 創建目標調整記錄
-        const targetAdjustmentId = db.collection('stockAdjustments').doc().id;
-        const targetAdjustment: StockAdjustment = {
-          adjustmentId: targetAdjustmentId,
-          itemId,
-          storeId: options.transferToStoreId,
+
+        const targetCurrentQuantity = targetMenuItemData.stock?.current || 0;
+        // quantityAdjusted for source is negative (e.g., -5 means 5 units out)
+        // target receives that amount positively
+        const quantityReceivedByTarget = Math.abs(actualQuantityAdjusted); 
+        const targetNewQuantity = targetCurrentQuantity + quantityReceivedByTarget;
+
+        const targetStockObjectExists = typeof targetMenuItemData.stock === 'object' && targetMenuItemData.stock !== null;
+        const targetManageStockPath = targetStockObjectExists ? 'stock.manageStock' : 'manageStock';
+
+        const targetMenuItemUpdatePayload: any = {
+          'stock.current': targetNewQuantity,
+          'updatedAt': now,
+          [targetManageStockPath]: true,
+        };
+        transaction.update(targetMenuItemRef, targetMenuItemUpdatePayload);
+        logger.info(`[createAdjustment_REFACTORED] Stock for target menuItem ${targetMenuItemDocId} (product ${globalProductId}) in store ${targetStoreId} updated to ${targetNewQuantity}.`);
+
+        targetAdjustmentResponse = await this.createAdjustmentRecordInTransaction_REFACTORED(transaction, {
+          itemId: targetMenuItemDocId, 
+          storeId: targetStoreId,
           tenantId,
-          adjustmentType: StockAdjustmentType.RECEIPT,
-          quantityAdjusted: Math.abs(quantityAdjusted),
-          reason: `從 ${storeId} 移撥${options.reason ? `: ${options.reason}` : ''}`,
+          adjustmentType: StockAdjustmentType.RECEIPT, // Or TRANSFER_IN
+          quantityAdjusted: quantityReceivedByTarget,
+          beforeQuantity: targetCurrentQuantity,
+          afterQuantity: targetNewQuantity,
+          reason: `Transfer from store ${storeId} (Product: ${globalProductId}) - ${options.reason || 'Product Transfer'}`.trim(),
           adjustmentDate,
           operatorId: userId,
-          beforeQuantity: targetQuantity,
-          afterQuantity: targetNewQuantity,
-          transferToStoreId: storeId
-        };
-        
-        // 寫入目標調整記錄
-        const targetAdjustmentRef = db.collection('stockAdjustments').doc(targetAdjustmentId);
-        transaction.set(targetAdjustmentRef, targetAdjustment);
+        });
+        logger.info(`[createAdjustment_REFACTORED] Target stock adjustment record ${targetAdjustmentResponse.adjustmentId} created for item ${targetMenuItemDocId}, target store ${targetStoreId}.`);
       }
-      
-      // 清除相關列表緩存
-      listCache.invalidateByPrefix(`stocklevels_${tenantId}`);
-      
+
       return {
-        adjustmentId,
-        ...newAdjustment
+        sourceAdjustment,
+        targetAdjustment: targetAdjustmentResponse,
       };
     });
-  }
-  
-  /**
-   * 獲取調整記錄詳情
-   */
-  async getAdjustment(adjustmentId: string, tenantId: string) {
-    const adjustmentDoc = await db.collection('stockAdjustments')
-      .where('adjustmentId', '==', adjustmentId)
-      .where('tenantId', '==', tenantId)
-      .limit(1)
-      .get();
-    
-    if (adjustmentDoc.empty) {
-      throw new Error(`找不到 ID 為 ${adjustmentId} 的庫存調整記錄`);
-    }
-    
-    return adjustmentDoc.docs[0].data() as StockAdjustment;
-  }
-  
-  /**
-   * 查詢調整記錄列表
-   */
-  async listAdjustments(
-    tenantId: string, 
-    filter: StockAdjustmentsFilter = {},
-    page = 1, 
-    pageSize = 20
-  ) {
-    // 構建緩存鍵
-    const filterKey = JSON.stringify(filter);
-    const cacheKey = `adjustments_${tenantId}_${filterKey}_p${page}_s${pageSize}`;
-    
-    // 檢查緩存
-    const cachedResult = listCache.get(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-    
-    // 基本查詢
-    let query = db.collection('stockAdjustments').where('tenantId', '==', tenantId);
-    
-    // 添加過濾條件
-    if (filter.itemId) {
-      query = query.where('itemId', '==', filter.itemId) as any;
-    }
-    
-    if (filter.storeId) {
-      query = query.where('storeId', '==', filter.storeId) as any;
-    }
-    
-    if (filter.adjustmentType) {
-      query = query.where('adjustmentType', '==', filter.adjustmentType) as any;
-    }
-    
-    if (filter.operatorId) {
-      query = query.where('operatorId', '==', filter.operatorId) as any;
-    }
-    
-    // 執行查詢
-    const snapshot = await query.get();
-    let adjustments = snapshot.docs.map(doc => doc.data() as StockAdjustment);
-    
-    // 應用日期範圍過濾
-    if (filter.startDate || filter.endDate) {
-      adjustments = adjustments.filter(adjustment => {
-        const date = adjustment.adjustmentDate;
-        
-        if (filter.startDate && filter.endDate) {
-          return date >= filter.startDate && date <= filter.endDate;
-        }
-        
-        if (filter.startDate) {
-          return date >= filter.startDate;
-        }
-        
-        if (filter.endDate) {
-          return date <= filter.endDate;
-        }
-        
-        return true;
-      });
-    }
-    
-    // 計算分頁
-    const total = adjustments.length;
-    const offset = (page - 1) * pageSize;
-    const paginatedAdjustments = adjustments.slice(offset, offset + pageSize);
-    
-    const result = {
-      adjustments: paginatedAdjustments,
-      pagination: {
-        total,
-        page,
-        pageSize,
-        totalPages: Math.ceil(total / pageSize)
-      }
-    };
-    
-    // 存入緩存
-    listCache.set(cacheKey, result);
-    
-    return result;
   }
 
   /**
-   * 批量創建庫存調整
-   * 同時處理多個品項的庫存調整，支持事務處理
+   * [REFACTORED - Helper, added createdAt/updatedAt to StockAdjustment type]
+   * Creates a stock adjustment record within a Firestore transaction.
    */
-  async batchCreateAdjustments(
-    tenantId: string,
-    adjustments: {
-      itemId: string;
+  async createAdjustmentRecordInTransaction_REFACTORED(
+    transaction: admin.firestore.Transaction,
+    details: {
+      itemId: string; 
       storeId: string;
+      tenantId: string;
       adjustmentType: StockAdjustmentType;
       quantityAdjusted: number;
+      beforeQuantity: number;
+      afterQuantity: number;
       reason?: string;
-      transferToStoreId?: string;
-    }[],
-    userId: string,
-    adjustmentDate?: Date
-  ) {
-    // 檢查是否有調整
-    if (!adjustments.length) {
-      return {
-        success: true,
-        results: [],
-        failureCount: 0,
-        successCount: 0
-      };
+      adjustmentDate?: Date;
+      operatorId: string;
+      transferToStoreId?: string; 
     }
-    
-    // 收集所有要調整的品項ID
-    const itemIds = [...new Set(adjustments.map(item => item.itemId))];
-    
-    // 批量獲取品項信息
-    const itemsMap = await inventoryItemService.batchGetItems(itemIds, tenantId);
-    
-    // 檢查所有品項是否存在
-    const missingItemIds = itemIds.filter(id => !itemsMap[id]);
-    if (missingItemIds.length > 0) {
-      throw new Error(`找不到以下品項: ${missingItemIds.join(', ')}`);
-    }
-    
-    // 處理日期
-    const now = admin.firestore.Timestamp.now();
-    const adjDate = adjustmentDate || now.toDate();
-    
-    // 使用事務處理批量創建調整
-    return db.runTransaction(async (transaction) => {
-      const results = [];
-      let successCount = 0;
-      let failureCount = 0;
-      const createdAdjustments: StockAdjustment[] = [];
-      
-      // 處理每個調整
-      for (const adjustment of adjustments) {
-        try {
-          // 檢查是否是移撥且指定了目標分店
-          if (adjustment.adjustmentType === StockAdjustmentType.TRANSFER && !adjustment.transferToStoreId) {
-            throw new Error(`移撥類型的調整需要指定 transferToStoreId: ${adjustment.itemId} in ${adjustment.storeId}`);
-          }
-          
-          // 獲取現有庫存水平
-          const stockLevelQuery = await transaction.get(
-            db.collection('stockLevels')
-              .where('itemId', '==', adjustment.itemId)
-              .where('storeId', '==', adjustment.storeId)
-              .where('tenantId', '==', tenantId)
-              .limit(1)
-          );
-          
-          let stockLevelRef;
-          let stockLevelId;
-          let currentQuantity = 0;
-          let lowStockThreshold = 0;
-          
-          // 處理現有庫存水平
-          if (!stockLevelQuery.empty) {
-            const stockLevelDoc = stockLevelQuery.docs[0];
-            stockLevelRef = stockLevelDoc.ref;
-            const stockLevelData = stockLevelDoc.data() as StockLevel;
-            stockLevelId = stockLevelData.stockLevelId;
-            currentQuantity = stockLevelData.quantity;
-            lowStockThreshold = stockLevelData.lowStockThreshold;
-          } else {
-            // 創建新庫存水平
-            stockLevelId = db.collection('stockLevels').doc().id;
-            stockLevelRef = db.collection('stockLevels').doc(stockLevelId);
-            
-            // 從品項獲取閾值
-            const itemData = itemsMap[adjustment.itemId];
-            lowStockThreshold = itemData.lowStockThreshold || 0;
-          }
-          
-          // 計算新數量
-          const newQuantity = currentQuantity + adjustment.quantityAdjusted;
-          
-          // 確保不為負數
-          if (newQuantity < 0) {
-            throw new Error(`庫存調整後數量不能為負數: ${adjustment.itemId} in ${adjustment.storeId}`);
-          }
-          
-          // 創建調整記錄
-          const adjustmentId = db.collection('stockAdjustments').doc().id;
-          const newAdjustment: StockAdjustment = {
-            adjustmentId,
-            itemId: adjustment.itemId,
-            storeId: adjustment.storeId,
-            tenantId,
-            adjustmentType: adjustment.adjustmentType,
-            quantityAdjusted: adjustment.quantityAdjusted,
-            reason: adjustment.reason,
-            adjustmentDate: adjDate,
-            operatorId: userId,
-            beforeQuantity: currentQuantity,
-            afterQuantity: newQuantity,
-            transferToStoreId: adjustment.transferToStoreId
-          };
-          
-          // 添加調整記錄
-          transaction.set(db.collection('stockAdjustments').doc(adjustmentId), newAdjustment);
-          createdAdjustments.push(newAdjustment);
-          
-          // 更新庫存水平
-          transaction.set(stockLevelRef, {
-            stockLevelId,
-            itemId: adjustment.itemId,
-            storeId: adjustment.storeId,
-            tenantId,
-            quantity: newQuantity,
-            lowStockThreshold,
-            lastUpdated: now.toDate(),
-            lastUpdatedBy: userId
-          }, { merge: true });
-          
-          // 清除緩存
-          const stockLevelCacheKey = `stocklevel_${tenantId}_${adjustment.storeId}_${adjustment.itemId}`;
-          stockLevelCache.delete(stockLevelCacheKey);
-          
-          // 處理移撥情況
-          if (adjustment.adjustmentType === StockAdjustmentType.TRANSFER && adjustment.transferToStoreId) {
-            // 獲取目標分店的庫存水平
-            const targetStockLevelQuery = await transaction.get(
-              db.collection('stockLevels')
-                .where('itemId', '==', adjustment.itemId)
-                .where('storeId', '==', adjustment.transferToStoreId)
-                .where('tenantId', '==', tenantId)
-                .limit(1)
-            );
-            
-            let targetQuantity = 0;
-            let targetStockLevelRef;
-            let targetStockLevelId;
-            let targetLowStockThreshold = lowStockThreshold;
-            
-            // 處理目標庫存水平
-            if (!targetStockLevelQuery.empty) {
-              const targetStockLevelDoc = targetStockLevelQuery.docs[0];
-              targetStockLevelRef = targetStockLevelDoc.ref;
-              const targetStockLevelData = targetStockLevelDoc.data() as StockLevel;
-              targetStockLevelId = targetStockLevelData.stockLevelId;
-              targetQuantity = targetStockLevelData.quantity;
-              targetLowStockThreshold = targetStockLevelData.lowStockThreshold;
-            } else {
-              // 創建新目標庫存水平
-              targetStockLevelId = db.collection('stockLevels').doc().id;
-              targetStockLevelRef = db.collection('stockLevels').doc(targetStockLevelId);
-            }
-            
-            // 計算目標新數量
-            const targetNewQuantity = targetQuantity + Math.abs(adjustment.quantityAdjusted);
-            
-            // 更新目標庫存水平
-            transaction.set(targetStockLevelRef, {
-              stockLevelId: targetStockLevelId,
-              itemId: adjustment.itemId,
-              storeId: adjustment.transferToStoreId,
-              tenantId,
-              quantity: targetNewQuantity,
-              lowStockThreshold: targetLowStockThreshold,
-              lastUpdated: now.toDate(),
-              lastUpdatedBy: userId
-            }, { merge: true });
-            
-            // 清除目標庫存水平緩存
-            const targetStockLevelCacheKey = `stocklevel_${tenantId}_${adjustment.transferToStoreId}_${adjustment.itemId}`;
-            stockLevelCache.delete(targetStockLevelCacheKey);
-            
-            // 創建目標調整記錄
-            const targetAdjustmentId = db.collection('stockAdjustments').doc().id;
-            const targetAdjustment: StockAdjustment = {
-              adjustmentId: targetAdjustmentId,
-              itemId: adjustment.itemId,
-              storeId: adjustment.transferToStoreId,
-              tenantId,
-              adjustmentType: StockAdjustmentType.RECEIPT,
-              quantityAdjusted: Math.abs(adjustment.quantityAdjusted),
-              reason: `從 ${adjustment.storeId} 移撥${adjustment.reason ? `: ${adjustment.reason}` : ''}`,
-              adjustmentDate: adjDate,
-              operatorId: userId,
-              beforeQuantity: targetQuantity,
-              afterQuantity: targetNewQuantity,
-              transferToStoreId: adjustment.storeId
-            };
-            
-            // 添加目標調整記錄
-            transaction.set(db.collection('stockAdjustments').doc(targetAdjustmentId), targetAdjustment);
-            createdAdjustments.push(targetAdjustment);
-          }
-          
-          // 記錄成功
-          results.push({
-            itemId: adjustment.itemId,
-            storeId: adjustment.storeId,
-            success: true,
-            data: {
-              adjustmentId: newAdjustment.adjustmentId,
-              adjustmentType: adjustment.adjustmentType,
-              quantityAdjusted: adjustment.quantityAdjusted,
-              newQuantity
-            }
-          });
-          
-          successCount++;
-        } catch (error: any) {
-          // 記錄失敗
-          results.push({
-            itemId: adjustment.itemId,
-            storeId: adjustment.storeId,
-            success: false,
-            error: error.message || '創建庫存調整時發生錯誤'
-          });
-          
-          failureCount++;
-        }
-      }
-      
-      // 清除相關列表緩存
-      listCache.invalidateByPrefix(`stocklevels_${tenantId}`);
-      
-      // 返回結果
-      return {
-        success: failureCount === 0,
-        results,
-        successCount,
-        failureCount,
-        adjustments: createdAdjustments
-      };
-    });
+  ): Promise<StockAdjustment> {
+    const adjustmentId = db.collection('stockAdjustments').doc().id;
+    const nowTimestamp = admin.firestore.Timestamp.now().toDate(); // Consistent timestamp for createdAt/updatedAt
+    const adjustmentData: StockAdjustment = {
+      adjustmentId,
+      itemId: details.itemId,
+      storeId: details.storeId,
+      tenantId: details.tenantId,
+      adjustmentType: details.adjustmentType,
+      quantityAdjusted: details.quantityAdjusted,
+      beforeQuantity: details.beforeQuantity,
+      afterQuantity: details.afterQuantity,
+      reason: details.reason,
+      adjustmentDate: details.adjustmentDate || nowTimestamp, // Use consistent now if not provided
+      operatorId: details.operatorId,
+      transferToStoreId: details.transferToStoreId,
+      createdAt: nowTimestamp, 
+      updatedAt: nowTimestamp, 
+    };
+    const adjustmentRef = db.collection('stockAdjustments').doc(adjustmentId);
+    transaction.set(adjustmentRef, adjustmentData);
+    logger.info(`[createAdjustmentRecordInTransaction_REFACTORED] Adjustment record ${adjustmentId} set in transaction for item ${details.itemId} store ${details.storeId}.`);
+    return adjustmentData;
   }
 }
 
@@ -1393,3 +1092,5 @@ export class StockAdjustmentService {
 export const inventoryItemService = new InventoryItemService();
 export const stockLevelService = new StockLevelService();
 export const stockAdjustmentService = new StockAdjustmentService(); 
+
+export {}; // Ensures this is treated as a module if it becomes completely empty 

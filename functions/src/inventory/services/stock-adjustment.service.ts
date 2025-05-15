@@ -21,6 +21,9 @@ import { StockTransferService } from './stock-transfer.service';
 import { StockOperationService } from './stock-operation.service';
 import { cacheManager, CacheLevel, CachePrefix } from '../cache/cache-manager';
 import { withErrorHandling, ErrorContext } from '../utils/error-handler';
+import { logger } from '../../logger';
+
+const db = admin.firestore();
 
 /**
  * 庫存調整處理結果接口
@@ -126,10 +129,12 @@ export class StockAdjustmentService {
   constructor(
     private repository: StockAdjustmentRepository,
     private stockLevelRepository: StockLevelRepository,
-    private inventoryItemService: InventoryItemService
+    private inventoryItemService: InventoryItemService,
+    private stockOperationService: StockOperationService,
+    private stockTransferService: StockTransferService
   ) {
-    this.stockOperationService = new StockOperationService();
-    this.stockTransferService = new StockTransferService();
+    this.stockOperationService = stockOperationService;
+    this.stockTransferService = stockTransferService;
   }
   
   // #region 公開方法
@@ -1024,4 +1029,220 @@ export class StockAdjustmentService {
   }
   
   // #endregion 驗證方法
-} 
+
+  /**
+   * [REFACTORED] Creates a stock adjustment record and updates the stock level
+   * directly in the 'menuItems' collection within a single transaction.
+   * Assumes itemId is the document ID in 'menuItems'. This ID should be for the item in the *source* store.
+   * Assumes menuItems documents contain: storeId, tenantId, stock: { current }, manageStock (boolean), and potentially a global `productId`.
+   */
+  async createAdjustment_REFACTORED(
+    tenantId: string,
+    itemId: string, // Document ID of the menuItem in the source store
+    storeId: string, // Source store for the adjustment
+    adjustmentType: StockAdjustmentType,
+    quantityAdjusted: number, // Positive for increase (RECEIPT, POSITIVE_ADJ), negative for decrease (ISSUE, WASTAGE, NEGATIVE_ADJ, TRANSFER_OUT)
+    userId: string,
+    options: {
+      reason?: string;
+      adjustmentDate?: Date;
+      transferToStoreId?: string; // Required if adjustmentType is TRANSFER. This is the ID of the destination store.
+      isInitialStock?: boolean; // Flag for initial stock setup
+      productId?: string; // Global product identifier, used for transfers if targetItemId not given.
+    } = {}
+  ) {
+    const sourceMenuItemRef = db.collection('menuItems').doc(itemId); // Ref to source item\\\'s document
+    const now = admin.firestore.Timestamp.now();
+    const adjustmentDate = options.adjustmentDate || now.toDate();
+
+    return db.runTransaction(async transaction => {
+      const sourceMenuItemDoc = await transaction.get(sourceMenuItemRef);
+
+      if (!sourceMenuItemDoc.exists) {
+        logger.error(`[createAdjustment_REFACTORED] Source MenuItem with ID ${itemId} not found.`);
+        throw new Error(`[RefactoredAdjustment] Source Menu item with ID ${itemId} not found.`);
+      }
+      const sourceMenuItemData = sourceMenuItemDoc.data() as {
+        storeId?: string;
+        tenantId?: string;
+        productId?: string; // Global product ID
+        stock?: { current?: number; manageStock?: boolean; lowStockThreshold?: number };
+        // manageStock?: boolean; // Prefer nested
+        name?: string;
+      };
+
+      // Validate source item belongs to the specified source storeId and tenantId
+      if (sourceMenuItemData.storeId !== storeId) {
+        logger.error(`[createAdjustment_REFACTORED] Source MenuItem ${itemId} storeId mismatch. Expected source store: ${storeId}, Actual item store: ${sourceMenuItemData.storeId}`);
+        throw new Error(`[RefactoredAdjustment] Source Menu item ${itemId} is associated with store ${sourceMenuItemData.storeId}, not target source store ${storeId}.`);
+      }
+      if (sourceMenuItemData.tenantId !== tenantId) {
+        logger.error(`[createAdjustment_REFACTORED] Source MenuItem ${itemId} tenantId mismatch. Expected: ${tenantId}, Actual: ${sourceMenuItemData.tenantId}`);
+        throw new Error(`[RefactoredAdjustment] Source Menu item ${itemId} tenant mismatch. Expected ${tenantId}, got ${sourceMenuItemData.tenantId}.`);
+      }
+
+      const sourceCurrentQuantity = sourceMenuItemData.stock?.current || 0;
+      let actualQuantityAdjusted = quantityAdjusted; // This is the delta for the source
+      let sourceNewQuantity;
+
+      if (options.isInitialStock) {
+        sourceNewQuantity = quantityAdjusted;
+        actualQuantityAdjusted = sourceNewQuantity - sourceCurrentQuantity; 
+      } else {
+        sourceNewQuantity = sourceCurrentQuantity + quantityAdjusted; 
+      }
+
+      if (!options.isInitialStock && sourceNewQuantity < 0) {
+         // Allow stock to become less negative or zero if it was already negative and adjustment is positive.
+         // Otherwise, prevent stock from becoming negative.
+        if (! (sourceCurrentQuantity < 0 && actualQuantityAdjusted > 0) ) {
+            // If it was positive or zero and is becoming negative, throw error.
+            if (sourceCurrentQuantity >=0 ) {
+                 logger.error(`[createAdjustment_REFACTORED] Adj for source item ${itemId} in store ${storeId} results in negative stock (${sourceNewQuantity}). Current: ${sourceCurrentQuantity}, Adjusted: ${actualQuantityAdjusted}`);
+                 throw new Error(`Adjusted quantity (${sourceNewQuantity}) for item '${sourceMenuItemData.name || itemId}' (source) cannot be negative.`);
+            }
+        }
+      }
+      
+      const updatePayload: any = {
+        'stock.current': sourceNewQuantity,
+        'stock.manageStock': true, 
+        'updatedAt': now,
+      };
+      
+      // Preserve existing lowStockThreshold if not explicitly changed and it exists
+      if (sourceMenuItemData.stock?.lowStockThreshold !== undefined) {
+        updatePayload['stock.lowStockThreshold'] = sourceMenuItemData.stock.lowStockThreshold;
+      }
+
+
+      transaction.update(sourceMenuItemRef, updatePayload);
+      logger.info(`[createAdjustment_REFACTORED] Stock for source menuItem ${itemId} in store ${storeId} updated from ${sourceCurrentQuantity} to ${sourceNewQuantity}.`);
+
+      const sourceAdjustment = await this.createAdjustmentRecordInTransaction_REFACTORED(transaction, {
+        itemId: itemId, 
+        storeId,
+        tenantId,
+        adjustmentType,
+        quantityAdjusted: actualQuantityAdjusted,
+        beforeQuantity: sourceCurrentQuantity,
+        afterQuantity: sourceNewQuantity,
+        reason: options.reason,
+        adjustmentDate,
+        operatorId: userId,
+        transferToStoreId: adjustmentType === StockAdjustmentType.TRANSFER_IN ? sourceStoreIdFromReason : undefined, // For TRANSFER_IN, source is in reason
+      });
+      logger.info(`[createAdjustment_REFACTORED] Source stock adjustment record ${sourceAdjustment.adjustmentId} created for item ${itemId}, store ${storeId}.`);
+
+      let targetAdjustmentResponse: StockAdjustment | undefined = undefined;
+
+      if (adjustmentType === StockAdjustmentType.TRANSFER) {
+        if (!options.transferToStoreId || options.transferToStoreId === storeId) {
+          logger.error(`[createAdjustment_REFACTORED] Invalid transferToStoreId for TRANSFER: ${options.transferToStoreId}.`);
+          throw new Error('Inventory transfer destination store ID is invalid or same as source store.');
+        }
+        const targetStoreId = options.transferToStoreId;
+        const globalProductId = options.productId || sourceMenuItemData.productId || itemId; 
+
+        const targetItemQuery = db.collection('menuItems')
+                                  .where('productId', '==', globalProductId)
+                                  .where('storeId', '==', targetStoreId)
+                                  .where('tenantId', '==', tenantId)
+                                  .limit(1);
+        const targetMenuItemSnapshot = await transaction.get(targetItemQuery);
+
+        if (targetMenuItemSnapshot.empty) {
+          logger.error(`[createAdjustment_REFACTORED] Target menu item for product ID ${globalProductId} in store ${targetStoreId} not found for TRANSFER.`);
+          throw new Error(`Transfer failed: Product '${sourceMenuItemData.name || globalProductId}' not found in destination store ${targetStoreId}.`);
+        }
+        const targetMenuItemRef = targetMenuItemSnapshot.docs[0].ref;
+        const targetMenuItemDocId = targetMenuItemRef.id; 
+        const targetMenuItemData = targetMenuItemSnapshot.docs[0].data() as {
+            stock?: { current?: number; manageStock?: boolean; lowStockThreshold?: number };
+            name?: string;
+        };
+
+        const targetCurrentQuantity = targetMenuItemData.stock?.current || 0;
+        const quantityReceivedByTarget = Math.abs(actualQuantityAdjusted);
+        const targetNewQuantity = targetCurrentQuantity + quantityReceivedByTarget;
+
+        const targetUpdatePayload: any = {
+            'stock.current': targetNewQuantity,
+            'stock.manageStock': true,
+            'updatedAt': now,
+        };
+        if (targetMenuItemData.stock?.lowStockThreshold !== undefined) {
+            targetUpdatePayload['stock.lowStockThreshold'] = targetMenuItemData.stock.lowStockThreshold;
+        }
+
+        transaction.update(targetMenuItemRef, targetUpdatePayload);
+        logger.info(`[createAdjustment_REFACTORED] Stock for target menuItem ${targetMenuItemDocId} (product ${globalProductId}) in store ${targetStoreId} updated to ${targetNewQuantity}.`);
+
+        targetAdjustmentResponse = await this.createAdjustmentRecordInTransaction_REFACTORED(transaction, {
+          itemId: targetMenuItemDocId,
+          storeId: targetStoreId,
+          tenantId,
+          adjustmentType: StockAdjustmentType.RECEIPT, 
+          quantityAdjusted: quantityReceivedByTarget,
+          beforeQuantity: targetCurrentQuantity,
+          afterQuantity: targetNewQuantity,
+          reason: `Transfer from store ${storeId} (Product: ${globalProductId}) - ${options.reason || 'Product Transfer'}`.trim(),
+          adjustmentDate,
+          operatorId: userId,
+        });
+        logger.info(`[createAdjustment_REFACTORED] Target stock adjustment record ${targetAdjustmentResponse.adjustmentId} created for item ${targetMenuItemDocId}, target store ${targetStoreId}.`);
+      }
+
+      return {
+        sourceAdjustment,
+        targetAdjustment: targetAdjustmentResponse,
+      };
+    });
+  }
+
+  /**
+   * [REFACTORED - Helper, added createdAt/updatedAt to StockAdjustment type]
+   * Creates a stock adjustment record within a Firestore transaction.
+   */
+  async createAdjustmentRecordInTransaction_REFACTORED(
+    transaction: admin.firestore.Transaction,
+    details: {
+      itemId: string;
+      storeId: string;
+      tenantId: string;
+      adjustmentType: StockAdjustmentType;
+      quantityAdjusted: number;
+      beforeQuantity: number;
+      afterQuantity: number;
+      reason?: string;
+      adjustmentDate?: Date;
+      operatorId: string;
+      transferToStoreId?: string;
+    }
+  ): Promise<StockAdjustment> {
+    const adjustmentId = db.collection('stockAdjustments').doc().id;
+    const nowTimestamp = admin.firestore.Timestamp.now().toDate(); 
+    const adjustmentData: StockAdjustment = {
+      adjustmentId,
+      itemId: details.itemId,
+      storeId: details.storeId,
+      tenantId: details.tenantId,
+      adjustmentType: details.adjustmentType,
+      quantityAdjusted: details.quantityAdjusted,
+      beforeQuantity: details.beforeQuantity,
+      afterQuantity: details.afterQuantity,
+      reason: details.reason,
+      adjustmentDate: details.adjustmentDate || nowTimestamp, 
+      operatorId: details.operatorId,
+      transferToStoreId: details.transferToStoreId,
+      createdAt: nowTimestamp,
+      updatedAt: nowTimestamp,
+    };
+    const adjustmentRef = db.collection('stockAdjustments').doc(adjustmentId);
+    transaction.set(adjustmentRef, adjustmentData);
+    logger.info(`[createAdjustmentRecordInTransaction_REFACTORED] Adjustment record ${adjustmentId} set in transaction for item ${details.itemId} store ${details.storeId}.`);
+    return adjustmentData;
+  }
+}
+
+export {}; // Ensures this is treated as a module if it becomes completely empty 

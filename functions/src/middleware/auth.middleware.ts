@@ -648,3 +648,81 @@ export const authorizeRoles = (roles: RoleType[]) => {
     }
   };
 };
+
+/**
+ * Placeholder Authentication Middleware.
+ * In a real app, this would verify Firebase ID token and populate req.user.
+ */
+export const authenticateRequestMiddlewarePlaceholder = (
+    req: Request, 
+    res: Response, 
+    next: NextFunction
+) => {
+  functions.logger.debug('[AuthMiddleware] Placeholder called. Pass through.');
+  // Simulate user for testing if not present (e.g. for routes that need it)
+  // if (!(req as any).user && req.headers.simulate_user) {
+  //   (req as any).user = { uid: req.headers.simulate_user, roles: ['customer'] };
+  // }
+  next();
+};
+
+/**
+ * Actual Firebase Authentication Middleware (Example Structure)
+ */
+export const authenticateFirebaseToken = async (
+    req: Request, 
+    res: Response, 
+    next: NextFunction
+) => {
+    const correlationId = (req as any).correlationId || 'N/A';
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        functions.logger.warn('Authentication token missing or malformed.', { correlationId });
+        return res.status(401).json({ message: 'Unauthorized: Missing or malformed token.' });
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        (req as any).user = decodedToken; // Attach user info (uid, email, custom claims etc.)
+        functions.logger.info('User authenticated successfully.', { correlationId, userId: decodedToken.uid });
+        next();
+    } catch (error: any) {
+        functions.logger.error('Error verifying Firebase ID token.', { 
+            correlationId, 
+            error: error.message,
+            code: error.code 
+        });
+        let message = 'Unauthorized: Invalid token.';
+        if (error.code === 'auth/id-token-expired') {
+            message = 'Unauthorized: Token expired.';
+        }
+        return res.status(401).json({ message });
+    }
+};
+
+/**
+ * Authorization Middleware Factory (Example)
+ * @param allowedRoles Array of roles that are allowed to access the route.
+ */
+export const authorizeRoles = (allowedRoles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const correlationId = (req as any).correlationId || 'N/A';
+    const user = (req as any).user;
+
+    if (!user) {
+      functions.logger.warn('Authorization check failed: User not authenticated.', { correlationId });
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const userRoles = user.roles || []; // Assuming roles are in custom claims as an array
+    const hasPermission = allowedRoles.some(role => userRoles.includes(role));
+
+    if (hasPermission) {
+      functions.logger.info(`User ${user.uid} authorized with roles: ${userRoles.join(',')}`, { correlationId });
+      next();
+    } else {
+      functions.logger.warn(`User ${user.uid} forbidden. Required: ${allowedRoles.join('|')}, Has: ${userRoles.join(',')}`, { correlationId });
+      return res.status(403).json({ message: 'Forbidden: Insufficient permissions.' });
+    }
+  };
+};

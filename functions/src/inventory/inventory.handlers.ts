@@ -4,10 +4,15 @@
 
 import { Request, Response } from 'express';
 import * as admin from 'firebase-admin';
-import { CreateInventoryItemRequest, InventoryItem, InventoryItemsFilter, StockAdjustment, StockAdjustmentType, StockLevel, StockLevelsFilter, UpdateInventoryItemRequest, UpsertStockLevelRequest, CreateStockAdjustmentRequest, StockAdjustmentsFilter } from './inventory.types';
-import { inventoryItemService, stockLevelService, stockAdjustmentService } from './service';
+import { CreateInventoryItemRequest, InventoryItem, InventoryItemsFilter, StockAdjustment, StockAdjustmentType, UpdateInventoryItemRequest, UpsertStockLevelRequest, CreateStockAdjustmentRequest, StockAdjustmentsFilter } from './inventory.types';
+import {
+  inventoryItemService,
+  stockLevelService,
+  stockAdjustmentService
+} from './services'; // This will now point to services/index.ts
+import { logger } from '../logger'; // Corrected logger path
 
-const db = admin.firestore();
+// const db = admin.firestore(); // db instance can be removed if services encapsulate all Firestore interactions
 
 /**
  * 創建庫存品項
@@ -55,7 +60,7 @@ export const createInventoryItem = async (req: Request, res: Response): Promise<
       data: createdItem
     });
   } catch (error: any) {
-    console.error('創建庫存品項時發生錯誤:', error);
+    logger.error('創建庫存品項時發生錯誤:', error);
     res.status(500).json({
       success: false,
       error: `創建庫存品項時發生錯誤: ${error.message || error}`
@@ -73,51 +78,52 @@ export const getInventoryItem = async (req: Request, res: Response): Promise<voi
     const tenantId = res.locals.tenantId;
     const storeId = req.query.storeId as string;
     
-    // 使用服務層獲取品項詳情
+    // 使用服務層獲取品項詳情 (來自 inventoryItems collection)
     const item = await inventoryItemService.getItem(itemId, tenantId);
     
     if (!item) {
       res.status(404).json({
         success: false,
-        error: `找不到 ID 為 ${itemId} 的庫存品項`
+        error: `找不到 ID 為 ${itemId} 的庫存品項定義`
       });
       return;
     }
     
-    // 如果請求包含 storeId 參數，則同時獲取該店鋪的庫存水平
+    // 如果請求包含 storeId 參數，則嘗試獲取該店鋪在 menuItems 中的庫存信息
     if (storeId) {
       try {
-        const stockLevel = await stockLevelService.upsertStockLevel(
-          itemId, 
-          storeId, 
-          tenantId, 
-          0, // 默認數量為0
-          undefined, 
-          'system'
-        );
+        // PLACEHOLDER: This service method needs to be implemented.
+        // It should fetch stock information from the 'menuItems' collection for the given itemId (as productId) and storeId.
+        // const menuItemStockInfo = await stockLevelService.getMenuItemStockInfo(item.itemId, storeId, tenantId);
         
-        res.status(200).json({
-          success: true,
-          data: {
-            ...item,
-            stockLevel: stockLevel.quantity,
-            lowStockThreshold: stockLevel.lowStockThreshold
-          }
-        });
-        return;
-      } catch (levelError) {
-        console.error('獲取庫存水平時發生錯誤:', levelError);
-        // 即使獲取庫存水平失敗，仍然返回品項資訊
+        // For now, let's assume we cannot reliably get this yet without the new service method.
+        // We will return the item definition only.
+        // If getMenuItemStockInfo were available:
+        // if (menuItemStockInfo) {
+        //   res.status(200).json({
+        //     success: true,
+        //     data: {
+        //       ...item, // from inventoryItems
+        //       liveStock: menuItemStockInfo.quantity, // from menuItems
+        //       liveLowStockThreshold: menuItemStockInfo.lowStockThreshold // from menuItems
+        //     }
+        //   });
+        //   return;
+        // }
+        logger.warn(`[getInventoryItem] Stock info from menuItems for item ${itemId}, store ${storeId} not yet implemented for direct fetch. Returning item definition only.`);
+      } catch (levelError: any) {
+        logger.error(`[getInventoryItem] Error attempting to fetch menu item stock info for item ${itemId}, store ${storeId}: ${levelError.message}`);
+        // Fall through to return item definition
       }
     }
     
-    // 如果沒有找到庫存水平或沒有請求，則只返回品項資料
+    // 只返回品項定義資料
     res.status(200).json({
       success: true,
       data: item
     });
   } catch (error: any) {
-    console.error('獲取庫存品項時發生錯誤:', error);
+    logger.error('獲取庫存品項時發生錯誤:', { error: error.message, itemId: req.params.itemId, tenantId: res.locals.tenantId });
     res.status(500).json({
       success: false,
       error: `獲取庫存品項時發生錯誤: ${error.message || error}`
@@ -162,7 +168,7 @@ export const updateInventoryItem = async (req: Request, res: Response): Promise<
       }
     }
   } catch (error: any) {
-    console.error('更新庫存品項時發生錯誤:', error);
+    logger.error('更新庫存品項時發生錯誤:', error);
     res.status(500).json({
       success: false,
       error: `更新庫存品項時發生錯誤: ${error.message || error}`
@@ -200,7 +206,7 @@ export const deleteInventoryItem = async (req: Request, res: Response): Promise<
       }
     }
   } catch (error: any) {
-    console.error('刪除庫存品項時發生錯誤:', error);
+    logger.error('刪除庫存品項時發生錯誤:', error);
     res.status(500).json({
       success: false,
       error: `刪除庫存品項時發生錯誤: ${error.message || error}`
@@ -239,74 +245,10 @@ export const listInventoryItems = async (req: Request, res: Response): Promise<v
       pagination: result.pagination
     });
   } catch (error: any) {
-    console.error('查詢庫存品項時發生錯誤:', error);
+    logger.error('查詢庫存品項時發生錯誤:', error);
     res.status(500).json({
       success: false,
       error: `查詢庫存品項時發生錯誤: ${error.message || error}`
-    });
-  }
-};
-
-/**
- * 查詢指定分店的庫存水平列表
- * HTTP 端點: GET /inventory/stores/{storeId}/stockLevels
- */
-export const listStockLevels = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const tenantId = res.locals.tenantId;
-    const storeId = req.params.storeId;
-    
-    // 檢查商店ID是否存在
-    if (!storeId) {
-      res.status(400).json({
-        success: false,
-        error: '缺少必要參數：storeId'
-      });
-      return;
-    }
-    
-    // 檢查用戶是否有權限訪問該店鋪的資料
-    const userStoreId = res.locals.storeId;
-    if (userStoreId && userStoreId !== storeId && !res.locals.isTenantAdmin) {
-      res.status(403).json({
-        success: false,
-        error: '您沒有權限訪問該分店的庫存資料'
-      });
-      return;
-    }
-    
-    // 分頁參數
-    const page = parseInt(req.query.page as string || '1', 10);
-    const pageSize = parseInt(req.query.pageSize as string || '20', 10);
-    
-    // 過濾條件
-    const filter: StockLevelsFilter = {
-      itemId: req.query.itemId as string,
-      category: req.query.category as string,
-      name: req.query.name as string,
-      lowStock: req.query.lowStock === 'true'
-    };
-    
-    // 使用服務層獲取庫存水平
-    const result = await stockLevelService.getStoreStockLevels(
-      storeId,
-      tenantId,
-      filter,
-      page,
-      pageSize
-    );
-    
-    // 回傳結果
-    res.status(200).json({
-      success: true,
-      data: result.levels,
-      pagination: result.pagination
-    });
-  } catch (error: any) {
-    console.error('查詢庫存水平時發生錯誤:', error);
-    res.status(500).json({
-      success: false,
-      error: `查詢庫存水平時發生錯誤: ${error.message || error}`
     });
   }
 };
@@ -320,90 +262,58 @@ export const createStockAdjustment = async (req: Request, res: Response): Promis
     const adjustmentData: CreateStockAdjustmentRequest = req.body;
     const tenantId = res.locals.tenantId;
     const userId = res.locals.userId;
-    
-    // 驗證必要欄位
-    if (!adjustmentData.itemId || !adjustmentData.storeId || adjustmentData.quantityAdjusted === undefined || !adjustmentData.adjustmentType) {
+
+    if (!adjustmentData.itemId || !adjustmentData.storeId || !adjustmentData.adjustmentType || adjustmentData.quantityAdjusted === undefined) {
       res.status(400).json({
         success: false,
-        error: '缺少必要欄位：itemId, storeId, quantityAdjusted, adjustmentType'
+        error: '缺少必要欄位：itemId, storeId, adjustmentType, quantityAdjusted'
       });
       return;
     }
     
-    // 如果是移撥類型，需要檢查目標分店ID
-    if (adjustmentData.adjustmentType === StockAdjustmentType.TRANSFER && !adjustmentData.transferToStoreId) {
-      res.status(400).json({
-        success: false,
-        error: '移撥類型的調整需要指定 transferToStoreId'
-      });
-      return;
-    }
-    
-    try {
-      // 使用服務層創建庫存調整
-      const adjustment = await stockAdjustmentService.createAdjustment(
-        tenantId,
-        adjustmentData.itemId,
-        adjustmentData.storeId,
-        adjustmentData.adjustmentType,
-        adjustmentData.quantityAdjusted,
-        userId,
-        {
-          reason: adjustmentData.reason,
-          adjustmentDate: adjustmentData.adjustmentDate ? new Date(adjustmentData.adjustmentDate) : undefined,
-          transferToStoreId: adjustmentData.transferToStoreId
-        }
-      );
-      
-      // 回傳成功結果
-      res.status(201).json({
-        success: true,
-        data: adjustment
-      });
-      
-      // 記錄庫存操作事件 (非同步處理，不影響主流程)
-      try {
-        const eventData = {
-          type: 'inventory_adjustment',
-          adjustmentId: adjustment.adjustmentId,
-          itemId: adjustmentData.itemId,
-          storeId: adjustmentData.storeId,
-          adjustmentType: adjustmentData.adjustmentType,
-          quantity: adjustmentData.quantityAdjusted,
-          tenantId,
-          userId,
-          timestamp: admin.firestore.Timestamp.now().toDate()
-        };
-        
-        // 使用 await 確保事件記錄完成
-        await db.collection('events').add(eventData);
-      } catch (eventError) {
-        // 僅記錄錯誤，不影響主流程
-        console.error('記錄庫存調整事件時發生錯誤:', eventError);
-      }
-    } catch (error: any) {
-      // 處理具體業務錯誤
-      if (error.message.includes('調整後庫存數量不能為負數')) {
-        res.status(400).json({
-          success: false,
-          error: error.message
-        });
-      } else if (error.message.includes('找不到')) {
-        res.status(404).json({
-          success: false,
-          error: error.message
-        });
-      } else {
-        throw error; // 重新拋出非預期的錯誤，讓外層捕獲
-      }
-    }
-  } catch (error: any) {
-    // 整體例外處理
-    console.error('創建庫存調整時發生錯誤:', error);
-    res.status(500).json({
-      success: false,
-      error: `創建庫存調整時發生錯誤: ${error.message || error}`
+    const options: {
+      reason?: string;
+      adjustmentDate?: Date;
+      transferToStoreId?: string;
+      isInitialStock?: boolean;
+      productId?: string; 
+    } = {
+      reason: adjustmentData.reason,
+      adjustmentDate: adjustmentData.adjustmentDate ? new Date(adjustmentData.adjustmentDate) : undefined,
+      transferToStoreId: adjustmentData.transferToStoreId,
+      isInitialStock: adjustmentData.isInitialStock,
+      productId: adjustmentData.productId 
+    };
+
+    // Use the injected stockAdjustmentService and its refactored method
+    const result = await stockAdjustmentService.createAdjustment_REFACTORED(
+      tenantId,
+      adjustmentData.itemId, 
+      adjustmentData.storeId,
+      adjustmentData.adjustmentType,
+      adjustmentData.quantityAdjusted,
+      userId,
+      options
+    );
+
+    res.status(201).json({
+      success: true,
+      message: '庫存調整已成功創建。',
+      data: result 
     });
+
+  } catch (error: any) {
+    logger.error('創建庫存調整時發生錯誤:', { error: error.message, body: req.body, tenantId: res.locals.tenantId });
+    if (error.message && (error.message.includes('not found') || error.message.includes('找不到'))) {
+      res.status(404).json({ success: false, error: error.message });
+    } else if (error.message && (error.message.includes('不匹配') || error.message.includes('無效') || error.message.includes('不能為負數') || error.message.includes('mismatch'))) {
+      res.status(400).json({ success: false, error: error.message });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: `創建庫存調整時發生錯誤: ${error.message || error}`
+      });
+    }
   }
 };
 
@@ -416,27 +326,25 @@ export const getStockAdjustment = async (req: Request, res: Response): Promise<v
     const { adjustmentId } = req.params;
     const tenantId = res.locals.tenantId;
     
-    try {
-      // 使用服務層獲取調整記錄
-      const adjustment = await stockAdjustmentService.getAdjustment(adjustmentId, tenantId);
+    // Use the injected stockAdjustmentService
+    const adjustment = await stockAdjustmentService.getAdjustment(adjustmentId, tenantId);
       
-      res.status(200).json({
-        success: true,
-        data: adjustment
+    if (!adjustment) {
+      res.status(404).json({
+        success: false,
+        error: `找不到 ID 為 ${adjustmentId} 的庫存調整記錄`
       });
-    } catch (error: any) {
-      // 處理具體業務錯誤
-      if (error.message && error.message.includes('找不到')) {
-        res.status(404).json({
-          success: false,
-          error: error.message
-        });
-      } else {
-        throw error; // 重新拋出非預期的錯誤，讓外層捕獲
-      }
+      return;
     }
+
+    res.status(200).json({
+      success: true,
+      data: adjustment
+    });
+
   } catch (error: any) {
-    console.error('獲取庫存調整記錄時發生錯誤:', error);
+    logger.error('獲取庫存調整記錄時發生錯誤:', { error: error.message, params: req.params, tenantId: res.locals.tenantId });
+    // Simplified error handling here, specific service errors (like not found) should be handled if service throws them
     res.status(500).json({
       success: false,
       error: `獲取庫存調整記錄時發生錯誤: ${error.message || error}`
@@ -451,12 +359,9 @@ export const getStockAdjustment = async (req: Request, res: Response): Promise<v
 export const listStockAdjustments = async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = res.locals.tenantId;
-    
-    // 分頁參數
     const page = parseInt(req.query.page as string || '1', 10);
     const pageSize = parseInt(req.query.pageSize as string || '20', 10);
     
-    // 過濾條件
     const filter: StockAdjustmentsFilter = {
       itemId: req.query.itemId as string,
       storeId: req.query.storeId as string,
@@ -466,7 +371,7 @@ export const listStockAdjustments = async (req: Request, res: Response): Promise
       operatorId: req.query.operatorId as string
     };
     
-    // 使用服務層獲取調整記錄
+    // Use the injected stockAdjustmentService
     const result = await stockAdjustmentService.listAdjustments(
       tenantId,
       filter,
@@ -474,14 +379,13 @@ export const listStockAdjustments = async (req: Request, res: Response): Promise
       pageSize
     );
     
-    // 回傳結果
     res.status(200).json({
       success: true,
       data: result.adjustments,
       pagination: result.pagination
     });
   } catch (error: any) {
-    console.error('查詢庫存調整記錄時發生錯誤:', error);
+    logger.error('查詢庫存調整記錄時發生錯誤:', { error: error.message, query: req.query, tenantId: res.locals.tenantId });
     res.status(500).json({
       success: false,
       error: `查詢庫存調整記錄時發生錯誤: ${error.message || error}`
@@ -490,145 +394,55 @@ export const listStockAdjustments = async (req: Request, res: Response): Promise
 };
 
 /**
- * 設置或更新庫存水平
- * HTTP 端點: PUT /inventory/items/:itemId/stock-levels/:storeId
+ * 設置或更新菜單項的庫存水平 (直接操作 menuItems 集合)
+ * HTTP 端點: PUT /inventory/items/:itemId/stock-levels/:storeId 
+ * Note: itemId here refers to the document ID in the 'menuItems' collection.
  */
 export const upsertStockLevel = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { itemId, storeId } = req.params;
-    const stockData: UpsertStockLevelRequest = req.body;
+    const { itemId, storeId } = req.params; 
+    const data: UpsertStockLevelRequest = req.body; // UpsertStockLevelRequest from inventory.types.ts has { quantity, lowStockThreshold?, reason? }
     const tenantId = res.locals.tenantId;
     const userId = res.locals.userId;
-    
-    // 驗證必要欄位
-    if (stockData.quantity === undefined) {
-      res.status(400).json({
-        success: false,
-        error: '缺少必要欄位：quantity'
-      });
-      return;
-    }
-    
-    try {
-      // 使用服務層更新庫存水平
-      const updatedLevel = await stockLevelService.upsertStockLevel(
-        itemId,
-        storeId,
-        tenantId,
-        stockData.quantity,
-        stockData.lowStockThreshold,
-        userId
-      );
-      
-      // 如果更新了庫存水平，創建一條調整記錄
-      // 注意: 對比舊版實現，這裡需要知道原始數量來計算變更，但 upsertStockLevel 方法不會返回這個資訊
-      // 為簡化代碼，直接使用 stockAdjustmentService 來建立記錄
-      const adjustmentType = StockAdjustmentType.STOCK_COUNT;
-      const reason = '庫存水平更新';
-      
-      try {
-        await stockAdjustmentService.createAdjustment(
-          tenantId,
-          itemId,
-          storeId,
-          adjustmentType,
-          0, // 這裡會在服務層自動計算差值
-          userId,
-          {
-            reason,
-            adjustmentDate: new Date()
-          }
-        );
-      } catch (adjustError) {
-        console.error('創建庫存調整記錄時發生錯誤:', adjustError);
-        // 不影響主流程
-      }
-      
-      // 回傳更新或創建的數據
-      res.status(updatedLevel ? 200 : 201).json({
-        success: true,
-        data: updatedLevel
-      });
-    } catch (error: any) {
-      // 處理具體業務錯誤
-      if (error.message && error.message.includes('找不到')) {
-        res.status(404).json({
-          success: false,
-          error: error.message
-        });
-      } else {
-        throw error; // 重新拋出非預期的錯誤，讓外層捕獲
-      }
-    }
-  } catch (error: any) {
-    console.error('更新庫存水平時發生錯誤:', error);
-    res.status(500).json({
-      success: false,
-      error: `更新庫存水平時發生錯誤: ${error.message || error}`
-    });
-  }
-};
 
-/**
- * 獲取特定店鋪的庫存水平
- * HTTP 端點: GET /inventory/stock-levels/:storeId
- */
-export const getStoreStockLevels = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { storeId } = req.params;
-    const tenantId = res.locals.tenantId;
-    
-    // 檢查商店ID是否存在
-    if (!storeId) {
-      res.status(400).json({
-        success: false,
-        error: '缺少必要參數：storeId'
-      });
+    if (!itemId || !storeId) {
+      res.status(400).json({ success: false, error: 'itemId 和 storeId 是必要的路徑參數。' });
+      return;
+    }
+
+    if (data.quantity === undefined || data.quantity === null) {
+      res.status(400).json({ success: false, error: 'quantity 是必要的請求內容。' });
       return;
     }
     
-    // 檢查用戶是否有權限訪問該店鋪的資料
-    const userStoreId = res.locals.storeId;
-    if (userStoreId && userStoreId !== storeId && !res.locals.isTenantAdmin) {
-      res.status(403).json({
-        success: false,
-        error: '您沒有權限訪問該分店的庫存資料'
-      });
-      return;
-    }
-    
-    // 過濾條件
-    const filter: StockLevelsFilter = {
-      itemId: req.query.itemId as string,
-      category: req.query.category as string,
-      name: req.query.name as string,
-      lowStock: req.query.lowStock === 'true'
-    };
-    
-    // 分頁參數
-    const page = parseInt(req.query.page as string || '1', 10);
-    const pageSize = parseInt(req.query.pageSize as string || '20', 10);
-    
-    // 使用服務層獲取庫存水平
-    const result = await stockLevelService.getStoreStockLevels(
+    const updatedStockLevelInfo = await stockLevelService.upsertStockLevel_REFACTORED(
+      itemId, 
       storeId,
       tenantId,
-      filter,
-      page,
-      pageSize
+      data.quantity,
+      data.lowStockThreshold,
+      userId,
+      data.reason || '手動庫存水平設置 (Handler)' // Pass reason from request if available
     );
-    
-    // 回傳結果
+
     res.status(200).json({
       success: true,
-      data: result.levels,
-      pagination: result.pagination
+      message: '菜單項庫存水平已成功更新。',
+      data: updatedStockLevelInfo 
     });
+
   } catch (error: any) {
-    console.error('獲取店鋪庫存水平時發生錯誤:', error);
-    res.status(500).json({
-      success: false,
-      error: `獲取店鋪庫存水平時發生錯誤: ${error.message || error}`
-    });
+    logger.error('更新/設置菜單項庫存水平時發生錯誤:', { error: error.message, params: req.params, body: req.body, tenantId: res.locals.tenantId });
+    if (error.message && (error.message.includes('not found') || error.message.includes('找不到'))) {
+      res.status(404).json({ success: false, error: error.message });
+    } else if (error.message && error.message.includes('mismatch')) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+    else {
+      res.status(500).json({
+        success: false,
+        error: `更新/設置菜單項庫存水平時發生錯誤: ${error.message || error}`
+      });
+    }
   }
 }; 

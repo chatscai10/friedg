@@ -1,334 +1,138 @@
 /**
- * 庫存水平服務
+ * 庫存水平服務 (重構後)
  * 
- * 處理庫存水平的業務邏輯
+ * 主要職責: 更新 menuItems 集合中單個菜單項的庫存水平。
+ * 舊的針對 stockLevels 集合的操作方法已被移除。
  */
-import { StockLevel, StockLevelsFilter } from '../inventory.types';
-import { StockLevelRepository } from '../repositories/stock-level.repository';
-import { InventoryItemService } from './inventory-item.service';
-import { MemoryCache } from '../cache/memory-cache';
-import { validateStockLevel } from '../utils/validators';
-import { NegativeStockError, TransactionTooLargeError } from '../utils/errors';
-import { processBatches } from '../utils/batch-processor';
+// import { StockLevel, StockLevelsFilter } from '../inventory.types'; // StockLevel no longer primary entity here
+// import { StockLevelRepository } from '../repositories/stock-level.repository'; // Repository for stockLevels collection, to be removed
+// import { InventoryItemService } from './inventory-item.service'; // Not directly used by upsertStockLevel_REFACTORED
+import { StockAdjustmentService } from './stock-adjustment.service';
+import { MemoryCache } from '../../../utils/memory-cache'; // Corrected path
+// import { validateStockLevel } from '../utils/validators';
+// import { NegativeStockError, TransactionTooLargeError } from '../utils/errors';
+// import { processBatches } from '../utils/batch-processor';
+import * as admin from 'firebase-admin';
+import { logger } from '../../logger';
+import { StockAdjustmentType } from '../inventory.types'; // Keep for StockAdjustmentType
+
+const db = admin.firestore();
 
 export class StockLevelService {
-  private stockLevelCache: MemoryCache<StockLevel>;
-  private listCache: MemoryCache<any>;
-  
+  // StockLevelRepository and InventoryItemService removed from constructor if not used by remaining methods
   constructor(
-    private repository: StockLevelRepository,
-    private inventoryItemService: InventoryItemService
-  ) {
-    this.stockLevelCache = new MemoryCache<StockLevel>(300); // 5分鐘
-    this.listCache = new MemoryCache<any>(60); // 1分鐘
-  }
+    private stockAdjustmentService: StockAdjustmentService,
+    // Caches might still be useful if we add read methods for menuItem stock, but for now, only upsert exists.
+    // private stockLevelCache: MemoryCache<any>, // Type would change from StockLevel
+    // private listCache: MemoryCache<any>
+  ) {}
   
+  // All old methods (upsertStockLevel, getStockLevel, getStoreStockLevels, batchGetStockLevels, batchUpdateStockLevels) are REMOVED.
+
   /**
-   * 獲取或更新庫存水平
+   * [REFACTORED] 更新 Firestore 中 `menuItems` 集合內特定菜單項的庫存水平。
+   *
+   * 此方法通過事務執行以下操作：
+   * 1. 驗證目標 `menuItem` 是否存在及其 `storeId` 和 `tenantId` 是否匹配。
+   * 2. 更新 `menuItem` 文檔中的嵌套 `stock` 對象字段 (`stock.current`, `stock.manageStock`, `stock.lowStockThreshold`)。
+   * 3. 調用 `StockAdjustmentService.createAdjustmentRecordInTransaction_REFACTORED` 來記錄庫存調整。
+   *
+   * @param itemId - 菜單品項的文檔ID (在 `menuItems` 集合中)。
+   * @param storeId - 菜單品項所屬的商店ID。
+   * @param tenantId - 租戶ID。
+   * @param quantity - 更新後的絕對庫存數量。
+   * @param lowStockThreshold - (可選) 低庫存閾值。如果未提供，則保留現有值（如果存在）。
+   * @param userId - (可選) 執行操作的用戶ID。
+   * @param reason - (可選) 本次庫存設定的原因，用於調整記錄。默認為 'Manual stock level set'。
+   * @returns Promise resolving to an object containing the updated stock details.
+   * @throws Error - 如果菜單項未找到、商店ID或租戶ID不匹配，或StockAdjustmentService不可用。
    */
-  async upsertStockLevel(
+  async upsertStockLevel_REFACTORED(
     itemId: string, 
     storeId: string, 
     tenantId: string, 
-    quantity: number, 
+    quantity: number, // Absolute new quantity
     lowStockThreshold?: number,
-    userId?: string
+    userId?: string,
+    reason: string = 'Manual stock level set'
   ) {
-    // 驗證庫存數量
-    if (quantity < 0) {
-      throw new NegativeStockError(itemId, storeId);
-    }
-    
-    // 檢查品項是否存在
-    const item = await this.inventoryItemService.getItem(itemId, tenantId);
-    if (!item) {
-      throw new Error(`找不到 ID 為 ${itemId} 的庫存品項`);
-    }
-    
-    // 如果未指定低庫存閾值，使用品項預設值
-    if (lowStockThreshold === undefined) {
-      lowStockThreshold = item.lowStockThreshold;
-    }
-    
-    // 更新庫存水平
-    const updatedLevel = await this.repository.upsertStockLevel(
-      itemId, 
-      storeId, 
-      tenantId, 
-      quantity, 
-      lowStockThreshold,
-      userId
-    );
-    
-    // 更新緩存
-    const cacheKey = `stocklevel_${tenantId}_${storeId}_${itemId}`;
-    this.stockLevelCache.set(cacheKey, updatedLevel);
-    
-    // 清除相關列表緩存
-    this.listCache.invalidateByPrefix(`stocklevels_${tenantId}`);
-    
-    return updatedLevel;
-  }
-  
-  /**
-   * 獲取特定品項的庫存水平
-   */
-  async getStockLevel(itemId: string, storeId: string, tenantId: string): Promise<StockLevel | null> {
-    const cacheKey = `stocklevel_${tenantId}_${storeId}_${itemId}`;
-    
-    // 檢查緩存
-    const cachedLevel = this.stockLevelCache.get(cacheKey);
-    if (cachedLevel) {
-      return cachedLevel;
-    }
-    
-    // 從儲存庫獲取
-    const stockLevel = await this.repository.getStockLevel(itemId, storeId, tenantId);
-    
-    // 存入緩存
-    if (stockLevel) {
-      this.stockLevelCache.set(cacheKey, stockLevel);
-    }
-    
-    return stockLevel;
-  }
-  
-  /**
-   * 獲取特定分店的庫存水平
-   */
-  async getStoreStockLevels(
-    storeId: string, 
-    tenantId: string, 
-    filter: StockLevelsFilter = {},
-    page = 1, 
-    pageSize = 20
-  ) {
-    // 構建緩存鍵
-    const filterKey = JSON.stringify(filter);
-    const cacheKey = `stocklevels_${tenantId}_${storeId}_${filterKey}_p${page}_s${pageSize}`;
-    
-    // 檢查緩存
-    const cachedResult = this.listCache.get(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-    
-    // 從儲存庫獲取基礎數據
-    const stockLevelsResult = await this.repository.getStoreStockLevels(
-      storeId, 
-      tenantId, 
-      filter,
-      page, 
-      pageSize
-    );
-    
-    // 如果沒有數據，直接返回
-    if (!stockLevelsResult.levels.length) {
-      return stockLevelsResult;
-    }
-    
-    // 收集所有不重複的商品ID
-    const itemIds = [...new Set(stockLevelsResult.levels.map(level => level.itemId))];
-    
-    // 獲取所有品項的詳情
-    const itemsMap = await this.inventoryItemService.batchGetItems(itemIds, tenantId);
-    
-    // 組合庫存水平和品項詳情
-    const levels = stockLevelsResult.levels.map(level => ({
-      ...level,
-      item: itemsMap[level.itemId] || null
-    }));
-    
-    // 應用更多過濾條件
-    let filteredLevels = levels;
-    
-    if (filter.category) {
-      filteredLevels = filteredLevels.filter(item => 
-        item.item && item.item.category === filter.category
-      );
-    }
-    
-    if (filter.name) {
-      const searchTerm = filter.name.toLowerCase();
-      filteredLevels = filteredLevels.filter(item => 
-        item.item && (
-          item.item.name.toLowerCase().includes(searchTerm) || 
-          (item.item.description && item.item.description.toLowerCase().includes(searchTerm))
-        )
-      );
-    }
-    
-    if (filter.lowStock) {
-      filteredLevels = filteredLevels.filter(item => {
-        const itemLowThreshold = item.item?.lowStockThreshold || 0;
-        const levelLowThreshold = item.lowStockThreshold || itemLowThreshold;
-        return item.quantity < levelLowThreshold;
-      });
-    }
-    
-    const result = {
-      levels: filteredLevels,
-      pagination: stockLevelsResult.pagination
-    };
-    
-    // 存入緩存
-    this.listCache.set(cacheKey, result);
-    
-    return result;
-  }
-  
-  /**
-   * 批量獲取多個商品的庫存水平
-   */
-  async batchGetStockLevels(
-    itemIds: string[], 
-    storeId: string | null, 
-    tenantId: string
-  ): Promise<Record<string, StockLevel[]>> {
-    // 檢查空數組
-    if (!itemIds.length) return {};
-    
-    const stockLevelMap: Record<string, StockLevel[]> = {};
-    
-    // 檢查緩存
-    if (storeId) {
-      for (const itemId of itemIds) {
-        const cacheKey = `stocklevel_${tenantId}_${storeId}_${itemId}`;
-        const cachedLevel = this.stockLevelCache.get(cacheKey);
-        
-        if (cachedLevel) {
-          if (!stockLevelMap[itemId]) {
-            stockLevelMap[itemId] = [];
-          }
-          stockLevelMap[itemId].push(cachedLevel);
-        }
-      }
-    }
-    
-    // 獲取所有品項的庫存水平
-    const dbStockLevelMap = await this.repository.batchGetStockLevels(
-      itemIds, 
-      storeId, 
-      tenantId
-    );
-    
-    // 合併結果並更新緩存
-    for (const [itemId, levels] of Object.entries(dbStockLevelMap)) {
-      // 更新緩存
-      if (storeId && levels.length === 1) {
-        const level = levels[0];
-        const cacheKey = `stocklevel_${tenantId}_${storeId}_${itemId}`;
-        this.stockLevelCache.set(cacheKey, level);
-      }
-      
-      // 合併到結果map
-      if (!stockLevelMap[itemId]) {
-        stockLevelMap[itemId] = [];
-      }
-      
-      // 過濾掉可能重複的項目
-      for (const level of levels) {
-        if (!stockLevelMap[itemId].some(l => l.stockLevelId === level.stockLevelId)) {
-          stockLevelMap[itemId].push(level);
-        }
-      }
-    }
-    
-    return stockLevelMap;
-  }
+    const menuItemRef = db.collection('menuItems').doc(itemId);
+    const now = admin.firestore.Timestamp.now();
 
-  /**
-   * 批量更新庫存水平
-   */
-  async batchUpdateStockLevels(
-    tenantId: string,
-    items: {
-      itemId: string;
-      storeId: string;
-      quantity: number;
-      lowStockThreshold?: number;
-    }[],
-    userId: string,
-    reason?: string
-  ) {
-    // 檢查空數組
-    if (!items.length) {
-      return {
-        success: true,
-        results: [],
-        successCount: 0,
-        failureCount: 0
+    return db.runTransaction(async transaction => {
+      const menuItemDoc = await transaction.get(menuItemRef);
+
+      if (!menuItemDoc.exists) {
+        logger.error(`[upsertStockLevel_REFACTORED] MenuItem with ID ${itemId} not found.`);
+        throw new Error(`[RefactoredUpsert] Menu item with ID ${itemId} not found.`);
+      }
+
+      const menuItemData = menuItemDoc.data() as { 
+        storeId?: string; 
+        tenantId?: string; 
+        stock?: { current?: number; lowStockThreshold?: number; manageStock?: boolean }; 
+        updatedAt?: admin.firestore.Timestamp;
       };
-    }
-    
-    // 檢查批次大小
-    if (items.length > 500) {
-      throw new TransactionTooLargeError();
-    }
-    
-    // 使用批次處理工具處理
-    const batchResults = await processBatches(
-      items,
-      batchItems => this.processBatchUpdateStockLevels(tenantId, batchItems, userId, reason),
-      20 // 每批最多20個
-    );
-    
-    // 合併結果
-    const results = batchResults.flatMap(r => r.results);
-    const successCount = batchResults.reduce((sum, r) => sum + r.successCount, 0);
-    const failureCount = batchResults.reduce((sum, r) => sum + r.failureCount, 0);
-    
-    // 清除相關列表緩存
-    this.listCache.invalidateByPrefix(`stocklevels_${tenantId}`);
-    
-    return {
-      success: failureCount === 0,
-      results,
-      successCount,
-      failureCount
-    };
-  }
-  
-  /**
-   * 處理單個批次的庫存水平更新
-   * @private
-   */
-  private async processBatchUpdateStockLevels(
-    tenantId: string,
-    items: {
-      itemId: string;
-      storeId: string;
-      quantity: number;
-      lowStockThreshold?: number;
-    }[],
-    userId: string,
-    reason?: string
-  ) {
-    // 收集所有要更新的品項ID
-    const itemIds = [...new Set(items.map(item => item.itemId))];
-    
-    // 批量獲取品項信息
-    const itemsMap = await this.inventoryItemService.batchGetItems(itemIds, tenantId);
-    
-    // 檢查所有品項是否存在
-    const missingItemIds = itemIds.filter(id => !itemsMap[id]);
-    if (missingItemIds.length > 0) {
-      throw new Error(`找不到以下品項: ${missingItemIds.join(', ')}`);
-    }
-    
-    // 使用儲存庫執行事務處理
-    const result = await this.repository.batchUpdateStockLevels(
-      tenantId,
-      items,
-      userId
-    );
-    
-    // 清除相關緩存
-    for (const item of items) {
-      const cacheKey = `stocklevel_${tenantId}_${item.storeId}_${item.itemId}`;
-      this.stockLevelCache.delete(cacheKey);
-    }
-    
-    return result;
+
+      // Validate storeId and tenantId before proceeding
+      if (menuItemData.storeId !== storeId) {
+        logger.error(`[upsertStockLevel_REFACTORED] MenuItem ${itemId} storeId mismatch. Expected: ${storeId}, Actual: ${menuItemData.storeId}`);
+        throw new Error(`[RefactoredUpsert] Menu item ${itemId} is associated with store ${menuItemData.storeId}, not target store ${storeId}.`);
+      }
+      if (menuItemData.tenantId !== tenantId) {
+        logger.error(`[upsertStockLevel_REFACTORED] MenuItem ${itemId} tenantId mismatch. Expected: ${tenantId}, Actual: ${menuItemData.tenantId}`);
+        throw new Error(`[RefactoredUpsert] Menu item ${itemId} tenant mismatch. Expected ${tenantId}, got ${menuItemData.tenantId}.`);
+      }
+
+      const oldQuantity = menuItemData.stock?.current || 0;
+      const quantityAdjusted = quantity - oldQuantity;
+
+      const updatePayload: any = {
+        'updatedAt': now,
+        'stock.current': quantity,
+        'stock.manageStock': true, // Default to true when directly setting stock level
+      };
+
+      if (lowStockThreshold !== undefined) {
+        updatePayload['stock.lowStockThreshold'] = lowStockThreshold;
+      } else if (menuItemData.stock?.lowStockThreshold !== undefined) {
+        // If not provided in args, but exists in doc, preserve it.
+        updatePayload['stock.lowStockThreshold'] = menuItemData.stock.lowStockThreshold;
+      } // If not in args and not in doc, it won't be set (which is fine, can be undefined)
+
+      transaction.update(menuItemRef, updatePayload);
+      logger.info(`[upsertStockLevel_REFACTORED] Stock for menuItem ${itemId} in store ${storeId} updated. New quantity: ${quantity}, LowThreshold: ${updatePayload['stock.lowStockThreshold']}`);
+
+      if (this.stockAdjustmentService && typeof this.stockAdjustmentService.createAdjustmentRecordInTransaction_REFACTORED === 'function') {
+        await this.stockAdjustmentService.createAdjustmentRecordInTransaction_REFACTORED(transaction, {
+          itemId,
+          storeId,
+          tenantId,
+          adjustmentType: StockAdjustmentType.STOCK_COUNT, // This type implies a direct setting of stock level
+          quantityAdjusted: quantityAdjusted, 
+          beforeQuantity: oldQuantity,
+          afterQuantity: quantity,
+          reason: reason,
+          adjustmentDate: now.toDate(),
+          operatorId: userId || 'system_stock_set' // Changed operatorId for clarity
+        });
+        logger.info(`[upsertStockLevel_REFACTORED] Stock adjustment record created for menuItem ${itemId}, store ${storeId}.`);
+      } else {
+        logger.warn(`[upsertStockLevel_REFACTORED] stockAdjustmentService.createAdjustmentRecordInTransaction_REFACTORED is not available. Adjustment record NOT created.`);
+        // Critical dependency, should throw if service is expected but not available
+        throw new Error('StockAdjustmentService is not available for creating adjustment record during stock level update.'); 
+      }
+      
+      return {
+        itemId: itemId,
+        storeId: storeId,
+        tenantId: tenantId,
+        quantity: quantity,
+        lowStockThreshold: updatePayload['stock.lowStockThreshold'],
+        manageStock: updatePayload['stock.manageStock'], // Return the effective manageStock status
+        lastUpdated: now.toDate(),
+        lastUpdatedBy: userId || 'system_stock_set'
+      };
+    });
   }
 } 

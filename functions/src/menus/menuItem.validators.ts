@@ -41,21 +41,27 @@ export const NutritionInfoSchema = z.object({
 export type NutritionInfo = z.infer<typeof NutritionInfoSchema>;
 
 /**
+ * 菜單品項 - 嵌套庫存對象 schema
+ */
+const StockObjectSchema = z.object({
+  current: z.number().int().min(0, '庫存數量不能為負數').optional(),
+  manageStock: z.boolean().optional(),
+  lowStockThreshold: z.number().int().min(0, '低庫存閾值不能為負數').optional(),
+});
+
+/**
  * 菜單品項輸入 schema
  */
 export const MenuItemInputSchema = z.object({
   name: z.string().min(1, '菜單品項名稱不能為空').max(100, '菜單品項名稱不能超過100個字元'),
   description: z.string().max(500, '描述不能超過500個字元').optional(),
   categoryId: z.string().min(1, '必須指定菜單分類ID'),
+  storeId: z.string().optional(),
   price: z.number().min(0, '價格不能為負數'),
   discountPrice: z.number().min(0, '折扣價格不能為負數').optional(),
   costPrice: z.number().min(0, '成本價格不能為負數').optional(),
   imageUrl: z.string().url('圖片URL格式不正確').optional(),
   thumbnailUrl: z.string().url('縮略圖URL格式不正確').optional(),
-  stockStatus: z.enum(['in_stock', 'low_stock', 'out_of_stock'], {
-    errorMap: () => ({ message: '庫存狀態必須是有效的選項' })
-  }).default('in_stock'),
-  stockQuantity: z.number().int().min(0, '庫存數量不能為負數').optional(),
   unit: z.string().max(20, '單位不能超過20個字元').optional(),
   preparationTime: z.number().int().min(0, '準備時間不能為負數').optional(),
   displayOrder: z.number().int().min(0, '顯示順序不能為負數').optional().default(0),
@@ -65,6 +71,7 @@ export const MenuItemInputSchema = z.object({
   nutritionInfo: NutritionInfoSchema.optional(),
   optionGroups: z.array(MenuItemOptionGroupSchema).optional(),
   tags: z.array(z.string()).optional(),
+  stock: StockObjectSchema.optional(),
 }).strict();
 
 export type MenuItemInput = z.infer<typeof MenuItemInputSchema>;
@@ -79,13 +86,10 @@ export type UpdateMenuItemInput = z.infer<typeof UpdateMenuItemInputSchema>;
 
 /**
  * 菜單品項狀態更新 schema
+ * Focus on non-stock status updates.
  */
 export const MenuItemStatusUpdateSchema = z.object({
   isActive: z.boolean().optional(),
-  stockStatus: z.enum(['in_stock', 'low_stock', 'out_of_stock'], {
-    errorMap: () => ({ message: '庫存狀態必須是有效的選項' })
-  }).optional(),
-  stockQuantity: z.number().int().min(0, '庫存數量不能為負數').optional(),
   isRecommended: z.boolean().optional(),
   isSpecial: z.boolean().optional(),
 }).strict();

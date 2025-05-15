@@ -12,7 +12,6 @@ import {
   deleteInventoryItem, 
   listInventoryItems,
   upsertStockLevel,
-  getStoreStockLevels,
   createStockAdjustment,
   getStockAdjustment,
   listStockAdjustments
@@ -27,7 +26,6 @@ import {
   StockLevelParamsSchema,
   StockAdjustmentParamsSchema,
   ListInventoryItemsSchema,
-  ListStockLevelsSchema,
   ListStockAdjustmentsSchema
 } from './schemas/inventory.schema';
 
@@ -69,12 +67,6 @@ router.put('/items/:itemId/stock-levels/:storeId',
   withPermissionCheck('inventory:update'), 
   validateRequest({ params: StockLevelParamsSchema, body: UpsertStockLevelSchema }),
   upsertStockLevel
-);
-
-router.get('/stock-levels/:storeId', 
-  withPermissionCheck('inventory:read'), 
-  validateRequest({ params: { storeId: StockLevelParamsSchema.shape.storeId }, query: ListStockLevelsSchema.omit({ storeId: true }) }),
-  getStoreStockLevels
 );
 
 // 庫存調整路由

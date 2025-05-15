@@ -118,18 +118,7 @@ export const ListInventoryItemsSchema = z.object({
   name: z.string().optional(),
   lowStock: z.boolean().optional(),
   isActive: z.boolean().optional(),
-  storeId: z.string().optional()
-}).merge(paginationSchema);
-
-/**
- * 庫存水平查詢參數 Schema
- */
-export const ListStockLevelsSchema = z.object({
-  storeId: z.string().min(1, "分店ID不能為空"),
-  itemId: z.string().optional(),
-  category: z.string().optional(),
-  name: z.string().optional(),
-  lowStock: z.boolean().optional()
+  storeId: z.string().optional() // Used to potentially filter inventory items if they have a primary store or to join with stock info
 }).merge(paginationSchema);
 
 /**

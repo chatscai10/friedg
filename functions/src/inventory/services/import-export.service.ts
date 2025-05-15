@@ -17,7 +17,6 @@ import {
 import { validateInventoryItem } from '../utils/validators';
 import { BatchOperationService } from './batch-operation.service';
 import { InventoryItemService } from './inventory-item.service';
-import { StockLevelService } from './stock-level.service';
 import { cacheManager, CachePrefix } from '../cache/cache-manager';
 
 /**
@@ -55,24 +54,6 @@ export interface InventoryItemImport {
   barcode?: string;
   /** 自定義欄位 */
   [key: string]: any;
-}
-
-/**
- * 庫存水平導入數據
- */
-export interface StockLevelImport {
-  /** 品項ID */
-  itemId: string;
-  /** 店鋪ID */
-  storeId: string;
-  /** 庫存數量 */
-  quantity: number;
-  /** 低庫存閾值 */
-  lowStockThreshold?: number;
-  /** 庫位 */
-  location?: string;
-  /** 上次盤點日期 */
-  lastStockTakeDate?: Date;
 }
 
 /**
@@ -140,7 +121,6 @@ export class ImportExportService {
   
   constructor(
     private inventoryItemService: InventoryItemService,
-    private stockLevelService: StockLevelService
   ) {
     this.batchOperationService = new BatchOperationService();
   }
@@ -186,50 +166,6 @@ export class ImportExportService {
       
       // 根據格式導出
       return this.exportDataToFormat(processedItems, format, options);
-    }, errorContext);
-  }
-  
-  /**
-   * 導出庫存水平數據
-   * @param tenantId 租戶ID
-   * @param format 導出格式
-   * @param options 導出選項
-   */
-  async exportStockLevels(
-    tenantId: string,
-    format: ExportFormat = 'json',
-    options: ExportOptions = {}
-  ): Promise<string | Buffer> {
-    const errorContext: ErrorContext = {
-      component: 'ImportExportService',
-      operation: '導出庫存水平',
-      identity: { tenantId }
-    };
-    
-    return withErrorHandling(async () => {
-      // 檢查配額
-      await quotaLimiter.enforceQuota(
-        QuotaType.OPERATIONS_PER_MINUTE, 
-        tenantId,
-        '導出操作超出每分鐘限制'
-      );
-      
-      // 獲取所有庫存水平
-      const allStockLevels = await this.fetchAllStockLevels(
-        tenantId, 
-        options.includeDeleted,
-        options.maxRecords
-      );
-      
-      // 過濾欄位
-      const processedStockLevels = this.processItemsForExport(
-        allStockLevels, 
-        options.includeFields, 
-        options.excludeFields
-      );
-      
-      // 根據格式導出
-      return this.exportDataToFormat(processedStockLevels, format, options);
     }, errorContext);
   }
   
@@ -284,57 +220,6 @@ export class ImportExportService {
     }, errorContext);
   }
   
-  /**
-   * 導入庫存水平數據
-   * @param tenantId 租戶ID
-   * @param userId 操作用戶ID
-   * @param data 要導入的數據
-   * @param format 數據格式
-   * @param options 導入選項
-   */
-  async importStockLevels(
-    tenantId: string,
-    userId: string,
-    data: string | Buffer,
-    format: ExportFormat = 'json',
-    options: ImportOptions = {}
-  ): Promise<ImportResult> {
-    const errorContext: ErrorContext = {
-      component: 'ImportExportService',
-      operation: '導入庫存水平',
-      identity: { tenantId, userId }
-    };
-    
-    return withErrorHandling(async () => {
-      // 檢查配額
-      await quotaLimiter.enforceQuota(
-        QuotaType.OPERATIONS_PER_MINUTE, 
-        tenantId,
-        '導入操作超出每分鐘限制'
-      );
-      
-      // 解析導入數據
-      const stockLevelsToImport: StockLevelImport[] = this.parseImportData(
-        data, 
-        format, 
-        options
-      );
-      
-      // 檢查批量大小
-      if (stockLevelsToImport.length > 500) {
-        throw new TransactionTooLargeError();
-      }
-      
-      // 執行導入
-      return await this.processStockLevelsImport(
-        tenantId,
-        userId,
-        stockLevelsToImport,
-        options
-      );
-    }, errorContext);
-  }
-  
   // #region 導出輔助方法
   
   /**
@@ -348,63 +233,24 @@ export class ImportExportService {
   ): Promise<any[]> {
     const items: any[] = [];
     let page = 1;
-    const pageSize = 100;
+    const pageSize = 200;
     let hasMore = true;
     
     while (hasMore && items.length < maxRecords) {
-      const result = await this.inventoryItemService.listItems(
-        tenantId, 
-        {}, 
-        page, 
-        pageSize,
-        includeDeleted
-      );
-      
-      items.push(...result.items);
-      hasMore = result.hasMore;
-      page++;
-      
+      const result = await this.inventoryItemService.listItems(tenantId, { isActive: includeDeleted ? undefined : true }, page, pageSize);
+      if (result.items && result.items.length > 0) {
+        items.push(...result.items);
+        page++;
+        hasMore = items.length < result.pagination.total && result.items.length === pageSize;
+      } else {
+        hasMore = false;
+      }
       if (items.length >= maxRecords) {
-        break;
+        hasMore = false;
       }
     }
     
     return items.slice(0, maxRecords);
-  }
-  
-  /**
-   * 獲取所有庫存水平
-   * @private
-   */
-  private async fetchAllStockLevels(
-    tenantId: string,
-    includeDeleted: boolean = false,
-    maxRecords: number = 10000
-  ): Promise<any[]> {
-    const stockLevels: any[] = [];
-    let page = 1;
-    const pageSize = 100;
-    let hasMore = true;
-    
-    while (hasMore && stockLevels.length < maxRecords) {
-      const result = await this.stockLevelService.listStockLevels(
-        tenantId, 
-        {}, 
-        page, 
-        pageSize,
-        includeDeleted
-      );
-      
-      stockLevels.push(...result.items);
-      hasMore = result.hasMore;
-      page++;
-      
-      if (stockLevels.length >= maxRecords) {
-        break;
-      }
-    }
-    
-    return stockLevels.slice(0, maxRecords);
   }
   
   /**
@@ -678,180 +524,6 @@ export class ImportExportService {
     cacheManager.invalidateByPrefix(`${CachePrefix.LIST}inventoryItems_${tenantId}`);
     
     return result;
-  }
-  
-  /**
-   * 處理庫存水平導入
-   * @private
-   */
-  private async processStockLevelsImport(
-    tenantId: string,
-    userId: string,
-    stockLevels: StockLevelImport[],
-    options: ImportOptions
-  ): Promise<ImportResult> {
-    // 初始化結果
-    const result: ImportResult = {
-      totalCount: stockLevels.length,
-      successCount: 0,
-      failureCount: 0,
-      createdCount: 0,
-      updatedCount: 0,
-      skippedCount: 0,
-      errors: []
-    };
-    
-    // 獲取所有相關品項
-    const itemIds = [...new Set(stockLevels.map(sl => sl.itemId))];
-    let itemsMap: Record<string, any> = {};
-    
-    if (itemIds.length > 0) {
-      itemsMap = await this.inventoryItemService.batchGetItems(itemIds, tenantId);
-    }
-    
-    // 檢查品項存在
-    const validStockLevels: StockLevelImport[] = [];
-    const missingItems: { itemId: string; stockLevel: StockLevelImport }[] = [];
-    
-    for (let i = 0; i < stockLevels.length; i++) {
-      const stockLevel = stockLevels[i];
-      
-      if (!itemsMap[stockLevel.itemId]) {
-        if (options.createReferences) {
-          // 記錄缺失的品項，稍後創建
-          missingItems.push({ itemId: stockLevel.itemId, stockLevel });
-        } else {
-          // 記錄缺失品項錯誤
-          result.skippedCount++;
-          result.errors?.push({
-            index: i,
-            record: stockLevel,
-            message: `品項 ${stockLevel.itemId} 不存在`
-          });
-          continue;
-        }
-      }
-      
-      validStockLevels.push(stockLevel);
-    }
-    
-    // 如果需要，創建缺失的品項
-    if (options.createReferences && missingItems.length > 0) {
-      await this.createMissingItems(tenantId, userId, missingItems, result);
-    }
-    
-    // 處理導入
-    const batchResult = await this.batchOperationService.executeBatchWrite(
-      validStockLevels,
-      async (batch) => {
-        const results = [];
-        
-        for (const stockLevel of batch) {
-          try {
-            // 更新或創建庫存水平
-            const updatedStockLevel = await this.stockLevelService.setStockLevel(
-              stockLevel.itemId,
-              stockLevel.storeId,
-              stockLevel.quantity,
-              tenantId,
-              userId,
-              stockLevel.lowStockThreshold,
-              stockLevel.location
-            );
-            
-            if (updatedStockLevel.isNew) {
-              result.createdCount++;
-            } else {
-              result.updatedCount++;
-            }
-            
-            result.successCount++;
-            results.push(updatedStockLevel);
-          } catch (error: any) {
-            // 記錄錯誤
-            result.failureCount++;
-            result.errors?.push({
-              index: batch.indexOf(stockLevel),
-              record: stockLevel,
-              message: error.message || '處理失敗'
-            });
-          }
-        }
-        
-        return results;
-      },
-      {
-        tenantId,
-        userId,
-        batchSize: 20,
-        operationName: '導入庫存水平',
-        trackProgress: !!options.progressCallback,
-        cacheInvalidation: {
-          prefixes: [CachePrefix.LIST, CachePrefix.STOCK_LEVEL],
-          itemIdField: 'itemId',
-          storeIdField: 'storeId'
-        }
-      }
-    );
-    
-    return result;
-  }
-  
-  /**
-   * 創建缺失的品項
-   * @private
-   */
-  private async createMissingItems(
-    tenantId: string,
-    userId: string,
-    missingItems: Array<{ itemId: string; stockLevel: StockLevelImport }>,
-    result: ImportResult
-  ): Promise<void> {
-    // 批量創建缺失的品項
-    await this.batchOperationService.executeBatchWrite(
-      missingItems,
-      async (batch) => {
-        const results = [];
-        
-        for (const { itemId, stockLevel } of batch) {
-          try {
-            // 創建基本品項
-            const newItem = await this.inventoryItemService.createItem(
-              {
-                itemId,
-                name: `品項 ${itemId}`,
-                sku: `SKU_${itemId}`,
-                lowStockThreshold: stockLevel.lowStockThreshold || 0,
-                createdBy: userId
-              },
-              tenantId,
-              userId,
-              itemId
-            );
-            
-            results.push(newItem);
-          } catch (error: any) {
-            // 記錄創建品項錯誤
-            result.errors?.push({
-              index: -1, // 不對應導入數據的特定索引
-              record: { itemId },
-              message: `創建缺失品項失敗: ${error.message || '處理失敗'}`
-            });
-          }
-        }
-        
-        return results;
-      },
-      {
-        tenantId,
-        userId,
-        batchSize: 20,
-        operationName: '創建缺失品項',
-        cacheInvalidation: {
-          prefixes: [CachePrefix.LIST, CachePrefix.INVENTORY_ITEM]
-        }
-      }
-    );
   }
   
   // #endregion 導入輔助方法
